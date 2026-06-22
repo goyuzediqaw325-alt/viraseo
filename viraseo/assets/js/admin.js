@@ -56,12 +56,25 @@ $(document).on('click', '#vs-gsc-disconnect', function(){
 $(document).on('click', '#vs-gsc-sync', function(){
     const $b = $(this).prop('disabled',true);
     const $s = $('#vs-sync-status').text('در حال همگام‌سازی...');
-    post('viraseo_gsc_fetch', {days: 28}, r => {
+    const site = $('#vs-gsc-site').val();
+    post('viraseo_gsc_fetch', {days: 28, site_url: site}, r => {
         $b.prop('disabled',false);
-        if (r.success) { $s.text(r.data.message); toast(r.data.message,'success'); loadKeywords(); }
-        else $s.text(r.data||'خطا');
+        if (r.success) { $s.text(r.data.message); toast(r.data.message,'success'); loadKeywords(); loadStriking(); }
+        else { $s.text(r.data||'خطا'); toast(r.data||'خطا','err'); }
     });
 });
+
+// Load GSC sites dropdown on page load
+if ($('#vs-gsc-site').length) {
+    post('viraseo_gsc_sites', {}, r => {
+        const $sel = $('#vs-gsc-site').empty();
+        if (r.success && r.data.sites && r.data.sites.length) {
+            r.data.sites.forEach(s => $sel.append(`<option value="${s}">${s}</option>`));
+        } else {
+            $sel.append('<option value="">سایتی یافت نشد</option>');
+        }
+    });
+}
 
 // === KEYWORDS ===
 function loadKeywords(search, page) {

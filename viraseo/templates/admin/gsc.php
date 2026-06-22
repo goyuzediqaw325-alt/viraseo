@@ -61,12 +61,21 @@ $gsc_connected = !empty($_GET['gsc_connected']);
 
   <?php if ($is_connected): ?>
   <!-- Sync Toolbar -->
-  <div class="vs-toolbar">
-    <button class="vs-btn vs-btn-primary" id="vs-gsc-sync">
-      <span class="dashicons dashicons-update"></span>
-      دریافت داده‌های سرچ کنسول
-    </button>
-    <span id="vs-sync-status" class="vs-status"></span>
+  <div class="vs-card" style="margin-bottom:20px;">
+    <h3 class="vs-card-title"><span class="dashicons dashicons-admin-site-alt3"></span> انتخاب سایت و همگام‌سازی</h3>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="vs-field" style="flex:1;min-width:250px;margin-bottom:0;">
+        <label class="vs-label">سایت (Property) در سرچ کنسول:</label>
+        <select id="vs-gsc-site" class="vs-select vs-input-ltr" style="width:100%;">
+          <option value="">در حال بارگذاری لیست سایت‌ها...</option>
+        </select>
+      </div>
+      <button class="vs-btn vs-btn-primary" id="vs-gsc-sync">
+        <span class="dashicons dashicons-update"></span>
+        دریافت داده‌ها
+      </button>
+      <span id="vs-sync-status" class="vs-status"></span>
+    </div>
   </div>
 
   <!-- Tabs -->

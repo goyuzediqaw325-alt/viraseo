@@ -192,39 +192,74 @@ class GoogleOAuth {
         check_ajax_referer('viraseo_nonce', 'nonce');
         if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
 
-        $site = sanitize_text_field($_POST['site_url'] ?? get_site_url());
+        $site = sanitize_text_field($_POST['site_url'] ?? '');
+        if (!$site) $site = get_site_url();
         $days = min(90, max(7, absint($_POST['days'] ?? 28)));
 
-        $result = self::api('/sites/' . urlencode($site) . '/searchAnalytics/query', [
+        // Save selected site for future use
+        update_option('viraseo_gsc_site', $site);
+
+        // Build query — NO country filter (get all data)
+        $query_body = [
             'startDate' => date('Y-m-d', strtotime("-{$days} days")),
             'endDate' => date('Y-m-d', strtotime('-3 days')),
-            'dimensions' => ['query', 'page', 'date'],
+            'dimensions' => ['query', 'page'],
             'rowLimit' => 5000,
-            'dimensionFilterGroups' => [['filters' => [['dimension' => 'country', 'expression' => 'irn']]]],
-        ]);
+        ];
+
+        $result = self::api('/sites/' . urlencode($site) . '/searchAnalytics/query', $query_body);
 
         if (!empty($result['error'])) wp_send_json_error($result['message']);
+
+        $rows = $result['rows'] ?? [];
+        if (empty($rows)) {
+            wp_send_json_success(['message' => '⚠️ هیچ داده‌ای از GSC دریافت نشد. ممکنه سایت انتخابی داده‌ای نداشته باشه.', 'inserted' => 0, 'total_rows' => 0]);
+            return;
+        }
 
         global $wpdb;
         $table = $wpdb->prefix . 'viraseo_gsc_keywords';
         $settings = Dashboard::get();
         $inserted = 0;
+        $today = date('Y-m-d');
 
-        foreach (($result['rows'] ?? []) as $row) {
-            if (($row['impressions'] ?? 0) < (int)$settings['min_impressions']) continue;
-            $kw = $row['keys'][0] ?? ''; $page = $row['keys'][1] ?? ''; $date = $row['keys'][2] ?? '';
+        foreach ($rows as $row) {
+            $kw = $row['keys'][0] ?? '';
+            $page = $row['keys'][1] ?? '';
+            if (!$kw || !$page) continue;
+
             $pos = $row['position'] ?? 0;
-            $kh = md5(mb_strtolower($kw)); $ph = md5($page);
+            $kh = md5(mb_strtolower($kw)); 
+            $ph = md5($page);
             $striking = ($pos >= (int)$settings['striking_min'] && $pos <= (int)$settings['striking_max']) ? 1 : 0;
 
-            $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE keyword_hash=%s AND page_url_hash=%s AND date_recorded=%s", $kh, $ph, $date));
-            $data = ['keyword'=>$kw,'keyword_hash'=>$kh,'page_url'=>$page,'page_url_hash'=>$ph,'post_id'=>url_to_postid($page)?:null,'clicks'=>$row['clicks']??0,'impressions'=>$row['impressions']??0,'ctr'=>$row['ctr']??0,'position'=>$pos,'date_recorded'=>$date,'is_striking'=>$striking];
+            $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE keyword_hash=%s AND page_url_hash=%s AND date_recorded=%s", $kh, $ph, $today));
 
-            if ($exists) $wpdb->update($table, $data, ['id'=>$exists]);
-            else { $wpdb->insert($table, $data); $inserted++; }
+            $data = [
+                'keyword'=>$kw, 'keyword_hash'=>$kh, 
+                'page_url'=>$page, 'page_url_hash'=>$ph,
+                'post_id'=>url_to_postid($page)?:null,
+                'clicks'=>$row['clicks']??0, 
+                'impressions'=>$row['impressions']??0,
+                'ctr'=>$row['ctr']??0, 
+                'position'=>$pos,
+                'date_recorded'=>$today, 
+                'is_striking'=>$striking,
+            ];
+
+            if ($exists) {
+                $wpdb->update($table, $data, ['id'=>$exists]);
+            } else {
+                $wpdb->insert($table, $data);
+                $inserted++;
+            }
         }
 
         update_option('viraseo_last_gsc_sync', current_time('mysql'));
-        wp_send_json_success(['message' => "✅ {$inserted} کلمه جدید ثبت شد (از " . count($result['rows'] ?? []) . " ردیف).", 'inserted' => $inserted]);
+        wp_send_json_success([
+            'message' => sprintf('✅ %d کلمه کلیدی ثبت شد (از %d ردیف GSC).', $inserted, count($rows)),
+            'inserted' => $inserted,
+            'total_rows' => count($rows),
+        ]);
     }
 }
