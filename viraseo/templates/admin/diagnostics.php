@@ -11,6 +11,10 @@
       <span class="dashicons dashicons-search"></span>
       اجرای تشخیص کامل
     </button>
+    <button class="vs-btn vs-btn-secondary" id="vs-repair-tables">
+      <span class="dashicons dashicons-admin-tools"></span>
+      بازسازی جداول
+    </button>
   </div>
 
   <div id="vs-diag-results" style="display:none;">

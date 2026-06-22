@@ -13,6 +13,18 @@ class Diagnostics {
     public function __construct() {
         add_action('wp_ajax_viraseo_run_diagnostics', [$this, 'ajax_run']);
         add_action('wp_ajax_viraseo_test_n8n_webhook', [$this, 'ajax_test_webhook']);
+        add_action('wp_ajax_viraseo_repair_tables', [$this, 'ajax_repair']);
+    }
+
+    /** Repair/recreate missing tables */
+    public function ajax_repair(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        
+        $schema = new \ViraSEO\Database\Schema();
+        $schema->create_all_tables();
+        
+        wp_send_json_success(['message' => '✅ جداول بازسازی شدند. دوباره تشخیص اجرا کنید.']);
     }
 
     /** Run full diagnostics */

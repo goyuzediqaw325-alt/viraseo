@@ -152,11 +152,21 @@ $(document).on('click', '#vs-serp-start', function(){
     });
 });
 function pollSerp(id) {
+    var attempts = 0;
+    const maxAttempts = 15; // 15 * 4s = 60 seconds max
     const iv = setInterval(()=>{
+        attempts++;
         post('viraseo_serp_status', {analysis_id:id}, r => {
             if (!r.success) return;
             if (r.data.status==='completed') { clearInterval(iv); loadSerpResults(id); }
-            else if (r.data.status==='failed') { clearInterval(iv); $('#vs-serp-progress').hide(); $('#vs-serp-start').prop('disabled',false); toast('خطا در تحلیل','err'); }
+            else if (r.data.status==='failed') { clearInterval(iv); $('#vs-serp-progress').hide(); $('#vs-serp-start').prop('disabled',false); $('#vs-serp-error').show(); $('#vs-serp-error-text').html('❌ تحلیل ناموفق بود. ممکنه n8n در اجرای ورکفلو خطا داده باشه. لاگ n8n رو بررسی کنید.'); }
+            else if (attempts >= maxAttempts) {
+                clearInterval(iv);
+                $('#vs-serp-progress').hide();
+                $('#vs-serp-start').prop('disabled',false);
+                $('#vs-serp-error').show();
+                $('#vs-serp-error-text').html('⏱️ Timeout — بعد از ۶۰ ثانیه هنوز نتیجه‌ای از n8n دریافت نشد.<br><br>دلایل ممکن:<br>• ورکفلو n8n اجرا شده ولی callback URL اشتباهه<br>• n8n نمی‌تونه به <code>' + window.VS.rest + 'serp-results</code> دسترسی پیدا کنه<br>• Secret خالیه (در تنظیمات مقدار Secret Webhook رو پر کنید)<br><br>REST URL: <code>' + window.VS.rest + '</code>');
+            }
         });
     }, 4000);
 }
@@ -189,7 +199,10 @@ function loadOrphans() {
     post('viraseo_get_orphans', {}, r => {
         if (!r.success) return;
         const $t = $('#vs-orphans-tbody').empty();
-        if (!r.data.rows.length) { $t.html('<tr><td colspan="5" class="vs-empty">صفحه یتیمی یافت نشد.</td></tr>'); return; }
+        if (!r.data.rows || !r.data.rows.length) { 
+            $t.html('<tr><td colspan="5" class="vs-empty">🎉 عالی! هیچ صفحه یتیمی یافت نشد. همه صفحات حداقل ۳ لینک ورودی دارند.</td></tr>'); 
+            return; 
+        }
         r.data.rows.forEach(o => {
             $t.append(`<tr><td><a href="${o.url}" target="_blank">${o.title}</a></td><td>${o.type}</td><td>${o.inlinks}</td><td>${o.outlinks}</td><td><a href="${o.edit}" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>`);
         });
@@ -290,10 +303,22 @@ $(document).on('click', '#vs-disc-start', function(){
     });
 });
 function pollDiscovery() {
+    var attempts = 0;
+    const maxAttempts = 20; // 20 * 3.5s = 70 seconds
     const iv = setInterval(()=>{
+        attempts++;
         post('viraseo_disc_ideas', {discovery_id: window._vsDiscId}, r => {
             if (!r.success) return;
-            if (r.data.status==='completed') { clearInterval(iv); showIdeas(r.data); }
+            if (r.data.status==='completed') { clearInterval(iv); $('#vs-disc-start').prop('disabled',false); showIdeas(r.data); }
+            else if (attempts >= maxAttempts) {
+                clearInterval(iv);
+                $('#vs-disc-start').prop('disabled',false);
+                $('#vs-disc-status').text('');
+                $('#vs-disc-error').show().find('p').html('⏱️ Timeout — n8n نتیجه‌ای برنگردوند.<br><br>بررسی کنید:<br>• آیا ورکفلو در n8n اجرا شد؟ (Executions بررسی کنید)<br>• آیا n8n می‌تونه به REST URL سایت شما POST کنه؟<br>• Secret باید در هر دو طرف یکسان باشه<br><br>Callback URL: <code>' + window.VS.rest + 'keyword-ideas</code>');
+            }
+        });
+    }, 3500);
+}
         });
     }, 3500);
 }
@@ -510,6 +535,14 @@ $(document).on('click', '.vs-test-wh', function(){
     post('viraseo_test_n8n_webhook', {path: $(this).data('path')}, function(r) {
         $btn.prop('disabled', false);
         alert(r.success ? r.data : r.data);
+    });
+});
+
+$(document).on('click', '#vs-repair-tables', function(){
+    var $btn = $(this).prop('disabled', true).text('بازسازی...');
+    post('viraseo_repair_tables', {}, function(r) {
+        $btn.prop('disabled', false).html('<span class="dashicons dashicons-admin-tools"></span> بازسازی جداول');
+        alert(r.success ? r.data.message : (r.data || 'خطا'));
     });
 });
 

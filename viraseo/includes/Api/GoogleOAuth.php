@@ -239,27 +239,49 @@ class GoogleOAuth {
                 'keyword'=>$kw, 'keyword_hash'=>$kh, 
                 'page_url'=>$page, 'page_url_hash'=>$ph,
                 'post_id'=>url_to_postid($page)?:null,
-                'clicks'=>$row['clicks']??0, 
-                'impressions'=>$row['impressions']??0,
-                'ctr'=>$row['ctr']??0, 
-                'position'=>$pos,
+                'clicks'=>(int)($row['clicks']??0), 
+                'impressions'=>(int)($row['impressions']??0),
+                'ctr'=>(float)($row['ctr']??0), 
+                'position'=>(float)$pos,
                 'date_recorded'=>$today, 
-                'is_striking'=>$striking,
+                'is_striking'=>(int)$striking,
             ];
 
             if ($exists) {
-                $wpdb->update($table, $data, ['id'=>$exists]);
+                $wpdb->update($table, $data, ['id'=>(int)$exists]);
             } else {
-                $wpdb->insert($table, $data);
-                $inserted++;
+                $result = $wpdb->insert($table, $data, ['%s','%s','%s','%s','%d','%d','%d','%f','%f','%s','%d']);
+                if ($result) {
+                    $inserted++;
+                } else {
+                    // Log first error for debugging
+                    if ($inserted === 0 && !isset($first_error)) {
+                        $first_error = $wpdb->last_error;
+                    }
+                }
             }
         }
 
         update_option('viraseo_last_gsc_sync', current_time('mysql'));
-        wp_send_json_success([
+        
+        $response = [
             'message' => sprintf('✅ %d کلمه کلیدی ثبت شد (از %d ردیف GSC).', $inserted, count($rows)),
             'inserted' => $inserted,
             'total_rows' => count($rows),
-        ]);
+        ];
+        
+        // Include debug info if nothing was inserted
+        if ($inserted === 0 && count($rows) > 0) {
+            $response['debug'] = [
+                'last_error' => $first_error ?? $wpdb->last_error,
+                'table_exists' => (bool)$wpdb->get_var("SHOW TABLES LIKE '{$table}'"),
+                'sample_keyword' => $rows[0]['keys'][0] ?? 'N/A',
+                'sample_page' => $rows[0]['keys'][1] ?? 'N/A',
+                'table_name' => $table,
+            ];
+            $response['message'] = '⚠️ ۰ کلمه ثبت شد از ' . count($rows) . ' ردیف. خطا: ' . ($first_error ?? $wpdb->last_error ?: 'نامشخص — ممکنه جدول ساختار متفاوت داشته باشه. افزونه رو غیرفعال و فعال کنید.');
+        }
+        
+        wp_send_json_success($response);
     }
 }
