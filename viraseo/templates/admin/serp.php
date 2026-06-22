@@ -43,6 +43,10 @@ $n8n_ready = !empty($n8n_url);
 
   <div id="vs-serp-results" style="display:none;">
     <div class="vs-stats" id="vs-serp-stats"></div>
+    <div class="vs-card" id="vs-serp-intent" style="display:none;margin-bottom:16px;">
+      <h3 class="vs-card-title"><span class="dashicons dashicons-visibility"></span> هدف کاربر (Search Intent)</h3>
+      <div id="vs-intent-body"></div>
+    </div>
     <div class="vs-card">
       <h3 class="vs-card-title">۱۰ نتیجه برتر گوگل</h3>
       <table class="vs-table">

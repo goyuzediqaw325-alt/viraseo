@@ -663,3 +663,12 @@
 .vs-cluster-members { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 6px; }
 .vs-cluster-members li { font-size: 12px; padding: 6px 10px; background: rgba(148,163,184,.06); border-radius: 6px; }
 .vs-cluster-members a, .vs-cluster-pillar a { color: var(--vs-primary,#818cf8); text-decoration: none; }
+
+
+/* === SERP intent bars === */
+.vs-intent-bars { display: flex; flex-direction: column; gap: 8px; }
+.vs-intent-bar { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.vs-intent-bar > span { min-width: 90px; }
+.vs-intent-bar > b { min-width: 42px; text-align: left; }
+.vs-intent-track { flex: 1; height: 10px; background: rgba(148,163,184,.15); border-radius: 6px; overflow: hidden; }
+.vs-intent-fill { height: 100%; border-radius: 6px; transition: width .4s; }

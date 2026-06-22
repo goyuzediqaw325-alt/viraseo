@@ -65,11 +65,60 @@ class SerpAnalyzer {
             'ecommerce'=>is_array($meta)?($meta['ecommerce']??null):null,
             'error'=>$err,
             'debug'=>$dbg,
+            'intent'=>$this->classify_intent($comps),
             'competitors'=>array_map(fn($c)=>[
                 'pos'=>$c->position,'url'=>$c->url,'domain'=>$c->domain,'title'=>$c->title,
                 'words'=>$c->word_count,'h1'=>$c->h1_count,'h2'=>$c->h2_count,'h3'=>$c->h3_count,
                 'images'=>$c->images_count,'schema'=>$c->schema_types,
             ], $comps),
         ]);
+    }
+
+    /**
+     * Classify search intent from the top-10 results (Persian-aware).
+     * Looks at titles + URLs for product / informational(article) / service signals
+     * and returns the distribution + the dominant intent.
+     */
+    private function classify_intent(array $comps): array {
+        $signals = [
+            'product' => ['خرید','قیمت','فروش','سفارش','تخفیف','ارزان','خرید اینترنتی','فروشگاه','محصول'],
+            'article' => ['آموزش','راهنما','چیست','چگونه','بهترین','معرفی','لیست','ترفند','نحوه','روش','۱۰','مقاله','بررسی'],
+            'service' => ['خدمات','خدمت','مشاوره','شرکت','طراحی','تعمیر','نصب','اجرا','سفارش طراحی'],
+        ];
+        $url_signals = [
+            'product' => ['/product','/shop','/store','/cart','/buy','/products','woocommerce'],
+            'article' => ['/blog','/article','/mag','/news','/post','/wiki','/category'],
+            'service' => ['/service','/services','/khadamat'],
+        ];
+        $score = ['product'=>0, 'article'=>0, 'service'=>0];
+        $n = 0;
+        foreach ($comps as $c) {
+            $n++;
+            $title = ' ' . PersianText::normalize((string)$c->title) . ' ';
+            $url = strtolower((string)$c->url);
+            foreach ($signals as $type => $words) {
+                foreach ($words as $w) if (mb_strpos($title, $w) !== false) { $score[$type] += 2; break; }
+            }
+            foreach ($url_signals as $type => $frags) {
+                foreach ($frags as $f) if (strpos($url, $f) !== false) { $score[$type] += 3; break; }
+            }
+        }
+        if ($n === 0) return ['dominant'=>'', 'label'=>'نامشخص', 'dist'=>$score, 'recommendation'=>''];
+
+        arsort($score);
+        $dominant = array_key_first($score);
+        $total = array_sum($score) ?: 1;
+        $labels = ['product'=>'محصول‌محور (خرید)', 'article'=>'مقاله‌محور (اطلاعاتی)', 'service'=>'خدماتی'];
+        $recs = [
+            'product' => 'نتایج برتر صفحات محصول/فروشگاهی هستند. برای رقابت، یک صفحه محصول یا دسته‌بندی با قیمت و دکمه خرید بسازید.',
+            'article' => 'نتایج برتر مقاله‌ی آموزشی/اطلاعاتی هستند. یک مقاله‌ی جامع و عمیق (با H2/H3 و پاسخ به سوالات) بنویسید.',
+            'service' => 'نتایج برتر صفحات خدماتی/شرکتی هستند. یک صفحه خدمات حرفه‌ای با نمونه‌کار و فرم تماس بسازید.',
+        ];
+        return [
+            'dominant'=>$dominant,
+            'label'=>$labels[$dominant] ?? 'نامشخص',
+            'dist'=>['product'=>round($score['product']*100/$total), 'article'=>round($score['article']*100/$total), 'service'=>round($score['service']*100/$total)],
+            'recommendation'=>$recs[$dominant] ?? '',
+        ];
     }
 }

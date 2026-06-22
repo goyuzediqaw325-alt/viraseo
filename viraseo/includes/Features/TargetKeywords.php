@@ -2,7 +2,7 @@
 namespace ViraSEO\Features;
 defined('ABSPATH') || exit;
 
-use ViraSEO\Utils\PersianText;
+use ViraSEO\Utils\{PersianText, JalaliDate};
 
 /**
  * Target Keyword system: lets ViraSEO know which keyword each page targets.
@@ -17,6 +17,72 @@ class TargetKeywords {
         add_action('add_meta_boxes', [$this, 'add_box']);
         add_action('save_post', [$this, 'save'], 10, 2);
         add_action('wp_ajax_viraseo_suggest_targets_gsc', [$this, 'ajax_suggest_from_gsc']);
+        add_action('wp_ajax_viraseo_targets_list', [$this, 'ajax_targets_list']);
+        add_action('wp_ajax_viraseo_target_save', [$this, 'ajax_target_save']);
+    }
+
+    /** List pages with their target keyword, source, GSC suggestion + stats (for the management page). */
+    public function ajax_targets_list(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+        $gt = $wpdb->prefix . 'viraseo_gsc_keywords';
+        $has_gsc = ($wpdb->get_var("SHOW TABLES LIKE '{$gt}'") === $gt);
+        $search = sanitize_text_field($_POST['search'] ?? '');
+
+        $args = ['post_type'=>self::TYPES, 'post_status'=>'publish', 'numberposts'=>200, 'orderby'=>'modified', 'order'=>'DESC'];
+        if ($search) $args['s'] = $search;
+        $posts = get_posts($args);
+
+        $rows = [];
+        foreach ($posts as $p) {
+            $own = (string) get_post_meta($p->ID, self::META, true);
+            $rm = self::rank_math_keyword($p->ID);
+            $current = $own !== '' ? PersianText::normalize($own) : $rm;
+            $source = $own !== '' ? 'دستی (ViraSEO)' : ($rm !== '' ? 'Rank Math' : '—');
+
+            $suggest = ''; $stats = null;
+            if ($has_gsc) {
+                $url = get_permalink($p->ID);
+                $suggest = (string) $wpdb->get_var($wpdb->prepare(
+                    "SELECT keyword FROM {$gt} WHERE page_url=%s ORDER BY clicks DESC, impressions DESC LIMIT 1", $url
+                ));
+                if ($current !== '') {
+                    $s = $wpdb->get_row($wpdb->prepare(
+                        "SELECT SUM(clicks) c, SUM(impressions) i, AVG(position) p FROM {$gt} WHERE page_url=%s AND keyword=%s", $url, $current
+                    ));
+                    if ($s && ($s->i !== null)) $stats = [
+                        'clicks'=>PersianText::format_number((int)$s->c),
+                        'impressions'=>PersianText::format_number((int)$s->i),
+                        'position'=>JalaliDate::to_fa(number_format((float)$s->p, 1)),
+                    ];
+                }
+            }
+
+            $rows[] = [
+                'id'=>$p->ID,
+                'title'=>$p->post_title ?: '(بدون عنوان)',
+                'type'=>$p->post_type,
+                'edit'=>get_edit_post_link($p->ID, 'raw'),
+                'current'=>$current,
+                'source'=>$source,
+                'suggest'=>$suggest,
+                'stats'=>$stats,
+            ];
+        }
+        wp_send_json_success(['rows'=>$rows, 'has_gsc'=>$has_gsc]);
+    }
+
+    /** Save a target keyword for a single post from the management page. */
+    public function ajax_target_save(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('edit_posts')) wp_send_json_error('دسترسی غیرمجاز.');
+        $id = absint($_POST['id'] ?? 0);
+        if (!$id) wp_send_json_error('شناسه نامعتبر.');
+        $kw = PersianText::normalize(sanitize_text_field($_POST['keyword'] ?? ''));
+        if ($kw === '') delete_post_meta($id, self::META);
+        else update_post_meta($id, self::META, $kw);
+        wp_send_json_success(['message'=>'ذخیره شد.']);
     }
 
     public function add_box(): void {

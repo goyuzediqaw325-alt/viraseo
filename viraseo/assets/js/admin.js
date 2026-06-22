@@ -245,6 +245,21 @@ function loadSerpResults(id) {
             return;
         }
         $('#vs-serp-results').show();
+        // Search intent
+        if (d.intent && d.intent.dominant) {
+            $('#vs-serp-intent').show();
+            const it = d.intent;
+            const icon = it.dominant === 'product' ? '🛒' : (it.dominant === 'article' ? '📝' : '🛠️');
+            $('#vs-intent-body').html(
+                '<div style="font-size:18px;font-weight:800;margin-bottom:10px">'+icon+' '+it.label+'</div>'
+                + '<div class="vs-intent-bars">'
+                +   '<div class="vs-intent-bar"><span>📝 مقاله‌ای</span><div class="vs-intent-track"><div class="vs-intent-fill" style="width:'+it.dist.article+'%;background:#0ea5e9"></div></div><b>'+it.dist.article+'%</b></div>'
+                +   '<div class="vs-intent-bar"><span>🛒 محصول</span><div class="vs-intent-track"><div class="vs-intent-fill" style="width:'+it.dist.product+'%;background:#10b981"></div></div><b>'+it.dist.product+'%</b></div>'
+                +   '<div class="vs-intent-bar"><span>🛠️ خدماتی</span><div class="vs-intent-track"><div class="vs-intent-fill" style="width:'+it.dist.service+'%;background:#f59e0b"></div></div><b>'+it.dist.service+'%</b></div>'
+                + '</div>'
+                + '<div class="vs-alert vs-alert-info" style="margin-top:12px"><span class="dashicons dashicons-lightbulb"></span><p>'+it.recommendation+'</p></div>'
+            );
+        } else { $('#vs-serp-intent').hide(); }
         $('#vs-serp-stats').html(`<div class="vs-stat"><div class="vs-stat-icon"><span class="dashicons dashicons-editor-textcolor"></span></div><div><span class="vs-stat-num">${d.avg_words}</span><span class="vs-stat-label">میانگین کلمات</span></div></div><div class="vs-stat"><div class="vs-stat-icon green"><span class="dashicons dashicons-heading"></span></div><div><span class="vs-stat-num">${d.avg_headings}</span><span class="vs-stat-label">هدینگ</span></div></div><div class="vs-stat"><div class="vs-stat-icon cyan"><span class="dashicons dashicons-groups"></span></div><div><span class="vs-stat-num">${d.competitors.length}</span><span class="vs-stat-label">رقیب</span></div></div>`);
         const $t = $('#vs-serp-tbody').empty();
         d.competitors.forEach(c => { $t.append(`<tr class="vs-serp-row" data-url="${c.url}" title="برای تحلیل دقیق این صفحه کلیک کنید"><td>${c.pos}</td><td>${c.domain}</td><td>${c.title||'-'}</td><td>${c.words} <span class="vs-snippet-note">(اسنیپت)</span></td><td>${c.h1}/${c.h2}/${c.h3}</td><td><span class="dashicons dashicons-search" style="color:var(--vs-primary)"></span></td></tr>`); });
@@ -683,6 +698,17 @@ $(function(){
     if ($('#vs-wf-grid').length) loadWorkflows();
     // Rank monitor page
     if ($('#vs-rank-tbody').length) loadRanks();
+    // Target keywords page
+    if ($('#vs-tg-tbody').length) loadTargets();
+    // SERP auto-start when arriving from Target Keywords (?keyword=..&autostart=1)
+    if ($('#vs-serp-kw').length) {
+        var params = new URLSearchParams(window.location.search);
+        var kwParam = params.get('keyword');
+        if (kwParam) {
+            $('#vs-serp-kw').val(kwParam);
+            if (params.get('autostart') === '1') $('#vs-serp-start').trigger('click');
+        }
+    }
     // WooCommerce page
     if ($('#vs-oos-tbody').length) { loadOOS(); loadFaceted(); }
 });
@@ -703,6 +729,76 @@ function downloadFile(name, content) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
+
+// === SEO OPPORTUNITIES ===
+$(document).on('click', '#vs-load-linkopp', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-linkopp-tbody').html('<tr><td colspan="6" class="vs-empty">در حال محاسبه...</td></tr>');
+    post('viraseo_link_opportunities', {}, r => {
+        $b.prop('disabled', false);
+        const $t = $('#vs-linkopp-tbody').empty();
+        if (!r.success) { $t.html('<tr><td colspan="6" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">🎉 فرصت پرپتانسیلی یافت نشد (همه صفحات پربازدید لینک کافی دارند).</td></tr>'); return; }
+        r.data.rows.forEach(o => {
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><strong style="color:var(--vs-success)">'+o.impressions+'</strong></td><td>'+o.clicks+'</td><td>'+o.position+'</td><td><span class="vs-badge vs-badge-'+(o.inlinks_raw===0?'red':'orange')+'">'+o.inlinks+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
+        });
+    });
+});
+$(document).on('click', '#vs-load-thin', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-thin-tbody').html('<tr><td colspan="6" class="vs-empty">در حال بررسی...</td></tr>');
+    post('viraseo_thin_content', {threshold: $('#vs-thin-threshold').val()}, r => {
+        $b.prop('disabled', false);
+        const $t = $('#vs-thin-tbody').empty();
+        if (!r.success) { $t.html('<tr><td colspan="6" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">🎉 محتوای ضعیفی یافت نشد.</td></tr>'); return; }
+        r.data.rows.forEach(o => {
+            const pc = o.priority === 'بالا' ? 'red' : (o.priority === 'متوسط' ? 'orange' : 'blue');
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td>'+o.type+'</td><td><strong style="color:'+(o.words<150?'#ef4444':'#f59e0b')+'">'+o.words_fa+'</strong></td><td>'+o.impressions+'</td><td><span class="vs-badge vs-badge-'+pc+'">'+o.priority+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بازنویسی</a></td></tr>');
+        });
+    });
+});
+
+// === TARGET KEYWORDS MANAGEMENT ===
+function loadTargets() {
+    if (!$('#vs-tg-tbody').length) return;
+    $('#vs-tg-tbody').html('<tr><td colspan="6" class="vs-empty">در حال بارگذاری...</td></tr>');
+    post('viraseo_targets_list', {search: $('#vs-tg-search').val()||''}, r => {
+        const $t = $('#vs-tg-tbody').empty();
+        if (!r.success) { $t.html('<tr><td colspan="6" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">صفحه‌ای یافت نشد.</td></tr>'); return; }
+        r.data.rows.forEach(o => {
+            let stats = o.stats ? ('کلیک '+o.stats.clicks+' · نمایش '+o.stats.impressions+' · جایگاه '+o.stats.position) : '<span class="vs-empty">—</span>';
+            let suggest = o.suggest ? ('<span class="vs-tag">'+o.suggest+'</span> <button class="vs-btn vs-btn-sm vs-btn-secondary vs-tg-use" data-id="'+o.id+'" data-kw="'+escAttr(o.suggest)+'">استفاده</button>') : '<span class="vs-empty">—</span>';
+            let serpBtn = o.current ? '<a class="vs-btn vs-btn-sm vs-btn-primary" href="admin.php?page=viraseo-serp&keyword='+encodeURIComponent(o.current)+'&autostart=1" title="تحلیل SERP این کلمه">🔍 تحلیل SERP</a>' : '';
+            $t.append('<tr>'
+                + '<td><a href="'+o.edit+'">'+o.title+'</a><br><small style="color:var(--vs-text-muted)">'+o.type+'</small></td>'
+                + '<td><input type="text" class="vs-input vs-tg-kw" data-id="'+o.id+'" value="'+escAttr(o.current)+'" style="min-width:160px" placeholder="کلمه هدف..."></td>'
+                + '<td><span class="vs-badge vs-badge-blue">'+o.source+'</span></td>'
+                + '<td style="font-size:11px">'+stats+'</td>'
+                + '<td>'+suggest+'</td>'
+                + '<td><button class="vs-btn vs-btn-sm vs-btn-success vs-tg-save" data-id="'+o.id+'">ذخیره</button> '+serpBtn+'</td>'
+                + '</tr>');
+        });
+    });
+}
+function escAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
+$(document).on('click', '#vs-tg-reload', loadTargets);
+$(document).on('keyup', '#vs-tg-search', function(e){ if (e.key === 'Enter') loadTargets(); });
+$(document).on('click', '.vs-tg-use', function(){
+    const $row = $(this).closest('tr');
+    $row.find('.vs-tg-kw').val($(this).data('kw'));
+});
+$(document).on('click', '.vs-tg-save', function(){
+    const id = $(this).data('id');
+    const kw = $(this).closest('tr').find('.vs-tg-kw').val();
+    const $b = $(this).prop('disabled', true).text('...');
+    post('viraseo_target_save', {id: id, keyword: kw}, r => {
+        $b.prop('disabled', false).text('ذخیره');
+        if (r.success) toast('کلمه هدف ذخیره شد','success'); else toast(r.data,'err');
+        loadTargets();
+    });
+});
 
 // === DIAGNOSTICS PAGE ===
 $(document).on('click', '#vs-run-diag', function(){

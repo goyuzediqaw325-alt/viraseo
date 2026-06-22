@@ -20,6 +20,8 @@ class Dashboard {
         add_submenu_page($s,'سرچ کنسول 🟢','سرچ کنسول','manage_options',$s.'-gsc',[$this,'page_gsc']);
         add_submenu_page($s,'تحلیل SERP 🔵','تحلیل SERP','manage_options',$s.'-serp',[$this,'page_serp']);
         add_submenu_page($s,'مانیتورینگ کلمات 🟢','مانیتورینگ کلمات','manage_options',$s.'-rank',[$this,'page_rank']);
+        add_submenu_page($s,'فرصت‌های سئو 🟢','فرصت‌های سئو','manage_options',$s.'-opps',[$this,'page_opps']);
+        add_submenu_page($s,'کلمات هدف 🟢','کلمات هدف','manage_options',$s.'-targets',[$this,'page_targets']);
         add_submenu_page($s,'لینک‌سازی 🟢','لینک‌سازی','manage_options',$s.'-links',[$this,'page_links']);
         add_submenu_page($s,'بک‌لینک CRM 🟢','بک‌لینک','manage_options',$s.'-backlinks',[$this,'page_backlinks']);
         add_submenu_page($s,'پیش‌بینی ترافیک 🟢','پیش‌بینی','manage_options',$s.'-forecast',[$this,'page_forecast']);
@@ -118,6 +120,8 @@ class Dashboard {
     public function page_gsc(): void { include VIRASEO_DIR.'templates/admin/gsc.php'; }
     public function page_serp(): void { include VIRASEO_DIR.'templates/admin/serp.php'; }
     public function page_rank(): void { include VIRASEO_DIR.'templates/admin/rank-monitor.php'; }
+    public function page_opps(): void { include VIRASEO_DIR.'templates/admin/opportunities.php'; }
+    public function page_targets(): void { include VIRASEO_DIR.'templates/admin/targets.php'; }
     public function page_links(): void { include VIRASEO_DIR.'templates/admin/links.php'; }
     public function page_backlinks(): void { include VIRASEO_DIR.'templates/admin/backlinks.php'; }
     public function page_forecast(): void { include VIRASEO_DIR.'templates/admin/forecast.php'; }
