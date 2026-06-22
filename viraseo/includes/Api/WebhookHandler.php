@@ -111,17 +111,20 @@ class WebhookHandler {
     public static function to_n8n(string $path, array $body): array {
         $url = Dashboard::get('n8n_url');
         $secret = Dashboard::get('n8n_secret');
-        if (!$url) return ['error'=>'n8n تنظیم نشده.'];
+        if (!$url) return ['error'=>'آدرس n8n در تنظیمات وارد نشده. ابتدا به تنظیمات بروید.'];
 
-        $r = wp_remote_post($url.'/webhook/'.$path, [
+        $full_url = $url . '/webhook/' . $path;
+        $r = wp_remote_post($full_url, [
             'timeout'=>30,
             'headers'=>['Content-Type'=>'application/json','X-ViraSEO-Secret'=>$secret],
             'body'=>wp_json_encode($body),
         ]);
-        if (is_wp_error($r)) return ['error'=>$r->get_error_message()];
+        if (is_wp_error($r)) return ['error'=>'خطا در اتصال به n8n: ' . $r->get_error_message() . "\n\nآدرس: " . $full_url];
         $code = wp_remote_retrieve_response_code($r);
+        if ($code === 404) return ['error'=>"ورکفلو '{$path}' در n8n یافت نشد (HTTP 404).\n\n🔧 راه‌حل:\n1. به پنل n8n بروید: {$url}\n2. Workflows → Import from File\n3. فایل JSON مربوطه را از منوی «ورکفلوهای n8n» دانلود و import کنید\n4. ورکفلو را Active کنید"];
         if ($code >= 200 && $code < 300) return ['success'=>true,'data'=>json_decode(wp_remote_retrieve_body($r),true)];
-        return ['error'=>"HTTP {$code}"];
+        $resp_body = wp_remote_retrieve_body($r);
+        return ['error'=>"n8n پاسخ HTTP {$code} داد.\n\nآدرس: {$full_url}\nپاسخ: " . mb_substr($resp_body, 0, 300)];
     }
 
     public static function send_serp_request(string $keyword, int $user_id): array {
