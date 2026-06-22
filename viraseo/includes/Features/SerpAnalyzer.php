@@ -3,6 +3,7 @@ namespace ViraSEO\Features;
 defined('ABSPATH') || exit;
 
 use ViraSEO\Api\WebhookHandler;
+use ViraSEO\Admin\Dashboard;
 use ViraSEO\Utils\{JalaliDate, PersianText};
 
 /** Feature 2: SERP Competitor Intelligence [🔵 نیازمند n8n] */

@@ -21,9 +21,13 @@ function toast(msg, type) {
 $(document).on('click', '.vs-tab', function(e){
     e.preventDefault();
     const t = $(this).data('tab');
+    const $wrap = $(this).closest('.vs-wrap');
     $(this).addClass('active').siblings().removeClass('active');
-    $(this).closest('.vs-wrap').find('.vs-tab-panel').removeClass('active');
-    $('#panel-'+t).addClass('active');
+    $wrap.find('.vs-tab-panel').removeClass('active');
+    // Support BOTH conventions: id="panel-X" AND data-panel="X"
+    var $panel = $('#panel-' + t);
+    if (!$panel.length) $panel = $wrap.find('.vs-tab-panel[data-panel="' + t + '"]');
+    $panel.addClass('active');
 });
 
 // === SETTINGS: Test n8n ===
