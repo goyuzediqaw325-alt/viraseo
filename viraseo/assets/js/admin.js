@@ -276,13 +276,16 @@ $(document).on('click', '#vs-gen-disavow', function(){
 
 // === TRAFFIC FORECAST ===
 $(document).on('click', '#vs-fc-calc', function(){
-    const $t = $('#vs-fc-tbody').html('<tr><td colspan="6" class="vs-empty">محاسبه...</td></tr>');
+    const $t = $('#vs-fc-tbody').html('<tr><td colspan="7" class="vs-empty">محاسبه...</td></tr>');
     post('viraseo_forecast', {target: $('#vs-fc-target').val()}, r => {
-        if (!r.success) return;
+        if (!r.success) { $t.html('<tr><td colspan="7" class="vs-empty">خطا</td></tr>'); return; }
         const $tb = $('#vs-fc-tbody').empty();
         $('#vs-fc-total').text('+' + r.data.total_growth);
+        $('#vs-fc-count').text(r.data.count || 0);
+        if (!r.data.rows.length) { $tb.html('<tr><td colspan="7" class="vs-empty">فرصتی یافت نشد. ابتدا داده‌های سرچ کنسول را همگام‌سازی کنید.</td></tr>'); return; }
         r.data.rows.forEach(f => {
-            $tb.append(`<tr><td>${f.keyword}</td><td>${f.position}</td><td>${f.impressions}</td><td>${f.clicks}</td><td>${f.potential}</td><td style="color:var(--vs-success);font-weight:700">+${f.growth}</td></tr>`);
+            const ec = f.effort_color === 'green' ? 'vs-badge-green' : (f.effort_color === 'orange' ? 'vs-badge-orange' : 'vs-badge-red');
+            $tb.append(`<tr><td><a href="${f.url}" target="_blank" style="color:var(--vs-primary)">${f.keyword}</a></td><td>${f.position}</td><td>${f.impressions}</td><td>${f.clicks}</td><td>${f.potential}</td><td style="color:var(--vs-success);font-weight:700">${f.growth}</td><td><span class="vs-badge ${ec}">${f.effort}</span></td></tr>`);
         });
     });
 });

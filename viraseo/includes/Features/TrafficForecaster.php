@@ -17,37 +17,62 @@ class TrafficForecaster {
         check_ajax_referer('viraseo_nonce','nonce');
         global $wpdb;
         $t = $wpdb->prefix.'viraseo_gsc_keywords';
-        $target = max(1,min(20,absint($_POST['target']??5)));
+        $target = max(1,min(20,absint($_POST['target']??3)));
         $target_ctr = (self::CTR[$target]??0.6) / 100;
 
-        $rows = $wpdb->get_results($wpdb->prepare(
+        // Get keywords ranked 4-30 (page 1 bottom to page 3) with impressions
+        // These are the "opportunity" keywords — ranking but not winning
+        $rows = $wpdb->get_results(
             "SELECT keyword, page_url, SUM(clicks) c, SUM(impressions) i, AVG(position) p
-             FROM {$t} WHERE date_recorded>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)
-             AND position BETWEEN 11 AND 30 AND impressions>=10
-             GROUP BY keyword_hash,page_url_hash ORDER BY i DESC LIMIT 80"
-        ));
+             FROM {$t}
+             WHERE position BETWEEN 4 AND 30 AND impressions >= 5
+             GROUP BY keyword_hash, page_url_hash
+             ORDER BY i DESC LIMIT 150"
+        );
 
         $data = [];
         foreach ($rows as $r) {
-            $potential = (int)round($r->i * $target_ctr);
-            $growth = max(0, $potential - (int)$r->c);
+            $curPos = round($r->p, 1);
+            $curClicks = (int)$r->c;
+            $impr = (int)$r->i;
+
+            // Potential at target rank
+            $potential = (int)round($impr * $target_ctr);
+            $growth = max(0, $potential - $curClicks);
+
+            // Effort estimate: how far to climb
+            $gap = $curPos - $target;
+            $effort = $gap <= 2 ? 'آسان' : ($gap <= 5 ? 'متوسط' : 'سخت');
+            $effortColor = $gap <= 2 ? 'green' : ($gap <= 5 ? 'orange' : 'red');
+
+            // Priority: high growth + low effort = high priority
+            $priority = $growth / max(1, $gap);
+
             $data[] = [
                 'keyword'=>$r->keyword,'url'=>$r->page_url,
-                'position'=>JalaliDate::to_fa(number_format($r->p,1)),
-                'impressions'=>PersianText::format_number($r->i),
-                'clicks'=>PersianText::format_number($r->c),
+                'position'=>JalaliDate::to_fa(number_format($curPos,1)),
+                'position_raw'=>$curPos,
+                'impressions'=>PersianText::format_number($impr),
+                'clicks'=>PersianText::format_number($curClicks),
                 'potential'=>PersianText::format_number($potential),
-                'growth'=>PersianText::format_number($growth),
+                'growth'=>'+'.PersianText::format_number($growth),
                 'growth_raw'=>$growth,
+                'effort'=>$effort,
+                'effort_color'=>$effortColor,
+                'priority'=>$priority,
             ];
         }
-        usort($data, fn($a,$b)=>$b['growth_raw']<=>$a['growth_raw']);
+
+        // Sort by priority (best opportunities first)
+        usort($data, fn($a,$b)=>$b['priority']<=>$a['priority']);
+        $data = array_slice($data, 0, 80);
 
         wp_send_json_success([
             'rows'=>$data,
             'target'=>$target,
             'target_ctr'=>self::CTR[$target].'%',
             'total_growth'=>PersianText::format_number(array_sum(array_column($data,'growth_raw'))),
+            'count'=>count($data),
         ]);
     }
 }
