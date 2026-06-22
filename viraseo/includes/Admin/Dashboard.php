@@ -26,6 +26,7 @@ class Dashboard {
         if (class_exists('WooCommerce'))
             add_submenu_page($s,'ووکامرس 🟢','ووکامرس','manage_woocommerce',$s.'-woo',[$this,'page_woo']);
         add_submenu_page($s,'ورکفلو n8n 🔵','ورکفلو n8n','manage_options',$s.'-workflows',[$this,'page_workflows']);
+        add_submenu_page($s,'🔧 تشخیص مشکلات','🔧 تشخیص','manage_options',$s.'-diagnostics',[$this,'page_diagnostics']);
         add_submenu_page($s,'تنظیمات','⚙️ تنظیمات','manage_options',$s.'-settings',[$this,'page_settings']);
     }
 
@@ -95,5 +96,6 @@ class Dashboard {
     public function page_discovery(): void { include VIRASEO_DIR.'templates/admin/discovery.php'; }
     public function page_woo(): void { include VIRASEO_DIR.'templates/admin/woo.php'; }
     public function page_workflows(): void { include VIRASEO_DIR.'templates/admin/workflows.php'; }
+    public function page_diagnostics(): void { include VIRASEO_DIR.'templates/admin/diagnostics.php'; }
     public function page_settings(): void { include VIRASEO_DIR.'templates/admin/settings.php'; }
 }

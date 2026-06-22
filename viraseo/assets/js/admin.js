@@ -133,11 +133,21 @@ $(document).on('click', '.vs-resolve', function(){
 // === SERP ANALYSIS ===
 $(document).on('click', '#vs-serp-start', function(){
     const kw = $('#vs-serp-kw').val().trim();
-    if (!kw) return;
+    if (!kw) { toast('کلمه کلیدی وارد کنید.', 'err'); return; }
     $(this).prop('disabled',true);
     $('#vs-serp-progress').show();
+    $('#vs-serp-error').hide();
+    $('#vs-serp-results').hide();
     post('viraseo_start_serp', {keyword:kw}, r => {
-        if (!r.success) { $('#vs-serp-progress').hide(); $(this).prop('disabled',false); toast(r.data,'err'); return; }
+        if (!r.success) {
+            $('#vs-serp-progress').hide();
+            $('#vs-serp-start').prop('disabled',false);
+            $('#vs-serp-error').show();
+            $('#vs-serp-error-text').html(r.data);
+            toast(r.data,'err');
+            return;
+        }
+        toast(r.data.message, 'success');
         pollSerp(r.data.analysis_id);
     });
 });
@@ -262,11 +272,18 @@ $(document).on('click', '#vs-fc-calc', function(){
 // === KEYWORD DISCOVERY ===
 $(document).on('click', '#vs-disc-start', function(){
     const seed = $('#vs-disc-seed').val().trim();
-    if (!seed) return;
-    const $s = $('#vs-disc-status').text('جستجو شروع شد...');
+    if (!seed) { toast('کلمه وارد کنید.','err'); return; }
+    const $s = $('#vs-disc-status').text('ارسال درخواست...');
     $(this).prop('disabled',true);
+    $('#vs-disc-error').hide();
     post('viraseo_discover', {seed}, r => {
-        if (!r.success) { $s.text(r.data); $(this).prop('disabled',false); return; }
+        if (!r.success) {
+            $s.text('');
+            $('#vs-disc-start').prop('disabled',false);
+            $('#vs-disc-error').show().find('p').html(r.data);
+            toast(r.data,'err');
+            return;
+        }
         $s.text(r.data.message);
         window._vsDiscId = r.data.discovery_id;
         pollDiscovery();
@@ -440,3 +457,74 @@ function downloadFile(name, content) {
     style.textContent = `.vs-toast{position:fixed;bottom:24px;left:24px;padding:14px 24px;border-radius:10px;font-size:13px;z-index:99999;opacity:0;transform:translateY(10px);transition:all .3s;font-family:var(--vs-font);max-width:400px;direction:rtl;}.vs-toast.show{opacity:1;transform:none;}.vs-toast-success{background:#065f46;color:#6ee7b7;border:1px solid #10b981;}.vs-toast-err{background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;}.vs-toast-info{background:#1e3a5f;color:#7dd3fc;border:1px solid #0ea5e9;}`;
     document.head.appendChild(style);
 })();
+
+
+// === DIAGNOSTICS PAGE ===
+$(document).on('click', '#vs-run-diag', function(){
+    const $btn = $(this).prop('disabled', true).text('در حال بررسی...');
+    post('viraseo_run_diagnostics', {}, r => {
+        $btn.prop('disabled', false).html('<span class="dashicons dashicons-search"></span> اجرای تشخیص کامل');
+        if (!r.success) { toast(r.data || 'خطا', 'err'); return; }
+        $('#vs-diag-results').show();
+        const d = r.data;
+
+        // Database
+        let dbHtml = `<p style="font-size:14px;margin-bottom:12px;">${d.database.message}</p>`;
+        dbHtml += '<table class="vs-table"><thead><tr><th>جدول</th><th>وجود</th><th>تعداد ردیف</th></tr></thead><tbody>';
+        d.database.tables.forEach(t => {
+            dbHtml += `<tr><td>viraseo_${t.table}</td><td>${t.exists?'<span class="vs-badge vs-badge-green">✓</span>':'<span class="vs-badge vs-badge-red">✗</span>'}</td><td>${t.rows >= 0 ? t.rows : '—'}</td></tr>`;
+        });
+        dbHtml += '</tbody></table>';
+        $('#vs-diag-db-content').html(dbHtml);
+
+        // GSC
+        let gscHtml = `<p style="font-size:14px;">${d.gsc.message}</p>`;
+        gscHtml += `<p style="font-size:12px;color:var(--vs-text-muted);">OAuth Proxy: <code>${d.gsc.proxy_url}</code></p>`;
+        $('#vs-diag-gsc-content').html(gscHtml);
+
+        // n8n
+        let n8nHtml = `<p style="font-size:14px;margin-bottom:12px;">${d.n8n.message}</p>`;
+        n8nHtml += `<p style="font-size:12px;color:var(--vs-text-muted);">آدرس: <code>${d.n8n.url}</code> | Secret: ${d.n8n.secret}</p>`;
+        if (d.n8n.webhooks && d.n8n.webhooks.length) {
+            n8nHtml += '<h4 style="margin:16px 0 8px;color:#fff;">وضعیت ورکفلوها:</h4>';
+            n8nHtml += '<table class="vs-table"><thead><tr><th>ورکفلو</th><th>Webhook Path</th><th>وضعیت</th><th>تست</th></tr></thead><tbody>';
+            d.n8n.webhooks.forEach(w => {
+                const badge = w.status === 'ok' ? 'vs-badge-green' : 'vs-badge-red';
+                n8nHtml += `<tr><td>${w.label}</td><td dir="ltr"><code>${w.path}</code></td><td><span class="vs-badge ${badge}">${w.message}</span></td><td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-test-wh" data-path="${w.path}">تست</button></td></tr>`;
+            });
+            n8nHtml += '</tbody></table>';
+            n8nHtml += '<div class="vs-alert vs-alert-info" style="margin-top:16px;"><span class="dashicons dashicons-info"></span><p><strong>اگه ورکفلو ❌ نشون می‌ده:</strong><br>1. به پنل n8n برید (<code>' + d.n8n.url + '</code>)<br>2. Workflows → Import from File<br>3. فایل JSON مربوطه رو از منوی «ورکفلوهای n8n» دانلود و import کنید<br>4. ورکفلو رو <strong>Active</strong> کنید (تاگل بالا سمت راست)</p></div>';
+        }
+        $('#vs-diag-n8n-content').html(n8nHtml);
+
+        // Data
+        let dataHtml = '<table class="vs-table"><tbody>';
+        dataHtml += `<tr><td>کلمات کلیدی GSC</td><td><strong>${d.data.keywords}</strong> ردیف</td></tr>`;
+        dataHtml += `<tr><td>صفحات یتیم</td><td><strong>${d.data.orphans}</strong></td></tr>`;
+        dataHtml += `<tr><td>بک‌لینک‌ها</td><td><strong>${d.data.backlinks}</strong></td></tr>`;
+        dataHtml += `<tr><td>تحلیل‌های SERP</td><td><strong>${d.data.serp_analyses}</strong></td></tr>`;
+        dataHtml += `<tr><td>آخرین همگام‌سازی GSC</td><td>${d.data.last_gsc_sync}</td></tr>`;
+        dataHtml += `<tr><td>آخرین اسکن لینک</td><td>${d.data.last_scan}</td></tr>`;
+        dataHtml += '</tbody></table>';
+        $('#vs-diag-data-content').html(dataHtml);
+
+        // Environment
+        let envHtml = '<table class="vs-table"><tbody>';
+        Object.entries(d.environment).forEach(([k, v]) => {
+            envHtml += `<tr><td>${k}</td><td><code>${v}</code></td></tr>`;
+        });
+        envHtml += '</tbody></table>';
+        $('#vs-diag-env-content').html(envHtml);
+    });
+});
+
+// Test individual webhook
+$(document).on('click', '.vs-test-wh', function(){
+    const $btn = $(this).prop('disabled', true);
+    const path = $(this).data('path');
+    post('viraseo_test_n8n_webhook', {path: path}, r => {
+        $btn.prop('disabled', false);
+        const msg = r.success ? r.data : r.data;
+        alert(msg);
+    });
+});

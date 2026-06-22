@@ -52,4 +52,5 @@ add_action('plugins_loaded', function() {
     new \ViraSEO\Features\TrafficForecaster();
     new \ViraSEO\Features\KeywordDiscovery();
     new \ViraSEO\Features\WorkflowManager();
+    new \ViraSEO\Features\Diagnostics();
 });
