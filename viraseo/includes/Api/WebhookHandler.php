@@ -114,14 +114,18 @@ class WebhookHandler {
     /**
      * Direct Serper.dev search from WP (lightweight, used by Rank Monitor).
      * Always forces Iran location + Persian language.
+     * NOTE: Google disabled num=100 in 2025 — each request returns ~10 results (one page).
+     * Use $page (1-indexed) to paginate; each request consumes 1 Serper credit.
      */
-    public static function serper_search(string $keyword, int $num = 30): array {
+    public static function serper_search(string $keyword, int $num = 10, int $page = 1): array {
         $key = Dashboard::get('serper_api_key');
         if (!$key) return ['error'=>'کلید Serper API در تنظیمات وارد نشده.'];
+        $payload = ['q'=>$keyword,'gl'=>'ir','hl'=>'fa','location'=>'Iran','num'=>$num];
+        if ($page > 1) $payload['page'] = $page;
         $r = wp_remote_post('https://google.serper.dev/search', [
             'timeout'=>25,
             'headers'=>['X-API-KEY'=>$key,'Content-Type'=>'application/json'],
-            'body'=>wp_json_encode(['q'=>$keyword,'gl'=>'ir','hl'=>'fa','location'=>'Iran','num'=>$num]),
+            'body'=>wp_json_encode($payload),
         ]);
         if (is_wp_error($r)) return ['error'=>'خطا در اتصال به Serper: '.$r->get_error_message()];
         $code = wp_remote_retrieve_response_code($r);

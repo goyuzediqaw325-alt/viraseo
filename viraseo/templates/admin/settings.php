@@ -21,6 +21,7 @@
       <div class="vs-field"><label class="vs-label">حداقل Striking</label><input class="vs-input" type="number" name="viraseo_settings[striking_min]" value="<?php echo esc_attr($s['striking_min'] ?? 4); ?>"></div>
       <div class="vs-field"><label class="vs-label">حداکثر Striking</label><input class="vs-input" type="number" name="viraseo_settings[striking_max]" value="<?php echo esc_attr($s['striking_max'] ?? 20); ?>"></div>
       <div class="vs-field"><label class="vs-label">حداقل نمایش</label><input class="vs-input" type="number" name="viraseo_settings[min_impressions]" value="<?php echo esc_attr($s['min_impressions'] ?? 100); ?>"></div>
+      <div class="vs-field"><label class="vs-label">تعداد صفحات بررسی رتبه</label><input class="vs-input" type="number" min="1" max="10" name="viraseo_settings[rank_max_pages]" value="<?php echo esc_attr($s['rank_max_pages'] ?? 3); ?>"><span class="vs-hint">هر صفحه ۱۰ نتیجه و ۱ کردیت Serper. بررسی به‌محض پیدا شدن سایت متوقف می‌شود.</span></div>
     </div>
     <h3 class="vs-card-title">منطقه خطر</h3>
     <div class="vs-field"><label class="vs-label"><input type="checkbox" name="viraseo_settings[remove_data]" value="1"> حذف تمام داده‌ها هنگام حذف پلاگین</label></div>

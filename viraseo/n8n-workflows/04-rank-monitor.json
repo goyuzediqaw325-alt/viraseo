@@ -16,7 +16,7 @@
         ]},
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({q: $node.Webhook.json.body.keyword, gl: 'ir', hl: 'fa', location: 'Iran', num: 100}) }}",
+        "jsonBody": "={{ JSON.stringify(Object.assign({q: $node.Webhook.json.body.keyword, gl: 'ir', hl: 'fa', location: 'Iran', num: 10}, ($node.Webhook.json.body.page && $node.Webhook.json.body.page > 1) ? {page: $node.Webhook.json.body.page} : {})) }}",
         "options": {"response": {"response": {"neverError": true}}}
       },
       "name": "Serper Search", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [430, 300],

@@ -34,7 +34,7 @@ $has_key = !empty(\ViraSEO\Admin\Dashboard::get('serper_api_key'));
       <button class="vs-btn vs-btn-primary" id="vs-rank-add"><span class="dashicons dashicons-plus-alt"></span> افزودن</button>
       <button class="vs-btn vs-btn-secondary" id="vs-rank-checkall"><span class="dashicons dashicons-update"></span> بررسی همه الان</button>
     </div>
-    <p style="font-size:11px;color:var(--vs-text-muted);margin-top:8px;">رتبه‌ها به‌صورت خودکار در پس‌زمینه (Action Scheduler) و بر اساس بازه‌ی انتخابی به‌روزرسانی می‌شوند. لوکیشن جستجو همیشه «ایران» است.</p>
+    <p style="font-size:11px;color:var(--vs-text-muted);margin-top:8px;">رتبه‌ها به‌صورت خودکار در پس‌زمینه (Action Scheduler) و بر اساس بازه‌ی انتخابی به‌روزرسانی می‌شوند. لوکیشن جستجو همیشه «ایران» است. تعداد صفحات بررسی (پیش‌فرض ۳ = تا رتبه ۳۰) در «تنظیمات» قابل تغییر است — بررسی به‌محض پیدا شدن سایت متوقف می‌شود تا کمترین کردیت Serper مصرف شود.</p>
   </div>
 
   <div class="vs-card">

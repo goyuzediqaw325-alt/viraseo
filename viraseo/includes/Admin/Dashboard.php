@@ -83,6 +83,7 @@ class Dashboard {
             'striking_min' => max(1, absint($i['striking_min'] ?? 11)),
             'striking_max' => max(1, absint($i['striking_max'] ?? 20)),
             'min_impressions' => absint($i['min_impressions'] ?? 10),
+            'rank_max_pages' => min(10, max(1, absint($i['rank_max_pages'] ?? 3))),
             'remove_data' => !empty($i['remove_data']),
         ];
     }
@@ -91,7 +92,7 @@ class Dashboard {
         $s = wp_parse_args(get_option(self::OPT, []), [
             'n8n_url'=>'','n8n_secret'=>'','serper_api_key'=>'','oauth_proxy_url'=>'',
             'gsc_client_id'=>'','gsc_client_secret'=>'',
-            'striking_min'=>11,'striking_max'=>20,'min_impressions'=>10,'remove_data'=>false,
+            'striking_min'=>11,'striking_max'=>20,'min_impressions'=>10,'rank_max_pages'=>3,'remove_data'=>false,
         ]);
         return $key ? ($s[$key] ?? null) : $s;
     }

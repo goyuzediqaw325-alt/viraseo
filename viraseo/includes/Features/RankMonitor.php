@@ -83,7 +83,7 @@ class RankMonitor {
                 $msg = '✅ رتبه شما: ' . $res['rank'] . ($res['found_url'] ? ' — ' . $res['found_url'] : '');
             } else {
                 $msg = '⚠️ سایت شما (' . implode('، ', $res['hosts']) . ') در ' . $res['total']
-                     . ' نتیجه بررسی‌شده پیدا نشد.';
+                     . ' نتیجه (' . ($res['pages'] ?? 1) . ' صفحه بررسی‌شده) پیدا نشد.';
                 if (!empty($res['top'])) $msg .= ' | دامنه‌های نتایج اول: ' . implode('، ', array_filter($res['top']));
             }
             wp_send_json_success(['message'=>$msg]);
@@ -135,8 +135,8 @@ class RankMonitor {
         }
     }
 
-    /** Query for a keyword, fetch results (n8n or direct), then match THIS site's domain.
-     *  Matching is done in PHP for both paths so behavior + debug are consistent. */
+    /** Query a keyword across up to N pages, stopping as soon as THIS site is found
+     *  (minimizes Serper credits — 1 credit per page). Matching is done in PHP. */
     public function check_keyword(int $id): array {
         global $wpdb;
         $t = $wpdb->prefix . 'viraseo_rank_tracking';
@@ -144,36 +144,49 @@ class RankMonitor {
         if (!$row) return ['error'=>'یافت نشد.'];
 
         $hosts = $this->site_hosts();
-        $fetch = $this->fetch_organic($row->keyword);
-        if (isset($fetch['error'])) return ['error'=>$fetch['error']];
+        $max_pages = max(1, min(10, (int) (\ViraSEO\Admin\Dashboard::get('rank_max_pages') ?: 3)));
 
-        $organic = $fetch['organic'];
-        $rank = null; $found_url = null;
-        foreach ($organic as $i => $item) {
-            $link = $item['link'] ?? '';
-            $h = $this->host_of($link);
-            if ($h && $this->host_match($h, $hosts)) {
-                $rank = (int)($item['position'] ?? ($i + 1));
-                $found_url = $link;
-                break;
+        $rank = null; $found_url = null; $scanned = 0; $top = []; $pages_used = 0; $prev_first = '';
+        for ($page = 1; $page <= $max_pages; $page++) {
+            $fetch = $this->fetch_page($row->keyword, $page);
+            if (isset($fetch['error'])) {
+                if ($page === 1) return ['error'=>$fetch['error']];
+                break; // keep what we have from earlier pages
             }
+            $organic = $fetch['organic'];
+            if (empty($organic)) break;
+            $pages_used = $page;
+
+            // Guard: if Serper ignored the page param and returned the same first result,
+            // stop to avoid wasting credits on duplicate pages.
+            $first = $this->host_of(($organic[0]['link'] ?? '')) . '|' . (($organic[0]['link'] ?? ''));
+            if ($page > 1 && $first === $prev_first) break;
+            $prev_first = $first;
+
+            foreach ($organic as $item) {
+                $scanned++;
+                $link = $item['link'] ?? '';
+                $h = $this->host_of($link);
+                if (count($top) < 10) $top[] = $h ?: '?';
+                if ($h && $this->host_match($h, $hosts)) {
+                    $rank = $scanned; $found_url = $link;
+                    break 2; // found — stop paginating (saves credits)
+                }
+            }
+            // Fewer than ~8 results means no further pages exist — stop early.
+            if (count($organic) < 8) break;
         }
 
         $this->store_result($id, $row, $rank, $found_url);
-
-        $top = [];
-        foreach (array_slice($organic, 0, 8) as $item) {
-            $d = $this->host_of($item['link'] ?? '');
-            if ($d) $top[] = $d;
-        }
-        return ['rank'=>$rank, 'found_url'=>$found_url, 'total'=>count($organic), 'top'=>$top, 'hosts'=>$hosts];
+        return ['rank'=>$rank, 'found_url'=>$found_url, 'total'=>$scanned, 'top'=>$top, 'hosts'=>$hosts, 'pages'=>$pages_used];
     }
 
-    /** Fetch organic results: prefer the dedicated n8n workflow, fall back to direct Serper. */
-    private function fetch_organic(string $keyword): array {
+    /** Fetch ONE page of organic results (n8n preferred, direct Serper fallback). */
+    private function fetch_page(string $keyword, int $page): array {
         if (\ViraSEO\Admin\Dashboard::get('n8n_url')) {
             $res = WebhookHandler::to_n8n('viraseo-rank-check', [
                 'keyword'=>$keyword,
+                'page'=>$page,
                 'site_host'=>$this->site_hosts()[0] ?? '',
                 'serper_api_key'=>\ViraSEO\Admin\Dashboard::get('serper_api_key'),
             ]);
@@ -185,7 +198,7 @@ class RankMonitor {
             }
             // n8n unavailable / old workflow / empty — fall through to direct
         }
-        $res = WebhookHandler::serper_search($keyword, 100);
+        $res = WebhookHandler::serper_search($keyword, 10, $page);
         if (isset($res['error'])) return ['error'=>$res['error']];
         return ['organic'=>$res['organic']];
     }
