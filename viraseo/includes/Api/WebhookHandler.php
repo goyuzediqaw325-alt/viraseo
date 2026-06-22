@@ -23,7 +23,8 @@ class WebhookHandler {
 
     public function verify(\WP_REST_Request $r): bool {
         $secret = Dashboard::get('n8n_secret');
-        if (!$secret) return false;
+        // If no secret configured, allow all callbacks (for easier setup)
+        if (empty($secret)) return true;
         return hash_equals($secret, (string)$r->get_header('X-ViraSEO-Secret'));
     }
 
