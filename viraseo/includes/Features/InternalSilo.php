@@ -177,12 +177,15 @@ class InternalSilo {
         $posts = $wpdb->get_results("SELECT ID,post_title,post_content FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT 300");
         if (count($posts) < 2) { wp_send_json_success(['clusters'=>[]]); return; }
 
-        // Top keyword per post → cluster key
+        // Top keyword per post → cluster key (prefer the target keyword, else top content keyword)
         $clusters = [];
         foreach ($posts as $p) {
-            $kw = PersianText::extract_keywords(wp_strip_all_tags($p->post_content).' '.$p->post_title, 5);
-            if (!$kw) continue;
-            $top = array_key_first($kw);
+            $top = mb_strtolower(\ViraSEO\Features\TargetKeywords::get((int)$p->ID));
+            if ($top === '') {
+                $kw = PersianText::extract_keywords(wp_strip_all_tags($p->post_content).' '.$p->post_title, 5);
+                if (!$kw) continue;
+                $top = array_key_first($kw);
+            }
             $clusters[$top][] = ['id'=>$p->ID, 'title'=>$p->post_title ?: get_the_title($p->ID), 'len'=>mb_strlen(wp_strip_all_tags($p->post_content))];
         }
 
@@ -282,24 +285,45 @@ class InternalSilo {
         $posts = $wpdb->get_results("SELECT ID,post_title,post_content FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT 300");
         if (count($posts)<2) return ['count'=>0,'attempted'=>0,'error'=>''];
 
-        // Build keyword cache for each post
-        $cache = [];
+        // Pre-compute normalized text + keyword sets + target keyword per post
+        $norm = []; $cache = []; $target = [];
         foreach ($posts as $p) {
             $text = wp_strip_all_tags($p->post_content) . ' ' . $p->post_title;
+            $norm[$p->ID] = PersianText::normalize(mb_strtolower($text));
             $cache[$p->ID] = PersianText::extract_keywords($text, 25);
+            $target[$p->ID] = PersianText::normalize(mb_strtolower(TargetKeywords::get((int)$p->ID)));
         }
 
         $count = 0; $attempted = 0; $error = '';
-        $insert = function(int $src, int $tgt, string $anchor, float $score, string $reason) use ($wpdb, $st, $lt, &$count, &$attempted, &$error): void {
-            if ($src < 1 || $tgt < 1 || $src === $tgt) return;
-            if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$lt} WHERE source_id=%d AND target_id=%d", $src, $tgt))) return;
-            if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$st} WHERE source_id=%d AND target_id=%d", $src, $tgt))) return;
+        $insert = function(int $src, int $tgt, string $anchor, float $score, string $reason) use ($wpdb, $st, $lt, &$count, &$attempted, &$error): bool {
+            if ($src < 1 || $tgt < 1 || $src === $tgt) return false;
+            if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$lt} WHERE source_id=%d AND target_id=%d", $src, $tgt))) return false;
+            if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$st} WHERE source_id=%d AND target_id=%d", $src, $tgt))) return false;
             $attempted++;
             $ok = $wpdb->insert($st, ['source_id'=>$src,'target_id'=>$tgt,'anchor'=>mb_substr($anchor,0,500),'score'=>$score,'reason'=>mb_substr($reason,0,200),'status'=>'pending']);
-            if ($ok === false) { if (!$error) $error = $wpdb->last_error; }
-            else $count++;
+            if ($ok === false) { if (!$error) $error = $wpdb->last_error; return false; }
+            $count++; return true;
         };
 
+        // ===== PRIMARY: keyword-targeted linking =====
+        // For each target page B with a target keyword KW, link source pages that MENTION KW
+        // to B, using KW itself as the (ideal) anchor. This is the SEO-correct method.
+        foreach ($posts as $b) {
+            if ($count >= 150) break;
+            $kw = $target[$b->ID];
+            if ($kw === '' || mb_strlen($kw) < 3) continue;
+            foreach ($posts as $a) {
+                if ($count >= 150) break;
+                if ($a->ID === $b->ID) continue;
+                if (mb_strpos($norm[$a->ID], $kw) === false) continue; // source must mention the keyword
+                // Score: prominence of keyword in source (frequency), capped to 100
+                $freq = substr_count($norm[$a->ID], $kw);
+                $score = min(100, 60 + $freq * 8);
+                $insert($a->ID, $b->ID, $kw, $score, 'صفحه مبدا شامل کلمه هدف مقصد («'.$kw.'») است — انکر دقیق.');
+            }
+        }
+
+        // ===== FALLBACK: keyword-similarity (for pages without target keywords) =====
         for ($i=0; $i<count($posts) && $count<150; $i++) {
             for ($j=$i+1; $j<count($posts) && $count<150; $j++) {
                 $a=$posts[$i]; $b=$posts[$j];
@@ -309,24 +333,17 @@ class InternalSilo {
                 if (empty($shared)) continue;
                 $union=array_unique(array_merge($ka,$kb));
                 $sim = count($shared)/count($union);
-                if ($sim < 0.08) continue; // lower threshold = more suggestions
+                if ($sim < 0.08) continue;
 
-                $anchor = reset($shared);
                 $score = round($sim*100,2);
                 $reason = 'کلمات مشترک: '.implode('، ', array_slice($shared,0,4));
-
-                // Smart anchor: prefer a shared keyword that appears in the TARGET's title
-                // (more topically relevant), otherwise the highest-frequency shared keyword.
                 $pick = function(array $shared, string $title) {
                     $tt = PersianText::tokenize($title);
                     foreach ($shared as $kw) if (in_array($kw, $tt, true)) return $kw;
                     return reset($shared);
                 };
-                $anchorAB = $pick($shared, $b->post_title);
-                $anchorBA = $pick($shared, $a->post_title);
-
-                $insert($a->ID, $b->ID, $anchorAB, $score, $reason);
-                if ($count<150) $insert($b->ID, $a->ID, $anchorBA, $score, $reason);
+                $insert($a->ID, $b->ID, $pick($shared, $b->post_title), $score, $reason);
+                if ($count<150) $insert($b->ID, $a->ID, $pick($shared, $a->post_title), $score, $reason);
             }
         }
         return ['count'=>$count,'attempted'=>$attempted,'error'=>$error];

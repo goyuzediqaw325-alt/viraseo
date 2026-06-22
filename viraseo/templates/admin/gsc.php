@@ -105,7 +105,8 @@ $gsc_connected = !empty($_GET['gsc_connected']);
   <div class="vs-tab-panel active" id="panel-keywords">
     <div class="vs-toolbar">
       <input type="text" class="vs-input" id="vs-kw-search" placeholder="جستجوی کلمه کلیدی..." style="max-width:300px;">
-      <span class="vs-hint">برای مرتب‌سازی روی عنوان ستون‌ها کلیک کنید.</span>
+      <button class="vs-btn vs-btn-secondary vs-btn-sm" id="vs-assign-targets" title="برای صفحاتی که کلمه هدف ندارند، پرکلیک‌ترین کوئری سرچ کنسول را به‌عنوان کلمه هدف تنظیم می‌کند">🎯 تخصیص خودکار کلمه هدف به صفحات</button>
+      <span id="vs-assign-status" class="vs-hint"></span>
     </div>
     <table class="vs-table vs-table-sortable">
       <thead><tr>

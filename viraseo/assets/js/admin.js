@@ -119,6 +119,17 @@ $(document).on('click', '.vs-sort', function(){
     else { vsKwSort.orderby = col; vsKwSort.order = 'desc'; }
     loadKeywords();
 });
+// Auto-assign target keywords to pages from GSC top queries
+$(document).on('click', '#vs-assign-targets', function(){
+    if (!confirm('برای صفحاتی که کلمه هدف ندارند، پرکلیک‌ترین کوئری سرچ کنسول به‌عنوان کلمه هدف تنظیم می‌شود. ادامه؟')) return;
+    const $b = $(this).prop('disabled', true);
+    $('#vs-assign-status').text('در حال تخصیص...');
+    post('viraseo_suggest_targets_gsc', {}, r => {
+        $b.prop('disabled', false);
+        $('#vs-assign-status').text(r.success ? r.data.message : (r.data||'خطا'));
+        toast(r.success ? r.data.message : (r.data||'خطا'), r.success ? 'success' : 'err');
+    });
+});
 // GSC daily timeline
 function loadDaily() {
     if (!$('#vs-gsc-daily-tbody').length) return;
