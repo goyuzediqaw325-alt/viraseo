@@ -61,9 +61,10 @@ $(document).on('click', '#vs-gsc-sync', function(){
     const $b = $(this).prop('disabled',true);
     const $s = $('#vs-sync-status').text('در حال همگام‌سازی...');
     const site = $('#vs-gsc-site').val();
-    post('viraseo_gsc_fetch', {days: 28, site_url: site}, r => {
+    const days = parseInt($('#vs-gsc-days').val(), 10) || 28;
+    post('viraseo_gsc_fetch', {days: days, site_url: site}, r => {
         $b.prop('disabled',false);
-        if (r.success) { $s.text(r.data.message); toast(r.data.message,'success'); loadKeywords(); loadStriking(); }
+        if (r.success) { $s.text(r.data.message); toast(r.data.message,'success'); loadKeywords(); loadStriking(); loadDaily(); }
         else { $s.text(r.data||'خطا'); toast(r.data||'خطا','err'); }
     });
 });
@@ -86,9 +87,21 @@ if ($('#vs-gsc-site').length) {
 }
 
 // === KEYWORDS ===
+var vsKwSort = {orderby: 'impressions', order: 'desc'};
 function loadKeywords(search, page) {
-    post('viraseo_get_keywords', {search: search||$('#vs-kw-search').val()||'', page: page||1}, r => {
+    post('viraseo_get_keywords', {search: search||$('#vs-kw-search').val()||'', page: page||1, orderby: vsKwSort.orderby, order: vsKwSort.order}, r => {
         if (!r.success) return;
+        // Overview totals
+        if (r.data.totals) {
+            $('#vs-gsc-overview').show();
+            $('#vs-gsc-t-clicks').text(r.data.totals.clicks);
+            $('#vs-gsc-t-impr').text(r.data.totals.impressions);
+            $('#vs-gsc-t-pos').text(r.data.totals.avg_position);
+            $('#vs-gsc-t-count').text(r.data.totals.count);
+        }
+        // Sort arrows
+        $('.vs-sort .vs-sort-ar').text('');
+        $('.vs-sort[data-sort="'+vsKwSort.orderby+'"] .vs-sort-ar').text(vsKwSort.order === 'asc' ? '▲' : '▼');
         const $t = $('#vs-kw-tbody').empty();
         if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">داده‌ای یافت نشد.</td></tr>'); return; }
         r.data.rows.forEach(k => {
@@ -97,6 +110,24 @@ function loadKeywords(search, page) {
                 <td>${k.clicks}</td><td>${k.impressions}</td><td>${k.ctr}</td><td>${k.position}</td>
                 <td><a href="${k.page_url}" target="_blank" class="vs-btn vs-btn-sm vs-btn-secondary">↗</a></td>
             </tr>`);
+        });
+    });
+}
+$(document).on('click', '.vs-sort', function(){
+    const col = $(this).data('sort');
+    if (vsKwSort.orderby === col) vsKwSort.order = (vsKwSort.order === 'asc' ? 'desc' : 'asc');
+    else { vsKwSort.orderby = col; vsKwSort.order = 'desc'; }
+    loadKeywords();
+});
+// GSC daily timeline
+function loadDaily() {
+    if (!$('#vs-gsc-daily-tbody').length) return;
+    post('viraseo_gsc_daily', {}, r => {
+        if (!r.success) return;
+        const $t = $('#vs-gsc-daily-tbody').empty();
+        if (!r.data.rows || !r.data.rows.length) { $t.html('<tr><td colspan="5" class="vs-empty">داده‌ای نیست. ابتدا همگام‌سازی کنید.</td></tr>'); return; }
+        r.data.rows.forEach(d => {
+            $t.append(`<tr><td>${d.date}</td><td>${d.clicks}</td><td>${d.impressions}</td><td>${d.ctr}</td><td>${d.position}</td></tr>`);
         });
     });
 }
@@ -572,7 +603,7 @@ function loadOOS() {
 // === INIT ON PAGE LOAD ===
 $(function(){
     // GSC page
-    if ($('#vs-kw-tbody').length) { loadKeywords(); loadStriking(); loadCannibal(); }
+    if ($('#vs-kw-tbody').length) { loadKeywords(); loadStriking(); loadCannibal(); loadDaily(); }
     // Links page
     if ($('#vs-orphans-tbody').length) { loadOrphans(); loadSuggestions(); }
     // Backlinks page

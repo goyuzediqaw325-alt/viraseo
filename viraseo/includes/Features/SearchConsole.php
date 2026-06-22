@@ -23,20 +23,28 @@ class SearchConsole {
         $page = max(1,absint($_POST['page']??1));
         $per = 50; $off = ($page-1)*$per;
 
+        // Sortable columns (whitelist) — lets the user sort like Search Console
+        $allowed = ['impressions'=>'impressions','clicks'=>'clicks','ctr'=>'ctr','position'=>'position','date'=>'date_recorded'];
+        $orderby = $allowed[$_POST['orderby'] ?? ''] ?? 'impressions';
+        $order = (strtolower($_POST['order'] ?? 'desc') === 'asc') ? 'ASC' : 'DESC';
+
+        $where = '';
+        $args = [];
         if ($search) {
-            $like = '%'.$wpdb->esc_like($search).'%';
-            $total = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$t} WHERE keyword LIKE %s", $like));
-            $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT * FROM {$t} WHERE keyword LIKE %s ORDER BY impressions DESC LIMIT %d OFFSET %d",
-                $like, $per, $off
-            ));
-        } else {
-            $total = $wpdb->get_var("SELECT COUNT(*) FROM {$t}");
-            $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT * FROM {$t} ORDER BY impressions DESC LIMIT %d OFFSET %d",
-                $per, $off
-            ));
+            $where = 'WHERE keyword LIKE %s';
+            $args[] = '%'.$wpdb->esc_like($search).'%';
         }
+        $total = $args
+            ? $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$t} {$where}", $args))
+            : $wpdb->get_var("SELECT COUNT(*) FROM {$t}");
+
+        $sql = "SELECT * FROM {$t} {$where} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d";
+        $rows = $wpdb->get_results($wpdb->prepare($sql, array_merge($args, [$per, $off])));
+
+        // Overview totals (across the whole dataset, matching the search filter)
+        $sum = $args
+            ? $wpdb->get_row($wpdb->prepare("SELECT SUM(clicks) c, SUM(impressions) i, AVG(position) p FROM {$t} {$where}", $args))
+            : $wpdb->get_row("SELECT SUM(clicks) c, SUM(impressions) i, AVG(position) p FROM {$t}");
 
         $data = array_map(fn($r) => [
             'keyword'=>$r->keyword, 'page_url'=>$r->page_url,
@@ -48,7 +56,16 @@ class SearchConsole {
             'is_striking'=>(bool)$r->is_striking,
         ], $rows ?: []);
 
-        wp_send_json_success(['rows'=>$data,'total'=>(int)$total,'pages'=>ceil($total/$per)]);
+        wp_send_json_success([
+            'rows'=>$data,'total'=>(int)$total,'pages'=>ceil($total/$per),
+            'orderby'=>array_search($orderby, $allowed, true), 'order'=>strtolower($order),
+            'totals'=>[
+                'clicks'=>PersianText::format_number((int)($sum->c ?? 0)),
+                'impressions'=>PersianText::format_number((int)($sum->i ?? 0)),
+                'avg_position'=>JalaliDate::to_fa(number_format((float)($sum->p ?? 0),1)),
+                'count'=>PersianText::format_number((int)$total),
+            ],
+        ]);
     }
 
     public function ajax_striking(): void {

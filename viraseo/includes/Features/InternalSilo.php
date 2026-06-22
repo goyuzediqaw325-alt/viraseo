@@ -23,12 +23,16 @@ class InternalSilo {
         try {
             $result = $this->scan();
             // Generate link suggestions immediately (don't wait for cron)
-            $suggCount = $this->suggest();
+            $sugg = $this->suggest();
+            $msg = sprintf('✅ اسکن کامل شد. %d لینک داخلی، %d صفحه یتیم، %d پیشنهاد لینک.', $result['links'], $result['orphans'], $sugg['count']);
+            if ($sugg['count'] === 0 && $sugg['attempted'] > 0) {
+                $msg .= ' ⚠️ ' . $sugg['attempted'] . ' پیشنهاد ساخته شد ولی ذخیره نشد. خطای پایگاه داده: ' . ($sugg['error'] ?: 'نامشخص');
+            }
             wp_send_json_success([
-                'message' => sprintf('✅ اسکن کامل شد. %d لینک داخلی، %d صفحه یتیم، %d پیشنهاد لینک.', $result['links'], $result['orphans'], $suggCount),
+                'message' => $msg,
                 'links' => $result['links'],
                 'orphans' => $result['orphans'],
-                'suggestions' => $suggCount,
+                'suggestions' => $sugg['count'],
             ]);
         } catch (\Throwable $e) {
             wp_send_json_error('خطا در اسکن: ' . $e->getMessage());
@@ -120,16 +124,22 @@ class InternalSilo {
         return ['links'=>$link_count, 'orphans'=>$orphan_count];
     }
 
-    public function suggest(): int {
+    public function suggest(): array {
         global $wpdb;
         $st = $wpdb->prefix.'viraseo_link_suggestions';
         $lt = $wpdb->prefix.'viraseo_internal_links';
+
+        // Self-heal: ensure the table + columns are correct (older installs may be missing 'reason')
+        $cols = $wpdb->get_col("SHOW COLUMNS FROM {$st}");
+        if (!$cols || !in_array('reason', $cols, true) || !in_array('score', $cols, true)) {
+            (new \ViraSEO\Database\Schema())->create_all_tables();
+        }
 
         // Clear old pending suggestions (keep accepted/rejected)
         $wpdb->query("DELETE FROM {$st} WHERE status='pending'");
 
         $posts = $wpdb->get_results("SELECT ID,post_title,post_content FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT 300");
-        if (count($posts)<2) return 0;
+        if (count($posts)<2) return ['count'=>0,'attempted'=>0,'error'=>''];
 
         // Build keyword cache for each post
         $cache = [];
@@ -138,7 +148,15 @@ class InternalSilo {
             $cache[$p->ID] = PersianText::extract_keywords($text, 25);
         }
 
-        $count = 0;
+        $count = 0; $attempted = 0; $error = '';
+        $insert = function(int $src, int $tgt, string $anchor, float $score, string $reason) use ($wpdb, $st, $lt, &$count, &$attempted, &$error): void {
+            if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$lt} WHERE source_id=%d AND target_id=%d", $src, $tgt))) return;
+            $attempted++;
+            $ok = $wpdb->insert($st, ['source_id'=>$src,'target_id'=>$tgt,'anchor'=>mb_substr($anchor,0,500),'score'=>$score,'reason'=>mb_substr($reason,0,200),'status'=>'pending']);
+            if ($ok === false) { if (!$error) $error = $wpdb->last_error; }
+            else $count++;
+        };
+
         for ($i=0; $i<count($posts) && $count<150; $i++) {
             for ($j=$i+1; $j<count($posts) && $count<150; $j++) {
                 $a=$posts[$i]; $b=$posts[$j];
@@ -151,19 +169,13 @@ class InternalSilo {
                 if ($sim < 0.08) continue; // lower threshold = more suggestions
 
                 $anchor = reset($shared);
+                $score = round($sim*100,2);
+                $reason = 'کلمات مشترک: '.implode('، ', array_slice($shared,0,4));
 
-                // Suggest A→B if no existing link
-                if (!$wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$lt} WHERE source_id=%d AND target_id=%d",$a->ID,$b->ID))) {
-                    $wpdb->insert($st, ['source_id'=>$a->ID,'target_id'=>$b->ID,'anchor'=>mb_substr($anchor,0,500),'score'=>round($sim*100,2),'reason'=>'کلمات مشترک: '.mb_substr(implode('، ', array_slice($shared,0,4)),0,200),'status'=>'pending']);
-                    $count++;
-                }
-                // Suggest B→A too if no existing link
-                if ($count<150 && !$wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$lt} WHERE source_id=%d AND target_id=%d",$b->ID,$a->ID))) {
-                    $wpdb->insert($st, ['source_id'=>$b->ID,'target_id'=>$a->ID,'anchor'=>mb_substr($anchor,0,500),'score'=>round($sim*100,2),'reason'=>'کلمات مشترک: '.mb_substr(implode('، ', array_slice($shared,0,4)),0,200),'status'=>'pending']);
-                    $count++;
-                }
+                $insert($a->ID, $b->ID, $anchor, $score, $reason);
+                if ($count<150) $insert($b->ID, $a->ID, $anchor, $score, $reason);
             }
         }
-        return $count;
+        return ['count'=>$count,'attempted'=>$attempted,'error'=>$error];
     }
 }

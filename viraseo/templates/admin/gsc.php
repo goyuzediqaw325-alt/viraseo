@@ -70,6 +70,14 @@ $gsc_connected = !empty($_GET['gsc_connected']);
           <option value="">در حال بارگذاری لیست سایت‌ها...</option>
         </select>
       </div>
+      <div class="vs-field" style="min-width:140px;margin-bottom:0;">
+        <label class="vs-label">بازه زمانی:</label>
+        <select id="vs-gsc-days" class="vs-select">
+          <option value="7">۷ روز اخیر</option>
+          <option value="28" selected>۲۸ روز اخیر</option>
+          <option value="90">۹۰ روز اخیر</option>
+        </select>
+      </div>
       <button class="vs-btn vs-btn-primary" id="vs-gsc-sync">
         <span class="dashicons dashicons-update"></span>
         دریافت داده‌ها
@@ -78,9 +86,18 @@ $gsc_connected = !empty($_GET['gsc_connected']);
     </div>
   </div>
 
+  <!-- Overview totals -->
+  <div id="vs-gsc-overview" class="vs-stats-row" style="margin-bottom:20px;display:none;">
+    <div class="vs-stat"><div class="vs-stat-icon"><span class="dashicons dashicons-admin-links"></span></div><div><span class="vs-stat-num" id="vs-gsc-t-clicks">۰</span><span class="vs-stat-label">کل کلیک‌ها</span></div></div>
+    <div class="vs-stat"><div class="vs-stat-icon green"><span class="dashicons dashicons-visibility"></span></div><div><span class="vs-stat-num" id="vs-gsc-t-impr">۰</span><span class="vs-stat-label">کل نمایش‌ها</span></div></div>
+    <div class="vs-stat"><div class="vs-stat-icon cyan"><span class="dashicons dashicons-chart-bar"></span></div><div><span class="vs-stat-num" id="vs-gsc-t-pos">۰</span><span class="vs-stat-label">میانگین جایگاه</span></div></div>
+    <div class="vs-stat"><div class="vs-stat-icon orange"><span class="dashicons dashicons-tag"></span></div><div><span class="vs-stat-num" id="vs-gsc-t-count">۰</span><span class="vs-stat-label">تعداد کلمات</span></div></div>
+  </div>
+
   <!-- Tabs -->
   <div class="vs-tabs">
     <button class="vs-tab active" data-tab="keywords">📊 کلمات کلیدی</button>
+    <button class="vs-tab" data-tab="timeline">📅 نمای زمانی</button>
     <button class="vs-tab" data-tab="striking">⭐ فرصت نزدیک (Striking)</button>
     <button class="vs-tab" data-tab="cannibal">⚠️ کنیبالایزیشن</button>
   </div>
@@ -88,11 +105,32 @@ $gsc_connected = !empty($_GET['gsc_connected']);
   <div class="vs-tab-panel active" id="panel-keywords">
     <div class="vs-toolbar">
       <input type="text" class="vs-input" id="vs-kw-search" placeholder="جستجوی کلمه کلیدی..." style="max-width:300px;">
+      <span class="vs-hint">برای مرتب‌سازی روی عنوان ستون‌ها کلیک کنید.</span>
     </div>
-    <table class="vs-table">
-      <thead><tr><th>کلمه کلیدی</th><th>کلیک</th><th>نمایش</th><th>CTR</th><th>جایگاه</th><th>صفحه</th></tr></thead>
+    <table class="vs-table vs-table-sortable">
+      <thead><tr>
+        <th>کلمه کلیدی</th>
+        <th class="vs-sort" data-sort="clicks">کلیک <span class="vs-sort-ar"></span></th>
+        <th class="vs-sort" data-sort="impressions">نمایش <span class="vs-sort-ar">▼</span></th>
+        <th class="vs-sort" data-sort="ctr">CTR <span class="vs-sort-ar"></span></th>
+        <th class="vs-sort" data-sort="position">جایگاه <span class="vs-sort-ar"></span></th>
+        <th>صفحه</th>
+      </tr></thead>
       <tbody id="vs-kw-tbody">
         <tr><td colspan="6" class="vs-empty">دکمه «دریافت داده‌ها» را بزنید.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="vs-tab-panel" id="panel-timeline">
+    <div class="vs-alert vs-alert-info">
+      <span class="dashicons dashicons-calendar-alt"></span>
+      <p>روند کلیک و نمایش به تفکیک روز — مرتب‌شده از جدیدترین، دقیقاً مثل نمای زمانی سرچ کنسول.</p>
+    </div>
+    <table class="vs-table">
+      <thead><tr><th>تاریخ</th><th>کلیک</th><th>نمایش</th><th>CTR</th><th>میانگین جایگاه</th></tr></thead>
+      <tbody id="vs-gsc-daily-tbody">
+        <tr><td colspan="5" class="vs-empty">ابتدا داده‌ها را همگام‌سازی کنید.</td></tr>
       </tbody>
     </table>
   </div>

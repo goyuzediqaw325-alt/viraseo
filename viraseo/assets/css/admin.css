@@ -646,3 +646,10 @@
 .vs-spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 36px; }
 .vs-spark-bar { width: 5px; min-height: 3px; border-radius: 2px; background: #0ea5e9; opacity: .85; }
 .vs-spark-miss { height: 100% !important; background: repeating-linear-gradient(45deg,#475569,#475569 2px,transparent 2px,transparent 4px) !important; opacity: .4; }
+
+
+/* === GSC sortable headers === */
+.vs-table-sortable th.vs-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.vs-table-sortable th.vs-sort:hover { color: var(--vs-primary,#818cf8); }
+.vs-sort-ar { font-size: 10px; color: var(--vs-primary,#818cf8); margin-right: 2px; }
+.vs-stats-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 14px; }

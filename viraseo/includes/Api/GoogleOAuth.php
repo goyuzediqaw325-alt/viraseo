@@ -31,6 +31,7 @@ class GoogleOAuth {
         add_action('wp_ajax_viraseo_gsc_status', [$this, 'ajax_status']);
         add_action('wp_ajax_viraseo_gsc_fetch', [$this, 'ajax_fetch']);
         add_action('wp_ajax_viraseo_gsc_sites', [$this, 'ajax_sites']);
+        add_action('wp_ajax_viraseo_gsc_daily', [$this, 'ajax_daily']);
     }
 
     /** Get OAuth Proxy URL from settings or default */
@@ -187,6 +188,33 @@ class GoogleOAuth {
         wp_send_json_success(['sites' => array_map(fn($s) => $s['siteUrl'] ?? '', $r['siteEntry'] ?? [])]);
     }
 
+    /** AJAX: Daily time-series (sorted by date desc) for the timeline view. */
+    public function ajax_daily(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        $series = get_option('viraseo_gsc_daily', []);
+        if (!is_array($series)) $series = [];
+        // Sort by date descending (most recent first), like Search Console
+        usort($series, fn($a, $b) => strcmp($b['date'] ?? '', $a['date'] ?? ''));
+        $rows = array_map(fn($d) => [
+            'date_en'     => $d['date'] ?? '',
+            'date'        => \ViraSEO\Utils\JalaliDate::format(($d['date'] ?? '') . ' 00:00:00', 'long'),
+            'clicks'      => \ViraSEO\Utils\PersianText::format_number((int)($d['clicks'] ?? 0)),
+            'impressions' => \ViraSEO\Utils\PersianText::format_number((int)($d['impressions'] ?? 0)),
+            'ctr'         => \ViraSEO\Utils\JalaliDate::to_fa(number_format(($d['ctr'] ?? 0) * 100, 2)) . '%',
+            'position'    => \ViraSEO\Utils\JalaliDate::to_fa(number_format($d['position'] ?? 0, 1)),
+        ], $series);
+        $totals = [
+            'clicks'      => array_sum(array_column($series, 'clicks')),
+            'impressions' => array_sum(array_column($series, 'impressions')),
+        ];
+        wp_send_json_success([
+            'rows'        => $rows,
+            'range_days'  => (int) get_option('viraseo_gsc_range_days', 28),
+            'total_clicks'=> \ViraSEO\Utils\PersianText::format_number($totals['clicks']),
+            'total_impr'  => \ViraSEO\Utils\PersianText::format_number($totals['impressions']),
+        ]);
+    }
+
     /** AJAX: Fetch GSC data */
     public function ajax_fetch(): void {
         check_ajax_referer('viraseo_nonce', 'nonce');
@@ -199,12 +227,13 @@ class GoogleOAuth {
         // Save selected site for future use
         update_option('viraseo_gsc_site', $site);
 
-        // Build query — NO country filter (get all data)
+        // Build query — NO country filter (get all data). dataState 'all' = include fresh/partial data.
         $query_body = [
             'startDate' => date('Y-m-d', strtotime("-{$days} days")),
-            'endDate' => date('Y-m-d', strtotime('-3 days')),
+            'endDate' => date('Y-m-d', strtotime('-2 days')),
             'dimensions' => ['query', 'page'],
             'rowLimit' => 5000,
+            'dataState' => 'all',
         ];
 
         $result = self::api('/sites/' . urlencode($site) . '/searchAnalytics/query', $query_body);
@@ -263,6 +292,26 @@ class GoogleOAuth {
         }
 
         update_option('viraseo_last_gsc_sync', current_time('mysql'));
+
+        // Fetch a time-series (by date) for the "نمای زمانی" view — lightweight, one extra call.
+        $daily = self::api('/sites/' . urlencode($site) . '/searchAnalytics/query', [
+            'startDate' => date('Y-m-d', strtotime("-{$days} days")),
+            'endDate' => date('Y-m-d', strtotime('-2 days')),
+            'dimensions' => ['date'],
+            'rowLimit' => 100,
+            'dataState' => 'all',
+        ]);
+        if (empty($daily['error']) && !empty($daily['rows'])) {
+            $series = array_map(fn($r) => [
+                'date' => $r['keys'][0] ?? '',
+                'clicks' => (int)($r['clicks'] ?? 0),
+                'impressions' => (int)($r['impressions'] ?? 0),
+                'ctr' => (float)($r['ctr'] ?? 0),
+                'position' => (float)($r['position'] ?? 0),
+            ], $daily['rows']);
+            update_option('viraseo_gsc_daily', $series);
+        }
+        update_option('viraseo_gsc_range_days', $days);
         
         $response = [
             'message' => sprintf('✅ %d کلمه کلیدی ثبت شد (از %d ردیف GSC).', $inserted, count($rows)),

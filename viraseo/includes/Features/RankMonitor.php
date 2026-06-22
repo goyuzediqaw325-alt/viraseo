@@ -82,9 +82,17 @@ class RankMonitor {
             if ($res['rank'] !== null) {
                 $msg = '✅ رتبه شما: ' . $res['rank'] . ($res['found_url'] ? ' — ' . $res['found_url'] : '');
             } else {
+                $reasons = [
+                    'end_of_results' => 'نتایج گوگل برای این کلمه تمام شد',
+                    'max_pages'      => 'به سقف صفحات تنظیم‌شده رسید',
+                    'duplicate'      => 'سرپر صفحه تکراری برگرداند (ورکفلو ۰۴ را دوباره Import کنید)',
+                    'error'          => 'خطا در دریافت صفحه بعدی',
+                ];
+                $why = $reasons[$res['stop'] ?? ''] ?? '';
                 $msg = '⚠️ سایت شما (' . implode('، ', $res['hosts']) . ') در ' . $res['total']
-                     . ' نتیجه (' . ($res['pages'] ?? 1) . ' صفحه بررسی‌شده) پیدا نشد.';
-                if (!empty($res['top'])) $msg .= ' | دامنه‌های نتایج اول: ' . implode('، ', array_filter($res['top']));
+                     . ' نتیجه پیدا نشد. ' . $res['pages'] . ' از ' . $res['max_pages'] . ' صفحه بررسی شد'
+                     . ($why ? ' (' . $why . ')' : '') . '.';
+                if (!empty($res['top'])) $msg .= ' | دامنه‌های نتایج: ' . implode('، ', array_filter($res['top']));
             }
             wp_send_json_success(['message'=>$msg]);
         }
@@ -147,20 +155,21 @@ class RankMonitor {
         $max_pages = max(1, min(10, (int) (\ViraSEO\Admin\Dashboard::get('rank_max_pages') ?: 3)));
 
         $rank = null; $found_url = null; $scanned = 0; $top = []; $pages_used = 0; $prev_first = '';
+        $stop = 'max_pages';
         for ($page = 1; $page <= $max_pages; $page++) {
             $fetch = $this->fetch_page($row->keyword, $page);
             if (isset($fetch['error'])) {
                 if ($page === 1) return ['error'=>$fetch['error']];
-                break; // keep what we have from earlier pages
+                $stop = 'error'; break; // keep what we have from earlier pages
             }
             $organic = $fetch['organic'];
-            if (empty($organic)) break;
+            if (empty($organic)) { $stop = 'end_of_results'; break; }
             $pages_used = $page;
 
             // Guard: if Serper ignored the page param and returned the same first result,
             // stop to avoid wasting credits on duplicate pages.
             $first = $this->host_of(($organic[0]['link'] ?? '')) . '|' . (($organic[0]['link'] ?? ''));
-            if ($page > 1 && $first === $prev_first) break;
+            if ($page > 1 && $first === $prev_first) { $stop = 'duplicate'; break; }
             $prev_first = $first;
 
             foreach ($organic as $item) {
@@ -169,16 +178,17 @@ class RankMonitor {
                 $h = $this->host_of($link);
                 if (count($top) < 10) $top[] = $h ?: '?';
                 if ($h && $this->host_match($h, $hosts)) {
-                    $rank = $scanned; $found_url = $link;
+                    $rank = $scanned; $found_url = $link; $stop = 'found';
                     break 2; // found — stop paginating (saves credits)
                 }
             }
             // Fewer than ~8 results means no further pages exist — stop early.
-            if (count($organic) < 8) break;
+            if (count($organic) < 8) { $stop = 'end_of_results'; break; }
         }
 
         $this->store_result($id, $row, $rank, $found_url);
-        return ['rank'=>$rank, 'found_url'=>$found_url, 'total'=>$scanned, 'top'=>$top, 'hosts'=>$hosts, 'pages'=>$pages_used];
+        return ['rank'=>$rank, 'found_url'=>$found_url, 'total'=>$scanned, 'top'=>$top,
+                'hosts'=>$hosts, 'pages'=>$pages_used, 'max_pages'=>$max_pages, 'stop'=>$stop];
     }
 
     /** Fetch ONE page of organic results (n8n preferred, direct Serper fallback). */
