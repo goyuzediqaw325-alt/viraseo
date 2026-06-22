@@ -32,8 +32,15 @@ class Dashboard {
 
     public function assets(string $hook): void {
         if (strpos($hook, self::SLUG) === false) return;
-        wp_enqueue_style('viraseo-admin', VIRASEO_URL.'assets/css/admin.css', [], VIRASEO_VERSION);
-        wp_enqueue_script('viraseo-admin', VIRASEO_URL.'assets/js/admin.js', ['jquery'], VIRASEO_VERSION, true);
+
+        // Register handles (needed for dependencies + localize)
+        wp_register_style('viraseo-admin', false, [], VIRASEO_VERSION);
+        wp_enqueue_style('viraseo-admin');
+
+        wp_register_script('viraseo-admin', false, ['jquery'], VIRASEO_VERSION, true);
+        wp_enqueue_script('viraseo-admin');
+
+        // Localize config FIRST (so VS is defined before our inline JS runs)
         wp_localize_script('viraseo-admin', 'VS', [
             'ajax' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('viraseo_nonce'),
@@ -41,6 +48,23 @@ class Dashboard {
             'restNonce' => wp_create_nonce('wp_rest'),
             'url' => VIRASEO_URL,
         ]);
+
+        // INLINE the CSS + JS to bypass servers that 403-block static plugin files.
+        // Falls back to file enqueue if reading fails.
+        $css_file = VIRASEO_DIR . 'assets/css/admin.css';
+        $js_file  = VIRASEO_DIR . 'assets/js/admin.js';
+
+        if (is_readable($css_file)) {
+            wp_add_inline_style('viraseo-admin', file_get_contents($css_file));
+        } else {
+            wp_enqueue_style('viraseo-admin-file', VIRASEO_URL.'assets/css/admin.css', [], VIRASEO_VERSION);
+        }
+
+        if (is_readable($js_file)) {
+            wp_add_inline_script('viraseo-admin', file_get_contents($js_file));
+        } else {
+            wp_enqueue_script('viraseo-admin-file', VIRASEO_URL.'assets/js/admin.js', ['jquery'], VIRASEO_VERSION, true);
+        }
     }
 
     public function register_settings(): void {
