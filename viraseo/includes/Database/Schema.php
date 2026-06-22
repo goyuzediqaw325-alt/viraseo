@@ -59,6 +59,8 @@ class Schema {
             content_gap longtext DEFAULT NULL,
             questions longtext DEFAULT NULL,
             ecommerce_data longtext DEFAULT NULL,
+            intent_data longtext DEFAULT NULL,
+            post_id bigint unsigned DEFAULT NULL,
             requested_by bigint unsigned DEFAULT NULL,
             requested_at datetime DEFAULT CURRENT_TIMESTAMP,
             completed_at datetime DEFAULT NULL,

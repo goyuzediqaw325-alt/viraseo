@@ -12,6 +12,7 @@ class SerpAnalyzer {
         add_action('wp_ajax_viraseo_start_serp', [$this, 'ajax_start']);
         add_action('wp_ajax_viraseo_serp_status', [$this, 'ajax_status']);
         add_action('wp_ajax_viraseo_serp_results', [$this, 'ajax_results']);
+        add_action('wp_ajax_viraseo_serp_history', [$this, 'ajax_history']);
     }
 
     public function ajax_start(): void {
@@ -26,9 +27,29 @@ class SerpAnalyzer {
         }
 
         $kw = PersianText::normalize($kw);
-        $r = WebhookHandler::send_serp_request($kw, get_current_user_id());
+        $post_id = absint($_POST['post_id'] ?? 0);
+        $r = WebhookHandler::send_serp_request($kw, get_current_user_id(), $post_id);
         if (isset($r['error'])) wp_send_json_error('❌ خطا: ' . $r['error']);
         wp_send_json_success(['analysis_id'=>$r['analysis_id'],'message'=>'✅ درخواست ارسال شد. n8n در حال تحلیل...']);
+    }
+
+    /** List recent SERP analyses (persistent history). */
+    public function ajax_history(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        global $wpdb;
+        $rows = $wpdb->get_results("SELECT id,keyword,status,avg_word_count,intent_data,completed_at,requested_at FROM {$wpdb->prefix}viraseo_serp_analysis ORDER BY id DESC LIMIT 20");
+        $labels = ['product'=>'محصول','article'=>'مقاله','service'=>'خدماتی'];
+        $data = array_map(function($r) use ($labels) {
+            $intent = json_decode($r->intent_data ?: 'null', true);
+            return [
+                'id'=>(int)$r->id,
+                'keyword'=>$r->keyword,
+                'status'=>$r->status,
+                'intent'=>is_array($intent) ? ($intent['label'] ?? '') : '',
+                'date'=>JalaliDate::format($r->completed_at ?: $r->requested_at, 'relative'),
+            ];
+        }, $rows ?: []);
+        wp_send_json_success(['rows'=>$data]);
     }
 
     public function ajax_status(): void {
@@ -54,6 +75,22 @@ class SerpAnalyzer {
         $err = is_array($meta) ? ($meta['error']??'') : '';
         $dbg = is_array($meta) ? ($meta['debug']??'') : '';
 
+        $intent = $this->classify_intent($comps);
+        // Persist the intent so it survives, and sync to the page's target-keyword data
+        if ($intent['dominant'] !== '' && empty($a->intent_data)) {
+            $wpdb->update($wpdb->prefix.'viraseo_serp_analysis', ['intent_data'=>wp_json_encode($intent)], ['id'=>$id]);
+            if ($a->post_id) {
+                update_post_meta((int)$a->post_id, '_viraseo_serp_intent', [
+                    'label'=>$intent['label'],
+                    'dominant'=>$intent['dominant'],
+                    'recommendation'=>$intent['recommendation'],
+                    'avg_words'=>(int)$a->avg_word_count,
+                    'keyword'=>$a->keyword,
+                    'date'=>current_time('mysql'),
+                ]);
+            }
+        }
+
         wp_send_json_success([
             'status'=>'completed',
             'keyword'=>$a->keyword,
@@ -65,7 +102,8 @@ class SerpAnalyzer {
             'ecommerce'=>is_array($meta)?($meta['ecommerce']??null):null,
             'error'=>$err,
             'debug'=>$dbg,
-            'intent'=>$this->classify_intent($comps),
+            'intent'=>$intent,
+            'saved_for_post'=> $a->post_id ? true : false,
             'competitors'=>array_map(fn($c)=>[
                 'pos'=>$c->position,'url'=>$c->url,'domain'=>$c->domain,'title'=>$c->title,
                 'words'=>$c->word_count,'h1'=>$c->h1_count,'h2'=>$c->h2_count,'h3'=>$c->h3_count,

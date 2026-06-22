@@ -189,7 +189,7 @@ $(document).on('click', '#vs-serp-start', function(){
     $('#vs-serp-progress').show();
     $('#vs-serp-error').hide();
     $('#vs-serp-results').hide();
-    post('viraseo_start_serp', {keyword:kw}, r => {
+    post('viraseo_start_serp', {keyword:kw, post_id: window._vsSerpPost||0}, r => {
         if (!r.success) {
             $('#vs-serp-progress').hide();
             $('#vs-serp-start').prop('disabled',false);
@@ -221,6 +221,26 @@ function pollSerp(id) {
         });
     }, 4000);
 }
+function loadSerpHistory() {
+    if (!$('#vs-serp-history').length) return;
+    post('viraseo_serp_history', {}, r => {
+        if (!r.success) return;
+        const $h = $('#vs-serp-history').empty();
+        if (!r.data.rows.length) { $h.html('<span class="vs-empty">هنوز تحلیلی انجام نشده.</span>'); return; }
+        r.data.rows.forEach(a => {
+            const badge = a.intent ? '<span class="vs-badge vs-badge-blue">'+a.intent+'</span>' : '';
+            const cls = a.status === 'completed' ? 'vs-hist-done' : 'vs-hist-pending';
+            $h.append('<button class="vs-hist-item '+cls+'" data-id="'+a.id+'" data-status="'+a.status+'"><strong>'+a.keyword+'</strong> '+badge+' <small>'+a.date+'</small></button>');
+        });
+    });
+}
+$(document).on('click', '.vs-hist-item', function(){
+    const id = $(this).data('id');
+    if ($(this).data('status') !== 'completed') { toast('این تحلیل کامل نشده است.','info'); return; }
+    $('#vs-serp-error').hide();
+    loadSerpResults(id);
+    $('html,body').animate({scrollTop: $('#vs-serp-results').offset() ? $('#vs-serp-results').offset().top - 60 : 0}, 300);
+});
 function loadSerpResults(id) {
     post('viraseo_serp_results', {analysis_id:id}, r => {
         $('#vs-serp-progress').hide(); $('#vs-serp-start').prop('disabled',false);
@@ -260,6 +280,8 @@ function loadSerpResults(id) {
                 + '<div class="vs-alert vs-alert-info" style="margin-top:12px"><span class="dashicons dashicons-lightbulb"></span><p>'+it.recommendation+'</p></div>'
             );
         } else { $('#vs-serp-intent').hide(); }
+        if (d.saved_for_post) toast('✅ نتیجه و نوع صفحه برای کلمه هدف این صفحه ذخیره شد.', 'success');
+        loadSerpHistory();
         $('#vs-serp-stats').html(`<div class="vs-stat"><div class="vs-stat-icon"><span class="dashicons dashicons-editor-textcolor"></span></div><div><span class="vs-stat-num">${d.avg_words}</span><span class="vs-stat-label">میانگین کلمات</span></div></div><div class="vs-stat"><div class="vs-stat-icon green"><span class="dashicons dashicons-heading"></span></div><div><span class="vs-stat-num">${d.avg_headings}</span><span class="vs-stat-label">هدینگ</span></div></div><div class="vs-stat"><div class="vs-stat-icon cyan"><span class="dashicons dashicons-groups"></span></div><div><span class="vs-stat-num">${d.competitors.length}</span><span class="vs-stat-label">رقیب</span></div></div>`);
         const $t = $('#vs-serp-tbody').empty();
         d.competitors.forEach(c => { $t.append(`<tr class="vs-serp-row" data-url="${c.url}" title="برای تحلیل دقیق این صفحه کلیک کنید"><td>${c.pos}</td><td>${c.domain}</td><td>${c.title||'-'}</td><td>${c.words} <span class="vs-snippet-note">(اسنیپت)</span></td><td>${c.h1}/${c.h2}/${c.h3}</td><td><span class="dashicons dashicons-search" style="color:var(--vs-primary)"></span></td></tr>`); });
@@ -739,10 +761,12 @@ $(function(){
     if ($('#vs-tg-tbody').length) loadTargets();
     // SERP auto-start when arriving from Target Keywords (?keyword=..&autostart=1)
     if ($('#vs-serp-kw').length) {
+        loadSerpHistory();
         var params = new URLSearchParams(window.location.search);
         var kwParam = params.get('keyword');
         if (kwParam) {
             $('#vs-serp-kw').val(kwParam);
+            window._vsSerpPost = parseInt(params.get('post'), 10) || 0;
             if (params.get('autostart') === '1') $('#vs-serp-start').trigger('click');
         }
     }
@@ -827,12 +851,14 @@ function loadTargets() {
         r.data.rows.forEach(o => {
             let stats = o.stats ? ('کلیک '+o.stats.clicks+' · نمایش '+o.stats.impressions+' · جایگاه '+o.stats.position) : '<span class="vs-empty">—</span>';
             let suggest = o.suggest ? ('<span class="vs-tag">'+o.suggest+'</span> <button class="vs-btn vs-btn-sm vs-btn-secondary vs-tg-use" data-id="'+o.id+'" data-kw="'+escAttr(o.suggest)+'">استفاده</button>') : '<span class="vs-empty">—</span>';
-            let serpBtn = o.current ? '<a class="vs-btn vs-btn-sm vs-btn-primary" href="admin.php?page=viraseo-serp&keyword='+encodeURIComponent(o.current)+'&autostart=1" title="تحلیل SERP این کلمه">🔍 تحلیل SERP</a>' : '';
+            let serpBtn = o.current ? '<a class="vs-btn vs-btn-sm vs-btn-primary" href="admin.php?page=viraseo-serp&keyword='+encodeURIComponent(o.current)+'&post='+o.id+'&autostart=1" title="تحلیل SERP این کلمه و ذخیره نتیجه برای این صفحه">🔍 تحلیل SERP</a>' : '';
+            let intentCell = o.serp_intent ? ('<span class="vs-badge vs-badge-blue">'+o.serp_intent.label+'</span>'+(o.serp_intent.avg_words?'<br><small style="color:var(--vs-text-muted)">میانگین کلمات رقبا: '+o.serp_intent.avg_words+'</small>':'')+(o.serp_intent.rec?'<br><small style="color:var(--vs-text-muted)">'+o.serp_intent.rec+'</small>':'')) : '<span class="vs-empty">هنوز تحلیل نشده</span>';
             $t.append('<tr>'
                 + '<td><a href="'+o.edit+'">'+o.title+'</a><br><small style="color:var(--vs-text-muted)">'+o.type+'</small></td>'
                 + '<td><input type="text" class="vs-input vs-tg-kw" data-id="'+o.id+'" value="'+escAttr(o.current)+'" style="min-width:160px" placeholder="کلمه هدف..."></td>'
                 + '<td><span class="vs-badge vs-badge-blue">'+o.source+'</span></td>'
                 + '<td style="font-size:11px">'+stats+'</td>'
+                + '<td style="font-size:11px;max-width:240px">'+intentCell+'</td>'
                 + '<td>'+suggest+'</td>'
                 + '<td><button class="vs-btn vs-btn-sm vs-btn-success vs-tg-save" data-id="'+o.id+'">ذخیره</button> '+serpBtn+'</td>'
                 + '</tr>');

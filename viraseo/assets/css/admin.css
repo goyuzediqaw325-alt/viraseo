@@ -690,3 +690,11 @@
 .vs-flow-arrow { font-size: 20px; color: #10b981; font-weight: 800; }
 .vs-suggestion-anchor-row { font-size: 13px; margin-bottom: 4px; }
 .vs-suggestion-reason { font-size: 11px; color: var(--vs-text-muted); margin-bottom: 8px; }
+
+
+/* === SERP history === */
+.vs-serp-history { display: flex; flex-wrap: wrap; gap: 8px; }
+.vs-hist-item { background: rgba(148,163,184,.08); border: 1px solid rgba(148,163,184,.2); border-radius: 10px; padding: 8px 12px; cursor: pointer; font-family: var(--vs-font); font-size: 12px; color: var(--vs-text,#e2e8f0); display: flex; align-items: center; gap: 6px; }
+.vs-hist-item:hover { border-color: var(--vs-primary,#6366f1); }
+.vs-hist-item small { color: var(--vs-text-muted); }
+.vs-hist-pending { opacity: .6; }

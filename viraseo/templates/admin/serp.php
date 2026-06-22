@@ -36,6 +36,11 @@ $n8n_ready = !empty($n8n_url);
     <div class="vs-progress"><div class="vs-progress-bar"></div><span class="vs-progress-text">n8n در حال تحلیل نتایج گوگل...</span></div>
   </div>
 
+  <div class="vs-card" id="vs-serp-history-card" style="margin-bottom:16px;">
+    <h3 class="vs-card-title"><span class="dashicons dashicons-backup"></span> تحلیل‌های اخیر (ذخیره‌شده)</h3>
+    <div id="vs-serp-history" class="vs-serp-history"><span class="vs-empty">در حال بارگذاری...</span></div>
+  </div>
+
   <div id="vs-serp-error" class="vs-alert vs-alert-danger" style="display:none;">
     <span class="dashicons dashicons-dismiss"></span>
     <p id="vs-serp-error-text"></p>

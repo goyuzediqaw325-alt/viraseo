@@ -18,7 +18,7 @@
 
   <table class="vs-table">
     <thead><tr>
-      <th>صفحه</th><th>کلمه هدف فعلی</th><th>منبع</th><th>عملکرد GSC</th><th>پیشنهاد افزونه</th><th>عملیات</th>
+      <th>صفحه</th><th>کلمه هدف فعلی</th><th>منبع</th><th>عملکرد GSC</th><th>هدف صفحه (SERP)</th><th>پیشنهاد افزونه</th><th>عملیات</th>
     </tr></thead>
     <tbody id="vs-tg-tbody"><tr><td colspan="6" class="vs-empty">در حال بارگذاری...</td></tr></tbody>
   </table>

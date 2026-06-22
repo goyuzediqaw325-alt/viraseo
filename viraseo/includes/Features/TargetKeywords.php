@@ -68,6 +68,11 @@ class TargetKeywords {
                 'source'=>$source,
                 'suggest'=>$suggest,
                 'stats'=>$stats,
+                'serp_intent'=>(function($pid){
+                    $si = get_post_meta($pid, '_viraseo_serp_intent', true);
+                    if (!is_array($si) || empty($si['label'])) return null;
+                    return ['label'=>$si['label'], 'rec'=>$si['recommendation'] ?? '', 'avg_words'=>$si['avg_words'] ?? 0];
+                })($p->ID),
             ];
         }
         wp_send_json_success(['rows'=>$rows, 'has_gsc'=>$has_gsc]);

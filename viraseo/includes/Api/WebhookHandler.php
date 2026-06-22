@@ -157,10 +157,10 @@ class WebhookHandler {
         return ['error'=>"n8n پاسخ HTTP {$code} داد.\n\nآدرس: {$full_url}\nپاسخ: " . mb_substr($resp_body, 0, 300)];
     }
 
-    public static function send_serp_request(string $keyword, int $user_id): array {
+    public static function send_serp_request(string $keyword, int $user_id, int $post_id = 0): array {
         global $wpdb;
         $t = $wpdb->prefix.'viraseo_serp_analysis';
-        $wpdb->insert($t, ['keyword'=>$keyword,'keyword_hash'=>md5(mb_strtolower($keyword)),'status'=>'pending','requested_by'=>$user_id]);
+        $wpdb->insert($t, ['keyword'=>$keyword,'keyword_hash'=>md5(mb_strtolower($keyword)),'status'=>'pending','requested_by'=>$user_id,'post_id'=>$post_id ?: null]);
         $id = $wpdb->insert_id;
         if (!$id) return ['error'=>'DB error'];
 
