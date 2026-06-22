@@ -11,6 +11,15 @@ class TrafficForecaster {
 
     public function __construct() {
         add_action('wp_ajax_viraseo_forecast', [$this, 'ajax']);
+        add_action('wp_ajax_viraseo_forecast_page', [$this, 'ajax_page']);
+    }
+
+    /** Action recommendation based on current position. */
+    private function action_for(float $pos): array {
+        if ($pos <= 3) return ['برای صفحه اول رقابت کنید: بهبود CTR با عنوان جذاب‌تر، افزودن FAQ Schema و تصاویر بهینه.', 'green'];
+        if ($pos <= 10) return ['در صفحه اول هستید: عنوان و متای جذاب‌تر برای کلیک بیشتر + هدف‌گیری Featured Snippet (پاسخ کوتاه به سوال).', 'green'];
+        if ($pos <= 20) return ['نزدیک صفحه اول: محتوا را عمیق‌تر کنید (H2/H3، پاسخ به سوالات)، و لینک داخلی بیشتری به این صفحه بدهید.', 'orange'];
+        return ['عقب‌تر: محتوا را کامل بازنویسی کنید، کلمه هدف را شفاف کنید و چند لینک داخلی قوی بسازید.', 'red'];
     }
 
     public function ajax(): void {
@@ -60,6 +69,7 @@ class TrafficForecaster {
                 'effort'=>$effort,
                 'effort_color'=>$effortColor,
                 'priority'=>$priority,
+                'action'=>$this->action_for($curPos)[0],
             ];
         }
 
@@ -74,5 +84,46 @@ class TrafficForecaster {
             'total_growth'=>PersianText::format_number(array_sum(array_column($data,'growth_raw'))),
             'count'=>count($data),
         ]);
+    }
+
+    /**
+     * Per-page traffic opportunities: ALL queries a page ranks for + actionable suggestions.
+     * Surfaces "other keywords" you can target on the same page to grow its traffic.
+     */
+    public function ajax_page(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        global $wpdb;
+        $t = $wpdb->prefix.'viraseo_gsc_keywords';
+        $url = esc_url_raw($_POST['url'] ?? '');
+        if (!$url) wp_send_json_error('آدرس صفحه نامعتبر است.');
+
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT keyword, SUM(clicks) c, SUM(impressions) i, AVG(position) p
+             FROM {$t} WHERE page_url=%s GROUP BY keyword_hash ORDER BY i DESC LIMIT 60", $url
+        ));
+        if (!$rows) wp_send_json_error('برای این صفحه داده‌ای در سرچ کنسول نیست.');
+
+        $kws = [];
+        foreach ($rows as $r) {
+            $pos = round((float)$r->p, 1);
+            $kws[] = [
+                'keyword'=>$r->keyword,
+                'position'=>JalaliDate::to_fa(number_format($pos,1)),
+                'impressions'=>PersianText::format_number((int)$r->i),
+                'clicks'=>PersianText::format_number((int)$r->c),
+                'pos_raw'=>$pos,
+                'is_opportunity'=> ($pos > 3 && (int)$r->i >= 10),
+            ];
+        }
+        // Pick the best-ranking query as the page's main intent + give a checklist
+        $best = $rows[0];
+        [$rec] = $this->action_for(round((float)$best->p, 1));
+        $checklist = [
+            'این کلمات مرتبط را به‌صورت طبیعی در محتوا و زیرعنوان‌ها (H2/H3) بگنجانید.',
+            $rec,
+            'یک بخش «سوالات متداول» با کلماتی که جایگاه ۸ تا ۲۰ دارند اضافه کنید.',
+            'از صفحات مرتبط دیگر با انکر همین کلمات به این صفحه لینک داخلی بدهید.',
+        ];
+        wp_send_json_success(['keywords'=>$kws, 'checklist'=>$checklist, 'count'=>count($kws)]);
     }
 }

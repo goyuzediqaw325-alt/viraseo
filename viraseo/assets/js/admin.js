@@ -579,11 +579,31 @@ $(document).on('click', '#vs-fc-calc', function(){
         const $tb = $('#vs-fc-tbody').empty();
         $('#vs-fc-total').text('+' + r.data.total_growth);
         $('#vs-fc-count').text(r.data.count || 0);
-        if (!r.data.rows.length) { $tb.html('<tr><td colspan="7" class="vs-empty">فرصتی یافت نشد. ابتدا داده‌های سرچ کنسول را همگام‌سازی کنید.</td></tr>'); return; }
+        if (!r.data.rows.length) { $tb.html('<tr><td colspan="8" class="vs-empty">فرصتی یافت نشد. ابتدا داده‌های سرچ کنسول را همگام‌سازی کنید.</td></tr>'); return; }
         r.data.rows.forEach(f => {
             const ec = f.effort_color === 'green' ? 'vs-badge-green' : (f.effort_color === 'orange' ? 'vs-badge-orange' : 'vs-badge-red');
-            $tb.append(`<tr><td><a href="${f.url}" target="_blank" style="color:var(--vs-primary)">${f.keyword}</a></td><td>${f.position}</td><td>${f.impressions}</td><td>${f.clicks}</td><td>${f.potential}</td><td style="color:var(--vs-success);font-weight:700">${f.growth}</td><td><span class="vs-badge ${ec}">${f.effort}</span></td></tr>`);
+            $tb.append(`<tr><td><a href="${f.url}" target="_blank" style="color:var(--vs-primary)">${f.keyword}</a></td><td>${f.position}</td><td>${f.impressions}</td><td>${f.clicks}</td><td>${f.potential}</td><td style="color:var(--vs-success);font-weight:700">${f.growth}</td><td><span class="vs-badge ${ec}">${f.effort}</span></td><td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-fc-page" data-url="${escAttr(f.url)}" title="${escAttr(f.action)}">💡 کلمات و اقدامات</button></td></tr>`);
         });
+    });
+});
+// Per-page keyword opportunities + action checklist
+$(document).on('click', '.vs-fc-page', function(){
+    const url = $(this).data('url');
+    const $row = $(this).closest('tr');
+    const $next = $row.next('.vs-fc-detail');
+    if ($next.length) { $next.remove(); return; }
+    const $d = $('<tr class="vs-fc-detail"><td colspan="8"><div class="vs-inspect-loading">⏳ در حال تحلیل صفحه...</div></td></tr>');
+    $row.after($d);
+    post('viraseo_forecast_page', {url: url}, r => {
+        if (!r.success) { $d.find('td').html('<div class="vs-inspect-err">'+(r.data||'خطا')+'</div>'); return; }
+        let kws = r.data.keywords.map(k => '<tr><td>'+k.keyword+(k.is_opportunity?' <span class="vs-badge vs-badge-orange">فرصت</span>':'')+'</td><td>'+k.position+'</td><td>'+k.impressions+'</td><td>'+k.clicks+'</td></tr>').join('');
+        let checks = r.data.checklist.map(c => '<li>'+c+'</li>').join('');
+        $d.find('td').html(
+            '<div class="vs-fc-detail-box"><div class="vs-row" style="gap:24px;align-items:flex-start">'
+            + '<div style="flex:2;min-width:280px"><h4>📊 کلمات دیگری که این صفحه می‌گیرد (فرصت رشد):</h4><table class="vs-table"><thead><tr><th>کلمه</th><th>جایگاه</th><th>نمایش</th><th>کلیک</th></tr></thead><tbody>'+kws+'</tbody></table></div>'
+            + '<div style="flex:1;min-width:220px"><h4>✅ اقدامات پیشنهادی برای افزایش ترافیک:</h4><ul class="vs-checklist">'+checks+'</ul></div>'
+            + '</div></div>'
+        );
     });
 });
 

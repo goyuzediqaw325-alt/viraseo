@@ -698,3 +698,11 @@
 .vs-hist-item:hover { border-color: var(--vs-primary,#6366f1); }
 .vs-hist-item small { color: var(--vs-text-muted); }
 .vs-hist-pending { opacity: .6; }
+
+
+/* === Forecast page detail === */
+.vs-fc-detail > td { background: rgba(15,23,42,.5); }
+.vs-fc-detail-box { padding: 14px; }
+.vs-fc-detail-box h4 { margin: 0 0 8px; font-size: 13px; color: #fff; }
+.vs-checklist { list-style: none; padding: 0; margin: 0; }
+.vs-checklist li { font-size: 12px; padding: 8px 12px; margin-bottom: 6px; background: rgba(16,185,129,.08); border-right: 3px solid #10b981; border-radius: 0 8px 8px 0; }
