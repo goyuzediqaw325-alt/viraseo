@@ -39,6 +39,7 @@ $has_key = !empty(\ViraSEO\Admin\Dashboard::get('serper_api_key'));
 
   <div class="vs-card">
     <h3 class="vs-card-title">کلمات تحت رصد</h3>
+    <div id="vs-rank-msg" style="display:none;margin-bottom:12px;"></div>
     <table class="vs-table">
       <thead><tr>
         <th>کلمه کلیدی</th><th>رتبه فعلی</th><th>تغییر</th><th>بهترین رتبه</th>

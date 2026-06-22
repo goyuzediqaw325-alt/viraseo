@@ -298,7 +298,14 @@ $(document).on('click', '#vs-rank-checkall', function(){
 $(document).on('click', '.vs-rank-check', function(){
     const $b = $(this).prop('disabled', true).text('...');
     post('viraseo_rank_check', {id:$(this).data('id')}, r => {
-        if (r.success) loadRanks(); else { toast(r.data,'err'); $b.prop('disabled',false).text('⟳'); }
+        if (r.success) {
+            const m = r.data.message || 'به‌روزرسانی شد';
+            const notFound = m.indexOf('⚠️') === 0;
+            $('#vs-rank-msg').show().html('<div class="vs-alert vs-alert-'+(notFound?'warning':'info')+'"><span class="dashicons dashicons-'+(notFound?'warning':'yes')+'"></span><p>'+m+'</p></div>');
+            toast(notFound ? 'سایت در نتایج پیدا نشد — جزئیات بالای جدول' : 'رتبه به‌روزرسانی شد', notFound?'info':'success');
+            loadRanks();
+        }
+        else { toast(r.data,'err'); $b.prop('disabled',false).text('⟳'); }
     });
 });
 $(document).on('click', '.vs-rank-del', function(){

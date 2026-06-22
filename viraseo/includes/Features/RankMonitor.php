@@ -78,11 +78,19 @@ class RankMonitor {
         if ($id) {
             $res = $this->check_keyword($id);
             if (isset($res['error'])) wp_send_json_error($res['error']);
-        } else {
-            // check all active
-            $ids = $wpdb->get_col("SELECT id FROM {$wpdb->prefix}viraseo_rank_tracking WHERE status='active'");
-            foreach ($ids as $kid) $this->check_keyword((int)$kid);
+            // Transparent feedback so the user can see exactly what happened
+            if ($res['rank'] !== null) {
+                $msg = '✅ رتبه شما: ' . $res['rank'] . ($res['found_url'] ? ' — ' . $res['found_url'] : '');
+            } else {
+                $msg = '⚠️ سایت شما (' . implode('، ', $res['hosts']) . ') در ' . $res['total']
+                     . ' نتیجه بررسی‌شده پیدا نشد.';
+                if (!empty($res['top'])) $msg .= ' | دامنه‌های نتایج اول: ' . implode('، ', array_filter($res['top']));
+            }
+            wp_send_json_success(['message'=>$msg]);
         }
+        // check all active
+        $ids = $wpdb->get_col("SELECT id FROM {$wpdb->prefix}viraseo_rank_tracking WHERE status='active'");
+        foreach ($ids as $kid) $this->check_keyword((int)$kid);
         wp_send_json_success(['message'=>'✅ رتبه‌ها به‌روزرسانی شد.']);
     }
 
@@ -127,51 +135,86 @@ class RankMonitor {
         }
     }
 
-    /** Query for a keyword and locate this site's best position.
-     *  Primary: dedicated n8n Rank Monitor workflow. Fallback: direct Serper from WP. */
+    /** Query for a keyword, fetch results (n8n or direct), then match THIS site's domain.
+     *  Matching is done in PHP for both paths so behavior + debug are consistent. */
     public function check_keyword(int $id): array {
         global $wpdb;
         $t = $wpdb->prefix . 'viraseo_rank_tracking';
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$t} WHERE id=%d", $id));
         if (!$row) return ['error'=>'یافت نشد.'];
 
-        $site_host = preg_replace('/^www\./', '', (string) wp_parse_url(get_site_url(), PHP_URL_HOST));
-        $rank = null; $found_url = null; $err = '';
+        $hosts = $this->site_hosts();
+        $fetch = $this->fetch_organic($row->keyword);
+        if (isset($fetch['error'])) return ['error'=>$fetch['error']];
 
-        // 1) Try dedicated n8n workflow (synchronous)
+        $organic = $fetch['organic'];
+        $rank = null; $found_url = null;
+        foreach ($organic as $i => $item) {
+            $link = $item['link'] ?? '';
+            $h = $this->host_of($link);
+            if ($h && $this->host_match($h, $hosts)) {
+                $rank = (int)($item['position'] ?? ($i + 1));
+                $found_url = $link;
+                break;
+            }
+        }
+
+        $this->store_result($id, $row, $rank, $found_url);
+
+        $top = [];
+        foreach (array_slice($organic, 0, 8) as $item) {
+            $d = $this->host_of($item['link'] ?? '');
+            if ($d) $top[] = $d;
+        }
+        return ['rank'=>$rank, 'found_url'=>$found_url, 'total'=>count($organic), 'top'=>$top, 'hosts'=>$hosts];
+    }
+
+    /** Fetch organic results: prefer the dedicated n8n workflow, fall back to direct Serper. */
+    private function fetch_organic(string $keyword): array {
         if (\ViraSEO\Admin\Dashboard::get('n8n_url')) {
             $res = WebhookHandler::to_n8n('viraseo-rank-check', [
-                'keyword'=>$row->keyword,
-                'site_host'=>$site_host,
+                'keyword'=>$keyword,
+                'site_host'=>$this->site_hosts()[0] ?? '',
                 'serper_api_key'=>\ViraSEO\Admin\Dashboard::get('serper_api_key'),
             ]);
             if (!isset($res['error']) && is_array($res['data'] ?? null)) {
                 $d = $res['data'];
-                if (empty($d['error'])) {
-                    $rank = isset($d['rank']) && $d['rank'] !== null ? (int)$d['rank'] : null;
-                    $found_url = $d['found_url'] ?? null;
-                    $this->store_result($id, $row, $rank, $found_url);
-                    return ['rank'=>$rank];
+                if (empty($d['error']) && !empty($d['organic']) && is_array($d['organic'])) {
+                    return ['organic'=>$d['organic']];
                 }
-                $err = $d['error'];
-            } else {
-                $err = $res['error'] ?? '';
             }
+            // n8n unavailable / old workflow / empty — fall through to direct
         }
+        $res = WebhookHandler::serper_search($keyword, 100);
+        if (isset($res['error'])) return ['error'=>$res['error']];
+        return ['organic'=>$res['organic']];
+    }
 
-        // 2) Fallback: direct Serper call from WP
-        $res = WebhookHandler::serper_search($row->keyword, 50);
-        if (isset($res['error'])) return ['error'=>$err ?: $res['error']];
-        foreach ($res['organic'] as $i => $item) {
-            $h = preg_replace('/^www\./', '', (string) wp_parse_url($item['link'] ?? '', PHP_URL_HOST));
-            if ($h && $h === $site_host) {
-                $rank = (int)($item['position'] ?? ($i + 1));
-                $found_url = $item['link'];
-                break;
-            }
+    /** Candidate host names for THIS site (home + site url, lowercased, www-stripped). */
+    private function site_hosts(): array {
+        $hosts = [];
+        foreach ([home_url(), get_site_url()] as $u) {
+            $h = $this->host_of($u);
+            if ($h) $hosts[$h] = true;
         }
-        $this->store_result($id, $row, $rank, $found_url);
-        return ['rank'=>$rank];
+        return array_keys($hosts) ?: ['']; 
+    }
+
+    private function host_of(string $url): string {
+        if ($url === '') return '';
+        if (!preg_match('#^https?://#i', $url)) $url = 'https://' . $url;
+        $h = (string) wp_parse_url($url, PHP_URL_HOST);
+        return strtolower(preg_replace('/^www\./i', '', $h));
+    }
+
+    /** True if result host equals a site host, or is a sub/parent domain of it. */
+    private function host_match(string $h, array $site_hosts): bool {
+        foreach ($site_hosts as $s) {
+            if ($s === '') continue;
+            if ($h === $s) return true;
+            if (str_ends_with($h, '.' . $s) || str_ends_with($s, '.' . $h)) return true;
+        }
+        return false;
     }
 
     /** Persist a rank check result + append to history. */
