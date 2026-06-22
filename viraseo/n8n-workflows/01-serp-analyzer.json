@@ -1,0 +1,58 @@
+{
+  "name": "ViraSEO — SERP Analyzer (Top 10 FA)",
+  "nodes": [
+    {
+      "parameters": {"httpMethod": "POST", "path": "viraseo-serp-analyze", "responseMode": "responseNode"},
+      "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 1.1, "position": [200, 300]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={\"status\":\"accepted\",\"executionId\":\"{{$execution.id}}\"}"},
+      "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [400, 300]
+    },
+    {
+      "parameters": {"method": "GET", "url": "=https://www.google.com/search?q={{encodeURIComponent($node.Webhook.json.body.keyword)}}&hl=fa&gl=ir&num=10", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}, {"name": "Accept-Language", "value": "fa-IR,fa;q=0.9"}]}, "options": {"response": {"response": {"fullResponse": true}}}},
+      "name": "Google SERP", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [600, 300]
+    },
+    {
+      "parameters": {"jsCode": "const cheerio=require('cheerio');\nconst html=$input.first().json.body||'';\nconst $=cheerio.load(html);\nconst results=[];\n$('div.g').each(function(i){if(i>=10)return false;const link=$(this).find('a').first().attr('href')||'';const title=$(this).find('h3').first().text()||'';if(link.startsWith('http'))results.push({position:results.length+1,url:link,title,domain:(new URL(link)).hostname});});\nconst questions=[];$('[data-q]').each(function(){questions.push($(this).attr('data-q'));});\nreturn[{json:{results,questions,keyword:$node.Webhook.json.body.keyword,analysis_id:$node.Webhook.json.body.analysis_id,callback_url:$node.Webhook.json.body.callback_url}}];"},
+      "name": "Parse SERP", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [800, 300]
+    },
+    {
+      "parameters": {"batchSize": 1},
+      "name": "Loop", "type": "n8n-nodes-base.splitInBatches", "typeVersion": 3, "position": [1000, 300]
+    },
+    {
+      "parameters": {"amount": 2},
+      "name": "Wait", "type": "n8n-nodes-base.wait", "typeVersion": 1.1, "position": [1100, 450]
+    },
+    {
+      "parameters": {"method": "GET", "url": "={{$json.url}}", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}]}, "options": {"timeout": 15000, "response": {"response": {"fullResponse": true}}}},
+      "name": "Fetch Page", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1250, 450], "continueOnFail": true
+    },
+    {
+      "parameters": {"jsCode": "const cheerio=require('cheerio');\nconst html=$input.first().json.body||'';\nconst pos=$input.first().json.position||0;\nconst url=$input.first().json.url||'';\nconst domain=$input.first().json.domain||'';\nconst title=$input.first().json.title||'';\nconst $c=cheerio.load(html);\n$c('script,style,nav,footer,header,aside').remove();\nconst h={h1:[],h2:[],h3:[]};\n$c('h1').each(function(){h.h1.push($c(this).text().trim());});\n$c('h2').each(function(){h.h2.push($c(this).text().trim());});\n$c('h3').each(function(){h.h3.push($c(this).text().trim());});\nconst text=$c('body').text().replace(/\\s+/g,' ').trim();\nconst words=text.split(/[\\s\\u200C]+/).filter(w=>w.length>1);\nconst stops=new Set(['و','در','به','از','که','این','را','با','است','آن','یک','برای','تا','ها','های','می','شود','کرد','شده']);\nconst freq={};\n(text.match(/[\\u0600-\\u06FF\\u200C]+/g)||[]).forEach(w=>{const n=w.toLowerCase().replace(/\\u200C{2,}/g,'\\u200C');if(n.length>=3&&!stops.has(n))freq[n]=(freq[n]||0)+1;});\nconst topKw=Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,30).map(e=>e[0]);\nreturn[{json:{position:pos,url,domain,title,word_count:words.length,h1_count:h.h1.length,h2_count:h.h2.length,h3_count:h.h3.length,images:$c('img').length,schema_types:'',top_keywords:topKw,headings:h}}];"},
+      "name": "Extract", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1450, 450]
+    },
+    {
+      "parameters": {"jsCode": "const comps=$input.all().map(i=>i.json);\nconst meta=$node['Parse SERP'].json;\nconst n=comps.length||1;\nconst avgW=Math.round(comps.reduce((s,c)=>s+c.word_count,0)/n);\nconst avgH=Math.round(comps.reduce((s,c)=>s+c.h1_count+c.h2_count+c.h3_count,0)/n);\nconst kwC={};\ncomps.forEach(c=>(c.top_keywords||[]).forEach(k=>{kwC[k]=(kwC[k]||0)+1;}));\nconst lsi=Object.entries(kwC).filter(e=>e[1]>=3).sort((a,b)=>b[1]-a[1]).slice(0,30).map(e=>e[0]);\nconst h2T={};\ncomps.forEach(c=>(c.headings?.h2||[]).forEach(h=>{const n2=h.toLowerCase().trim();if(n2.length>5)h2T[n2]=(h2T[n2]||0)+1;}));\nconst gap=Object.entries(h2T).filter(e=>e[1]>=2).sort((a,b)=>b[1]-a[1]).slice(0,15).map(e=>e[0]);\nreturn[{json:{analysis_id:meta.analysis_id,callback_url:meta.callback_url,avg_word_count:avgW,avg_headings:avgH,lsi_keywords:lsi,content_gap:gap,questions:meta.questions||[],competitors:comps}}];"},
+      "name": "Aggregate", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1700, 300]
+    },
+    {
+      "parameters": {"method": "POST", "url": "={{$json.callback_url}}", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "X-ViraSEO-Secret", "value": "={{$env.VIRASEO_SECRET}}"}, {"name": "Content-Type", "value": "application/json"}]}, "sendBody": true, "specifyBody": "json", "jsonBody": "={{JSON.stringify($json)}}"},
+      "name": "Send to WP", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]},
+    "Respond": {"main": [[{"node": "Google SERP", "type": "main", "index": 0}]]},
+    "Google SERP": {"main": [[{"node": "Parse SERP", "type": "main", "index": 0}]]},
+    "Parse SERP": {"main": [[{"node": "Loop", "type": "main", "index": 0}]]},
+    "Loop": {"main": [[{"node": "Aggregate", "type": "main", "index": 0}], [{"node": "Wait", "type": "main", "index": 0}]]},
+    "Wait": {"main": [[{"node": "Fetch Page", "type": "main", "index": 0}]]},
+    "Fetch Page": {"main": [[{"node": "Extract", "type": "main", "index": 0}]]},
+    "Extract": {"main": [[{"node": "Loop", "type": "main", "index": 0}]]},
+    "Aggregate": {"main": [[{"node": "Send to WP", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionTimeout": 600},
+  "tags": [{"name": "ViraSEO"}]
+}

@@ -1,191 +1,102 @@
 <?php
 namespace ViraSEO\Features;
-
 defined('ABSPATH') || exit;
 
-/**
- * n8n Workflow Manager — AJAX handlers for CRUD operations on workflow JSON files
- */
+/** Workflow Manager — CRUD for n8n JSON files + configurator */
 class WorkflowManager {
-
     public function __construct() {
+        add_action('wp_ajax_viraseo_wf_list', [$this, 'ajax_list']);
         add_action('wp_ajax_viraseo_wf_save', [$this, 'ajax_save']);
         add_action('wp_ajax_viraseo_wf_create', [$this, 'ajax_create']);
         add_action('wp_ajax_viraseo_wf_delete', [$this, 'ajax_delete']);
-        add_action('wp_ajax_viraseo_wf_download_all', [$this, 'ajax_download_all']);
+        add_action('wp_ajax_viraseo_wf_configure', [$this, 'ajax_configure']);
     }
 
-    private function get_dir(): string {
-        return VIRASEO_DIR . 'n8n-workflows/';
-    }
+    private function dir(): string { return VIRASEO_DIR.'n8n-workflows/'; }
 
-    /**
-     * Save edits to an existing workflow JSON file
-     */
-    public function ajax_save(): void {
-        check_ajax_referer('viraseo_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('دسترسی غیرمجاز.');
-        }
-
-        $filename = sanitize_file_name($_POST['filename'] ?? '');
-        $content = wp_unslash($_POST['content'] ?? '');
-
-        if (!$filename || !$content) {
-            wp_send_json_error('نام فایل و محتوا الزامی است.');
-        }
-
-        // Validate JSON
-        $decoded = json_decode($content);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            wp_send_json_error('JSON نامعتبر: ' . json_last_error_msg());
-        }
-
-        $filepath = $this->get_dir() . $filename;
-        if (!file_exists($filepath)) {
-            wp_send_json_error('فایل یافت نشد: ' . $filename);
-        }
-
-        // Pretty-print JSON before saving
-        $pretty = wp_json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $written = file_put_contents($filepath, $pretty);
-
-        if ($written === false) {
-            wp_send_json_error('خطا در نوشتن فایل. مجوزها را بررسی کنید.');
-        }
-
-        wp_send_json_success([
-            'message' => 'ورکفلو با موفقیت ذخیره شد.',
-            'size' => size_format(strlen($pretty)),
-        ]);
-    }
-
-    /**
-     * Create a new workflow JSON file
-     */
-    public function ajax_create(): void {
-        check_ajax_referer('viraseo_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('دسترسی غیرمجاز.');
-        }
-
-        $name = sanitize_file_name($_POST['name'] ?? '');
-        $content = wp_unslash($_POST['content'] ?? '');
-
-        if (!$name) {
-            wp_send_json_error('نام فایل الزامی است.');
-        }
-
-        // Ensure .json extension
-        if (pathinfo($name, PATHINFO_EXTENSION) !== 'json') {
-            $name .= '.json';
-        }
-
-        $filepath = $this->get_dir() . $name;
-        if (file_exists($filepath)) {
-            wp_send_json_error('فایلی با این نام وجود دارد: ' . $name);
-        }
-
-        // Default content if empty
-        if (empty($content)) {
-            $content = wp_json_encode([
-                'name' => str_replace(['-', '_', '.json'], [' ', ' ', ''], $name),
-                'nodes' => [],
-                'connections' => new \stdClass(),
-                'settings' => ['executionTimeout' => 300],
-                'tags' => [['name' => 'ViraSEO']],
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        } else {
-            // Validate provided JSON
-            $decoded = json_decode($content);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                wp_send_json_error('JSON نامعتبر: ' . json_last_error_msg());
-            }
-            $content = wp_json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        }
-
-        $written = file_put_contents($filepath, $content);
-        if ($written === false) {
-            wp_send_json_error('خطا در ایجاد فایل.');
-        }
-
-        wp_send_json_success([
-            'message' => 'ورکفلو جدید ایجاد شد: ' . $name,
-            'filename' => $name,
-        ]);
-    }
-
-    /**
-     * Delete a workflow file
-     */
-    public function ajax_delete(): void {
-        check_ajax_referer('viraseo_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('دسترسی غیرمجاز.');
-        }
-
-        $filename = sanitize_file_name($_POST['filename'] ?? '');
-        if (!$filename) {
-            wp_send_json_error('نام فایل الزامی.');
-        }
-
-        $filepath = $this->get_dir() . $filename;
-        if (!file_exists($filepath)) {
-            wp_send_json_error('فایل یافت نشد.');
-        }
-
-        if (!unlink($filepath)) {
-            wp_send_json_error('خطا در حذف فایل.');
-        }
-
-        wp_send_json_success(['message' => 'ورکفلو حذف شد.']);
-    }
-
-    /**
-     * Generate a ZIP of all workflow files for download
-     */
-    public function ajax_download_all(): void {
-        check_ajax_referer('viraseo_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('دسترسی غیرمجاز.');
-        }
-
-        $dir = $this->get_dir();
-        $files = glob($dir . '*.json');
-
-        if (empty($files)) {
-            wp_send_json_error('هیچ ورکفلویی یافت نشد.');
-        }
-
-        $upload_dir = wp_upload_dir();
-        $zip_path = $upload_dir['basedir'] . '/viraseo-workflows.zip';
-        $zip_url = $upload_dir['baseurl'] . '/viraseo-workflows.zip';
-
-        if (!class_exists('ZipArchive')) {
-            // Fallback: return list of download URLs
-            $urls = [];
-            foreach ($files as $f) {
-                $urls[] = VIRASEO_URL . 'n8n-workflows/' . basename($f);
-            }
-            wp_send_json_success(['urls' => $urls, 'zip' => false]);
-            return;
-        }
-
-        $zip = new \ZipArchive();
-        if ($zip->open($zip_path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
-            wp_send_json_error('خطا در ایجاد فایل ZIP.');
-        }
-
+    public function ajax_list(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        $files = glob($this->dir().'*.json');
+        $list = [];
         foreach ($files as $f) {
-            $zip->addFile($f, basename($f));
+            $content = file_get_contents($f);
+            $json = json_decode($content, true);
+            $list[] = [
+                'filename'=>basename($f),
+                'name'=>$json['name']??basename($f,'.json'),
+                'nodes'=>isset($json['nodes'])?count($json['nodes']):0,
+                'size'=>size_format(filesize($f)),
+                'content'=>$content,
+            ];
         }
-        $zip->close();
+        wp_send_json_success(['workflows'=>$list]);
+    }
+
+    public function ajax_save(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        $fn = sanitize_file_name($_POST['filename']??'');
+        $content = wp_unslash($_POST['content']??'');
+        if (!$fn || !$content) wp_send_json_error('داده ناقص.');
+        $decoded = json_decode($content);
+        if (!$decoded) wp_send_json_error('JSON نامعتبر: '.json_last_error_msg());
+        $path = $this->dir().$fn;
+        if (!file_exists($path)) wp_send_json_error('فایل نیست.');
+        file_put_contents($path, wp_json_encode($decoded, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+        wp_send_json_success(['message'=>'ذخیره شد.']);
+    }
+
+    public function ajax_create(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        $name = sanitize_file_name($_POST['name']??'');
+        if (!$name) wp_send_json_error('نام الزامی.');
+        if (pathinfo($name,PATHINFO_EXTENSION)!=='json') $name .= '.json';
+        $path = $this->dir().$name;
+        if (file_exists($path)) wp_send_json_error('موجود است.');
+        $content = wp_unslash($_POST['content']??'');
+        if (!$content) $content = '{"name":"'.str_replace(['-','_','.json'],' ',$name).'","nodes":[],"connections":{}}';
+        file_put_contents($path, $content);
+        wp_send_json_success(['message'=>'ایجاد شد.']);
+    }
+
+    public function ajax_delete(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        $fn = sanitize_file_name($_POST['filename']??'');
+        $path = $this->dir().$fn;
+        if (file_exists($path)) unlink($path);
+        wp_send_json_success();
+    }
+
+    /**
+     * Configure: Takes user fields and injects into workflow JSON template
+     * Fields: n8n_url, secret, site_url, gsc_property
+     */
+    public function ajax_configure(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        $fn = sanitize_file_name($_POST['filename']??'');
+        $path = $this->dir().$fn;
+        if (!file_exists($path)) wp_send_json_error('فایل یافت نشد.');
+
+        $content = file_get_contents($path);
+        $site = get_site_url();
+        $secret = \ViraSEO\Admin\Dashboard::get('n8n_secret');
+        $callback_base = rest_url('viraseo/v1/');
+
+        // Replace placeholder values in JSON
+        $content = str_replace([
+            '{{SITE_URL}}','{{SECRET}}','{{CALLBACK_BASE}}',
+            '{{GSC_CALLBACK}}','{{SERP_CALLBACK}}','{{IDEAS_CALLBACK}}',
+            '{{CANNIBAL_CALLBACK}}',
+        ], [
+            $site, $secret, $callback_base,
+            $callback_base.'gsc-data',
+            $callback_base.'serp-results',
+            $callback_base.'keyword-ideas',
+            $callback_base.'cannibalization',
+        ], $content);
 
         wp_send_json_success([
-            'zip' => true,
-            'url' => $zip_url,
-            'count' => count($files),
-            'message' => count($files) . ' ورکفلو در فایل ZIP آماده دانلود است.',
+            'configured_json'=>$content,
+            'message'=>'ورکفلو با تنظیمات سایت شما پیکربندی شد. کپی کنید و در n8n وارد کنید.',
         ]);
     }
 }

@@ -1,0 +1,63 @@
+{
+  "name": "ViraSEO — Keyword Discovery (Google Suggest FA)",
+  "nodes": [
+    {
+      "parameters": {"httpMethod": "POST", "path": "viraseo-keyword-discover", "responseMode": "responseNode"},
+      "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 1.1, "position": [200, 300]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={\"status\":\"accepted\"}"},
+      "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [400, 300]
+    },
+    {
+      "parameters": {"method": "GET", "url": "=http://suggestqueries.google.com/complete/search?output=firefox&hl=fa&gl=ir&q={{encodeURIComponent($node.Webhook.json.body.seed_keyword)}}", "options": {"response": {"response": {"fullResponse": true}}}},
+      "name": "Suggest Base", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [600, 200]
+    },
+    {
+      "parameters": {"jsCode": "const seed=$node.Webhook.json.body.seed_keyword;\nconst letters=['ا','ب','پ','ت','ج','چ','خ','د','ر','ز','س','ش','ف','ق','ک','گ','ل','م','ن','و','ه','ی'];\nconst mods=['بهترین','خرید','قیمت','آموزش','چیست','چگونه','مقایسه','ارزان'];\nconst qs=[];\nletters.forEach(l=>qs.push({q:seed+' '+l}));\nmods.forEach(m=>qs.push({q:m+' '+seed}));\nreturn qs.map(item=>({json:item}));"},
+      "name": "Gen Queries", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [600, 450]
+    },
+    {
+      "parameters": {"batchSize": 1},
+      "name": "Loop", "type": "n8n-nodes-base.splitInBatches", "typeVersion": 3, "position": [800, 450]
+    },
+    {
+      "parameters": {"amount": 0.5},
+      "name": "Wait", "type": "n8n-nodes-base.wait", "typeVersion": 1.1, "position": [950, 550]
+    },
+    {
+      "parameters": {"method": "GET", "url": "=http://suggestqueries.google.com/complete/search?output=firefox&hl=fa&gl=ir&q={{encodeURIComponent($json.q)}}"},
+      "name": "Suggest Expanded", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1100, 550], "continueOnFail": true
+    },
+    {
+      "parameters": {"method": "GET", "url": "=https://www.google.com/search?q={{encodeURIComponent($node.Webhook.json.body.seed_keyword)}}&hl=fa&gl=ir&num=10", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}, {"name": "Accept-Language", "value": "fa-IR,fa;q=0.9"}]}, "options": {"response": {"response": {"fullResponse": true}}}},
+      "name": "SERP Related", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [600, 650], "continueOnFail": true
+    },
+    {
+      "parameters": {"jsCode": "const cheerio=require('cheerio');\nconst html=$input.first().json.body||'';\nconst $=cheerio.load(html);\nconst related=[];const questions=[];\n$('a').each(function(){const h=$(this).attr('href')||'';const t=$(this).text().trim();if(h.includes('/search?q=')&&t.length>3&&/[\\u0600-\\u06FF]/.test(t))related.push(t);});\n$('[data-q]').each(function(){const q=$(this).attr('data-q');if(q)questions.push(q);});\nreturn[{json:{related:[...new Set(related)].slice(0,15),questions:[...new Set(questions)].slice(0,10)}}];"},
+      "name": "Extract Related", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [850, 650]
+    },
+    {
+      "parameters": {"jsCode": "const ZWNJ='\\u200C';\nconst seed=$node.Webhook.json.body.seed_keyword;\nconst discId=$node.Webhook.json.body.discovery_id;\nconst cbUrl=$node.Webhook.json.body.callback_url;\nlet base=[];\ntry{const r=$node['Suggest Base'].json;base=Array.isArray(r)?r[1]||[]:(r.body?JSON.parse(r.body)[1]||'[]':[]);}catch(e){}\nconst expanded=[];\ntry{const items=$items('Suggest Expanded');items.forEach(item=>{try{const d=item.json;const arr=Array.isArray(d)?d[1]||[]:(d.body?JSON.parse(d.body)[1]||[]:[]);arr.forEach(s=>{if(!expanded.includes(s))expanded.push(s);});}catch(e){}});}catch(e){}\nconst rel=($node['Extract Related'].json||{}).related||[];\nconst paa=($node['Extract Related'].json||{}).questions||[];\nfunction norm(t){return t.replace(/\\u0643/g,'\\u06A9').replace(/\\u064A/g,'\\u06CC').replace(/[\\u064B-\\u065F]/g,'').replace(new RegExp(ZWNJ+'{2,}','g'),ZWNJ).replace(/\\s+/g,' ').trim();}\nconst stops=new Set(['و','در','به','از','که','این','را','با','است','آن','یک','برای','تا','ها','های','می','شود']);\nfunction score(kw){const sw=seed.split(/[\\s\\u200C]+/).filter(w=>!stops.has(w));const kws=kw.split(/[\\s\\u200C]+/).filter(w=>!stops.has(w));let m=0;sw.forEach(s=>{if(kws.some(k=>k.includes(s)||s.includes(k)))m++;});return Math.min(100,Math.round((sw.length?m/sw.length:0.5)*100)+Math.min(20,kws.length*5));}\nfunction isQ(t){return t.includes('؟')||['چیست','چگونه','چرا','کجا','آیا'].some(q=>t.includes(q));}\nconst all=new Map();\nfunction add(kw,src){const n=norm(kw);if(n.length<3)return;const key=n.toLowerCase().replace(/\\u200C/g,' ');if(key===seed.toLowerCase().replace(/\\u200C/g,' '))return;if(!all.has(key))all.set(key,{keyword:n,source:src,relevance:score(n),is_question:isQ(n)});}\nbase.forEach(k=>add(k,'suggest'));expanded.forEach(k=>add(k,'suggest'));\nrel.forEach(k=>add(k,'related'));paa.forEach(k=>add(k,'paa'));\nconst ideas=Array.from(all.values()).sort((a,b)=>b.relevance-a.relevance).slice(0,200);\nreturn[{json:{discovery_id:discId,callback_url:cbUrl,ideas}}];"},
+      "name": "Merge Score", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1350, 300]
+    },
+    {
+      "parameters": {"method": "POST", "url": "={{$json.callback_url}}", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "X-ViraSEO-Secret", "value": "={{$env.VIRASEO_SECRET}}"}, {"name": "Content-Type", "value": "application/json"}]}, "sendBody": true, "specifyBody": "json", "jsonBody": "={{JSON.stringify({discovery_id:$json.discovery_id,ideas:$json.ideas})}}"},
+      "name": "Send to WP", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1550, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]},
+    "Respond": {"main": [[{"node": "Suggest Base", "type": "main", "index": 0}, {"node": "Gen Queries", "type": "main", "index": 0}, {"node": "SERP Related", "type": "main", "index": 0}]]},
+    "Suggest Base": {"main": [[{"node": "Merge Score", "type": "main", "index": 0}]]},
+    "Gen Queries": {"main": [[{"node": "Loop", "type": "main", "index": 0}]]},
+    "Loop": {"main": [[{"node": "Merge Score", "type": "main", "index": 0}], [{"node": "Wait", "type": "main", "index": 0}]]},
+    "Wait": {"main": [[{"node": "Suggest Expanded", "type": "main", "index": 0}]]},
+    "Suggest Expanded": {"main": [[{"node": "Loop", "type": "main", "index": 0}]]},
+    "SERP Related": {"main": [[{"node": "Extract Related", "type": "main", "index": 0}]]},
+    "Extract Related": {"main": [[{"node": "Merge Score", "type": "main", "index": 0}]]},
+    "Merge Score": {"main": [[{"node": "Send to WP", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionTimeout": 120},
+  "tags": [{"name": "ViraSEO"}]
+}

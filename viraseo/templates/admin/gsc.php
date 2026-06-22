@@ -1,71 +1,39 @@
-<?php
-defined('ABSPATH') || exit;
-?>
-<div class="wrap viraseo-wrap" dir="rtl">
-    <h1 class="viraseo-page-title">
-        <span class="dashicons dashicons-search"></span>
-        سرچ کنسول و تشخیص کنیبالایزیشن
-    </h1>
-
-    <div class="viraseo-toolbar">
-        <button type="button" id="viraseo-sync-gsc" class="button button-primary">
-            <span class="dashicons dashicons-update"></span>
-            همگام‌سازی با سرچ کنسول
-        </button>
-        <span id="viraseo-sync-status" class="viraseo-inline-status"></span>
-    </div>
-
-    <div class="viraseo-tabs-wrapper">
-        <nav class="viraseo-tabs">
-            <a href="#" class="viraseo-tab active" data-tab="keywords">کلمات کلیدی</a>
-            <a href="#" class="viraseo-tab" data-tab="striking">فرصت‌های نزدیک ⭐</a>
-            <a href="#" class="viraseo-tab" data-tab="cannibal">کنیبالایزیشن ⚠️</a>
-        </nav>
-
-        <div class="viraseo-tab-content active" id="tab-keywords">
-            <div class="viraseo-filter-bar">
-                <input type="text" id="viraseo-kw-search" placeholder="جستجوی کلمه کلیدی..." class="viraseo-search-input" />
-            </div>
-            <table class="viraseo-table">
-                <thead>
-                    <tr>
-                        <th>کلمه کلیدی</th>
-                        <th>کلیک</th>
-                        <th>نمایش</th>
-                        <th>CTR</th>
-                        <th>جایگاه</th>
-                        <th>صفحه</th>
-                    </tr>
-                </thead>
-                <tbody id="viraseo-kw-tbody">
-                    <tr><td colspan="6" class="viraseo-empty-state">برای مشاهده داده‌ها، ابتدا با سرچ کنسول همگام‌سازی کنید.</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="viraseo-tab-content" id="tab-striking">
-            <div class="viraseo-info-box">
-                <span class="dashicons dashicons-lightbulb"></span>
-                <p>کلمات در جایگاه ۱۱ تا ۲۰ — با کمی تلاش می‌توانند به صفحه اول برسند.</p>
-            </div>
-            <table class="viraseo-table">
-                <thead>
-                    <tr><th>کلمه کلیدی</th><th>نمایش</th><th>جایگاه</th><th>صفحه</th></tr>
-                </thead>
-                <tbody id="viraseo-striking-tbody">
-                    <tr><td colspan="4" class="viraseo-empty-state">داده‌ای یافت نشد.</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="viraseo-tab-content" id="tab-cannibal">
-            <div class="viraseo-info-box warning">
-                <span class="dashicons dashicons-warning"></span>
-                <p>کنیبالایزیشن: چند صفحه سایت شما برای یک کلمه با هم رقابت می‌کنند و قدرت سئویی کاهش می‌یابد.</p>
-            </div>
-            <div id="viraseo-cannibal-list" class="viraseo-cards-list">
-                <div class="viraseo-empty-state">تعارضی شناسایی نشده.</div>
-            </div>
-        </div>
-    </div>
+<?php defined('ABSPATH') || exit; ?>
+<div class="vs-wrap" dir="rtl">
+  <div class="vs-header">
+    <h1 class="vs-title">سرچ کنسول</h1>
+    <span class="vs-badge vs-badge-green">🟢 مستقل — اتصال مستقیم به گوگل</span>
+  </div>
+  <div class="vs-gsc-box" id="vs-gsc-box">
+    <?php if (!empty($connected)) : ?>
+      <span class="vs-gsc-icon green">✅</span>
+      <span class="vs-gsc-info">اتصال برقرار است</span>
+      <button class="vs-btn vs-btn-danger vs-btn-sm" id="vs-gsc-disconnect">قطع اتصال</button>
+    <?php else : ?>
+      <span class="vs-gsc-icon">🔌</span>
+      <span class="vs-gsc-info">به سرچ کنسول متصل نیستید</span>
+      <button class="vs-btn vs-btn-primary" id="vs-gsc-connect">اتصال به گوگل</button>
+    <?php endif; ?>
+  </div>
+  <div class="vs-toolbar">
+    <button class="vs-btn vs-btn-secondary" id="vs-gsc-sync">همگام‌سازی</button>
+    <span id="vs-sync-status"></span>
+  </div>
+  <div class="vs-tabs">
+    <button class="vs-tab active" data-tab="keywords">کلمات کلیدی</button>
+    <button class="vs-tab" data-tab="striking">Striking Distance</button>
+    <button class="vs-tab" data-tab="cannibal">کانیبالیزاسیون</button>
+  </div>
+  <div class="vs-tab-panel active" data-panel="keywords">
+    <input type="text" class="vs-input" id="vs-kw-search" placeholder="جستجوی کلمه...">
+    <table class="vs-table"><thead><tr><th>کلمه</th><th>کلیک</th><th>نمایش</th><th>CTR</th><th>جایگاه</th><th>لینک</th></tr></thead><tbody id="vs-kw-tbody"></tbody></table>
+    <p class="vs-empty">داده‌ای یافت نشد. ابتدا همگام‌سازی کنید.</p>
+  </div>
+  <div class="vs-tab-panel" data-panel="striking">
+    <table class="vs-table"><thead><tr><th>کلمه</th><th>نمایش</th><th>کلیک</th><th>جایگاه</th><th>لینک</th></tr></thead><tbody id="vs-striking-tbody"></tbody></table>
+  </div>
+  <div class="vs-tab-panel" data-panel="cannibal">
+    <button class="vs-btn vs-btn-primary" id="vs-detect-cannibal">تشخیص کانیبالیزاسیون</button>
+    <div id="vs-cannibal-list"></div>
+  </div>
 </div>

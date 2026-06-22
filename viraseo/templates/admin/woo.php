@@ -1,67 +1,29 @@
-<?php
-defined('ABSPATH') || exit;
-?>
-<div class="wrap viraseo-wrap" dir="rtl">
-    <h1 class="viraseo-page-title">
-        <span class="dashicons dashicons-cart"></span>
-        سئو ووکامرس
-    </h1>
-
-    <div class="viraseo-tabs-wrapper">
-        <nav class="viraseo-tabs">
-            <a href="#" class="viraseo-tab active" data-tab="oos">محافظ ناموجودی (OOS)</a>
-            <a href="#" class="viraseo-tab" data-tab="faceted">کنترل فیلترها</a>
-        </nav>
-
-        <div class="viraseo-tab-content active" id="tab-oos">
-            <div class="viraseo-info-box">
-                <span class="dashicons dashicons-lightbulb"></span>
-                <p>محصولات ناموجود با ترافیک → بلوک جایگزین. بدون ترافیک + منقضی → ریدایرکت ۳۰۱.</p>
-            </div>
-            <table class="viraseo-table">
-                <thead>
-                    <tr><th>محصول</th><th>ترافیک</th><th>اقدام</th><th>تاریخ</th></tr>
-                </thead>
-                <tbody id="viraseo-oos-tbody">
-                    <tr><td colspan="4" class="viraseo-empty-state">محصول ناموجودی شناسایی نشده.</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-
-        <div class="viraseo-tab-content" id="tab-faceted">
-            <div class="viraseo-info-box warning">
-                <span class="dashicons dashicons-shield"></span>
-                <p>اگر تعداد فیلترها بیش از حد مجاز باشد، noindex/nofollow اعمال می‌شود تا بودجه کراول هدر نرود.</p>
-            </div>
-            <form id="viraseo-faceted-form" class="viraseo-form">
-                <div class="viraseo-form-row">
-                    <label><input type="checkbox" name="enabled" id="viraseo-fac-enabled" /> فعال‌سازی محافظ</label>
-                </div>
-                <div class="viraseo-form-row">
-                    <label>حداکثر پارامتر مجاز: <input type="number" name="max_params_allowed" value="1" min="0" max="10" class="small-text" /></label>
-                </div>
-                <div class="viraseo-form-row">
-                    <label>پارامترهای فیلتر (هر خط یکی):<br>
-                        <textarea name="filter_params_text" rows="5" class="large-text" dir="ltr" placeholder="min_price&#10;max_price&#10;pa_color"></textarea>
-                    </label>
-                </div>
-                <div class="viraseo-form-row">
-                    <label>پارامترهای امن (هر خط یکی):<br>
-                        <textarea name="safe_params_text" rows="3" class="large-text" dir="ltr" placeholder="product_cat&#10;paged&#10;s"></textarea>
-                    </label>
-                </div>
-                <div class="viraseo-form-row">
-                    <label>پیشوند ویژگی‌ها: <input type="text" name="prefix" value="pa_" dir="ltr" class="small-text" /></label>
-                </div>
-                <div class="viraseo-form-row">
-                    <label><input type="checkbox" name="noindex_sorting" /> noindex مرتب‌سازی (orderby)</label>
-                </div>
-                <div class="viraseo-form-row">
-                    <label><input type="checkbox" name="add_canonical" /> افزودن canonical تمیز</label>
-                </div>
-                <button type="submit" class="button button-primary">ذخیره تنظیمات فیلتر</button>
-            </form>
-        </div>
-    </div>
+<?php defined('ABSPATH') || exit; ?>
+<div class="vs-wrap" dir="rtl">
+  <div class="vs-header">
+    <h1 class="vs-title">سئو ووکامرس</h1>
+    <span class="vs-badge vs-badge-green">🟢 مستقل</span>
+  </div>
+  <div class="vs-tabs">
+    <button class="vs-tab active" data-tab="oos">محصولات ناموجود</button>
+    <button class="vs-tab" data-tab="faceted">ناوبری فیلتری</button>
+  </div>
+  <div class="vs-tab-panel active" data-panel="oos">
+    <table class="vs-table">
+      <thead><tr><th>محصول</th><th>ترافیک</th><th>اقدام</th><th>تاریخ</th></tr></thead>
+      <tbody id="vs-oos-tbody"></tbody>
+    </table>
+    <p class="vs-empty">محصول ناموجودی با ترافیک یافت نشد.</p>
+  </div>
+  <div class="vs-tab-panel" data-panel="faceted">
+    <form id="vs-faceted-form" class="vs-card">
+      <div class="vs-field"><label class="vs-label"><input type="checkbox" id="vs-fac-enabled"> فعال‌سازی مدیریت ناوبری فیلتری</label></div>
+      <div class="vs-field"><label class="vs-label">حداکثر پارامتر مجاز</label><input type="number" class="vs-input" id="vs-fac-max" value="2"></div>
+      <div class="vs-field"><label class="vs-label">فیلترهای ایندکس‌شونده</label><textarea class="vs-textarea" id="vs-fac-filters" placeholder="color&#10;size"></textarea><span class="vs-hint">هر خط یک فیلتر</span></div>
+      <div class="vs-field"><label class="vs-label">ترکیبات امن</label><textarea class="vs-textarea" id="vs-fac-safe" placeholder="color+size"></textarea></div>
+      <div class="vs-field"><label class="vs-label">پیشوند canonical</label><input type="text" class="vs-input vs-input-ltr" id="vs-fac-prefix" placeholder="/shop/"></div>
+      <div class="vs-field"><label class="vs-label"><input type="checkbox" id="vs-fac-sort"> noindex صفحات sort</label></div>
+      <button type="submit" class="vs-btn vs-btn-success">ذخیره تنظیمات</button>
+    </form>
+  </div>
 </div>
