@@ -779,6 +779,8 @@ $(function(){
     if ($('#vs-rank-tbody').length) { loadRanks(); loadRankAlerts(); }
     // Target keywords page
     if ($('#vs-tg-tbody').length) loadTargets();
+    // WooCommerce SEO page
+    if ($('#vs-woo-tbody').length) loadWooCats();
     // SERP auto-start when arriving from Target Keywords (?keyword=..&autostart=1)
     if ($('#vs-serp-kw').length) {
         loadSerpHistory();
@@ -900,6 +902,42 @@ $(document).on('click', '.vs-tg-save', function(){
         $b.prop('disabled', false).text('ذخیره');
         if (r.success) toast('کلمه هدف ذخیره شد','success'); else toast(r.data,'err');
         loadTargets();
+    });
+});
+
+// === WOOCOMMERCE SEO ===
+function loadWooCats() {
+    $('#vs-woo-tbody').html('<tr><td colspan="7" class="vs-empty">در حال تحلیل...</td></tr>');
+    post('viraseo_woo_categories', {}, r => {
+        const $t = $('#vs-woo-tbody').empty();
+        if (!r.success) { $t.html('<tr><td colspan="7" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="7" class="vs-empty">دسته‌ای یافت نشد.</td></tr>'); return; }
+        r.data.rows.forEach(c => {
+            const hc = c.health === 'ok' ? 'green' : (c.health === 'warn' ? 'orange' : 'red');
+            const hl = c.health === 'ok' ? 'سالم' : (c.health === 'warn' ? 'نیاز به بهبود' : 'ضعیف');
+            const issues = c.issues.length ? '<br><small style="color:var(--vs-text-muted)">'+c.issues.join(' · ')+'</small>' : '';
+            $t.append('<tr>'
+                + '<td><a href="'+c.url+'" target="_blank"><strong>'+c.name+'</strong></a>'+issues+'</td>'
+                + '<td>'+c.count_fa+'</td><td>'+c.desc_words+'</td><td>'+c.impressions+'</td>'
+                + '<td><input type="text" class="vs-input vs-woo-kw" data-id="'+c.id+'" value="'+escAttr(c.keyword)+'" placeholder="کلمه هدف..." style="min-width:140px"></td>'
+                + '<td><span class="vs-badge vs-badge-'+hc+'">'+hl+'</span></td>'
+                + '<td><button class="vs-btn vs-btn-sm vs-btn-success vs-woo-kw-save" data-id="'+c.id+'">ذخیره</button> <button class="vs-btn vs-btn-sm vs-btn-primary vs-woo-autolink" data-id="'+c.id+'" title="درج لینک از همه محصولات این دسته به صفحه دسته">🔗 لینک محصولات به دسته</button></td>'
+                + '</tr>');
+        });
+    });
+}
+$(document).on('click', '#vs-woo-load', loadWooCats);
+$(document).on('click', '.vs-woo-kw-save', function(){
+    const id = $(this).data('id');
+    const kw = $(this).closest('tr').find('.vs-woo-kw').val();
+    post('viraseo_woo_cat_kw', {id:id, keyword:kw}, r => toast(r.success?r.data.message:r.data, r.success?'success':'err'));
+});
+$(document).on('click', '.vs-woo-autolink', function(){
+    if (!confirm('یک لینک به صفحه‌ی این دسته در انتهای توضیحات همه محصولات این دسته درج می‌شود. ادامه؟')) return;
+    const $b = $(this).prop('disabled', true).text('...');
+    post('viraseo_woo_autolink', {id:$(this).data('id')}, r => {
+        $b.prop('disabled', false).text('🔗 لینک محصولات به دسته');
+        toast(r.success?r.data.message:r.data, r.success?'success':'err');
     });
 });
 
