@@ -66,12 +66,17 @@ $(document).on('click', '#vs-gsc-sync', function(){
 
 // Load GSC sites dropdown on page load
 if ($('#vs-gsc-site').length) {
-    post('viraseo_gsc_sites', {}, r => {
-        const $sel = $('#vs-gsc-site').empty();
+    var siteTimeout = setTimeout(function(){
+        $('#vs-gsc-site').empty().append('<option value="">خطا در بارگذاری — از «دریافت داده‌ها» استفاده کنید</option>');
+    }, 8000);
+    
+    post('viraseo_gsc_sites', {}, function(r) {
+        clearTimeout(siteTimeout);
+        var $sel = $('#vs-gsc-site').empty();
         if (r.success && r.data.sites && r.data.sites.length) {
-            r.data.sites.forEach(s => $sel.append(`<option value="${s}">${s}</option>`));
+            r.data.sites.forEach(function(s){ $sel.append('<option value="'+s+'">'+s+'</option>'); });
         } else {
-            $sel.append('<option value="">سایتی یافت نشد</option>');
+            $sel.append('<option value="' + window.location.hostname + '">'+window.location.hostname+' (پیش‌فرض)</option>');
         }
     });
 }
@@ -316,9 +321,6 @@ function pollDiscovery() {
                 $('#vs-disc-status').text('');
                 $('#vs-disc-error').show().find('p').html('⏱️ Timeout — n8n نتیجه‌ای برنگردوند.<br><br>بررسی کنید:<br>• آیا ورکفلو در n8n اجرا شد؟ (Executions بررسی کنید)<br>• آیا n8n می‌تونه به REST URL سایت شما POST کنه؟<br>• Secret باید در هر دو طرف یکسان باشه<br><br>Callback URL: <code>' + window.VS.rest + 'keyword-ideas</code>');
             }
-        });
-    }, 3500);
-}
         });
     }, 3500);
 }
