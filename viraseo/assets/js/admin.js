@@ -38,9 +38,15 @@ $(document).on('click', '#vs-test-n8n', function(){
 
 // === GSC OAuth ===
 $(document).on('click', '#vs-gsc-connect', function(){
-    post('viraseo_gsc_auth_url', {}, r => {
-        if (r.success) window.location.href = r.data.url;
-        else toast(r.data, 'err');
+    const $btn = $(this).prop('disabled', true).text('در حال اتصال...');
+    post('viraseo_gsc_connect', {}, r => {
+        if (r.success && r.data.redirect_url) {
+            // Redirect browser to Google consent page
+            window.location.href = r.data.redirect_url;
+        } else {
+            $btn.prop('disabled', false).html('<span class="dashicons dashicons-google"></span> اتصال به سرچ کنسول گوگل');
+            toast(r.data || 'خطا در اتصال', 'err');
+        }
     });
 });
 $(document).on('click', '#vs-gsc-disconnect', function(){
