@@ -21,19 +21,22 @@ class SearchConsole {
         $t = $wpdb->prefix.'viraseo_gsc_keywords';
         $search = sanitize_text_field($_POST['search']??'');
         $page = max(1,absint($_POST['page']??1));
-        $per = 30; $off = ($page-1)*$per;
+        $per = 50; $off = ($page-1)*$per;
 
-        $where = '1=1'; $params = [];
-        if ($search) { $where .= ' AND keyword LIKE %s'; $params[] = '%'.$wpdb->esc_like($search).'%'; }
-
-        $total = $params
-            ? $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$t} WHERE {$where}", ...$params))
-            : $wpdb->get_var("SELECT COUNT(*) FROM {$t}");
-
-        $params[] = $per; $params[] = $off;
-        $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM {$t} WHERE {$where} ORDER BY impressions DESC LIMIT %d OFFSET %d", ...$params
-        ));
+        if ($search) {
+            $like = '%'.$wpdb->esc_like($search).'%';
+            $total = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$t} WHERE keyword LIKE %s", $like));
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM {$t} WHERE keyword LIKE %s ORDER BY impressions DESC LIMIT %d OFFSET %d",
+                $like, $per, $off
+            ));
+        } else {
+            $total = $wpdb->get_var("SELECT COUNT(*) FROM {$t}");
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM {$t} ORDER BY impressions DESC LIMIT %d OFFSET %d",
+                $per, $off
+            ));
+        }
 
         $data = array_map(fn($r) => [
             'keyword'=>$r->keyword, 'page_url'=>$r->page_url,
@@ -43,7 +46,7 @@ class SearchConsole {
             'position'=>JalaliDate::to_fa(number_format($r->position,1)),
             'date'=>JalaliDate::format($r->date_recorded),
             'is_striking'=>(bool)$r->is_striking,
-        ], $rows);
+        ], $rows ?: []);
 
         wp_send_json_success(['rows'=>$data,'total'=>(int)$total,'pages'=>ceil($total/$per)]);
     }
