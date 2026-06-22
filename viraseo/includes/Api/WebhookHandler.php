@@ -35,6 +35,8 @@ class WebhookHandler {
         if (!$id) return new \WP_REST_Response(['error'=>'no id'],400);
 
         $t = $wpdb->prefix.'viraseo_serp_analysis';
+        $has_error = !empty($d['error']);
+        $meta = ['error'=>$d['error']??'', 'debug'=>$d['debug']??'', 'ecommerce'=>$d['ecommerce_data']??null];
         $wpdb->update($t, [
             'status'=>'completed','completed_at'=>current_time('mysql'),
             'avg_word_count'=>absint($d['avg_word_count']??0),
@@ -42,7 +44,7 @@ class WebhookHandler {
             'lsi_keywords'=>wp_json_encode($d['lsi_keywords']??[]),
             'content_gap'=>wp_json_encode($d['content_gap']??[]),
             'questions'=>wp_json_encode($d['questions']??[]),
-            'ecommerce_data'=>wp_json_encode($d['ecommerce_data']??null),
+            'ecommerce_data'=>wp_json_encode($meta),
         ], ['id'=>$id]);
 
         $ct = $wpdb->prefix.'viraseo_serp_competitors';
@@ -138,6 +140,7 @@ class WebhookHandler {
         $result = self::to_n8n('viraseo-serp-analyze', [
             'keyword'=>$keyword,'analysis_id'=>$id,
             'callback_url'=>rest_url('viraseo/v1/serp-results'),
+            'serper_api_key'=>Dashboard::get('serper_api_key'),
             'site_url'=>get_site_url(),'language'=>'fa',
         ]);
 

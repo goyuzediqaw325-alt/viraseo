@@ -50,6 +50,10 @@ class SerpAnalyzer {
             "SELECT * FROM {$wpdb->prefix}viraseo_serp_competitors WHERE analysis_id=%d ORDER BY position", $id
         ));
 
+        $meta = json_decode($a->ecommerce_data?:'null',true);
+        $err = is_array($meta) ? ($meta['error']??'') : '';
+        $dbg = is_array($meta) ? ($meta['debug']??'') : '';
+
         wp_send_json_success([
             'status'=>'completed',
             'keyword'=>$a->keyword,
@@ -58,7 +62,9 @@ class SerpAnalyzer {
             'lsi'=>json_decode($a->lsi_keywords?:'[]',true),
             'gap'=>json_decode($a->content_gap?:'[]',true),
             'questions'=>json_decode($a->questions?:'[]',true),
-            'ecommerce'=>json_decode($a->ecommerce_data?:'null',true),
+            'ecommerce'=>is_array($meta)?($meta['ecommerce']??null):null,
+            'error'=>$err,
+            'debug'=>$dbg,
             'competitors'=>array_map(fn($c)=>[
                 'pos'=>$c->position,'url'=>$c->url,'domain'=>$c->domain,'title'=>$c->title,
                 'words'=>$c->word_count,'h1'=>$c->h1_count,'h2'=>$c->h2_count,'h3'=>$c->h3_count,

@@ -184,6 +184,24 @@ function loadSerpResults(id) {
         $('#vs-serp-progress').hide(); $('#vs-serp-start').prop('disabled',false);
         if (!r.success || r.data.status!=='completed') return;
         const d = r.data;
+        // If n8n returned an error or no competitors, show a clear reason instead of an empty table
+        if (d.error || !d.competitors || d.competitors.length === 0) {
+            $('#vs-serp-results').hide();
+            $('#vs-serp-error').show();
+            var reason = d.error
+                ? ('❌ خطای n8n/Serper: <code>' + d.error + '</code>')
+                : '⚠️ هیچ نتیجه‌ای برگردانده نشد.';
+            $('#vs-serp-error-text').html(
+                reason +
+                '<br><br>🔑 برای تحلیل SERP باید کلید رایگان Serper.dev را در تنظیمات افزونه وارد کنید:' +
+                '<br>۱. به <a href="https://serper.dev" target="_blank">serper.dev</a> بروید و ثبت‌نام کنید (۲۵۰۰ جستجوی رایگان).' +
+                '<br>۲. کلید API را کپی کنید.' +
+                '<br>۳. در «تنظیمات» افزونه، فیلد «کلید Serper API» را پر کرده و ذخیره کنید.' +
+                '<br>۴. ورکفلو <code>01-serp-analyzer.json</code> را دوباره در n8n Import و Active کنید.' +
+                (d.debug ? ('<br><br><small>اطلاعات فنی: ' + d.debug + '</small>') : '')
+            );
+            return;
+        }
         $('#vs-serp-results').show();
         $('#vs-serp-stats').html(`<div class="vs-stat"><div class="vs-stat-icon"><span class="dashicons dashicons-editor-textcolor"></span></div><div><span class="vs-stat-num">${d.avg_words}</span><span class="vs-stat-label">میانگین کلمات</span></div></div><div class="vs-stat"><div class="vs-stat-icon green"><span class="dashicons dashicons-heading"></span></div><div><span class="vs-stat-num">${d.avg_headings}</span><span class="vs-stat-label">هدینگ</span></div></div><div class="vs-stat"><div class="vs-stat-icon cyan"><span class="dashicons dashicons-groups"></span></div><div><span class="vs-stat-num">${d.competitors.length}</span><span class="vs-stat-label">رقیب</span></div></div>`);
         const $t = $('#vs-serp-tbody').empty();
