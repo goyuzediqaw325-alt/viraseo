@@ -19,8 +19,13 @@ class PersianText {
         return array_filter($words, fn($w) => (bool)preg_match('/[\x{0600}-\x{06FF}]/u', $w));
     }
 
-    public static function extract_keywords(string $t, int $limit = 20): array {
-        $tokens = array_filter(self::tokenize($t), fn($w) => !in_array($w, self::$stops, true) && mb_strlen($w) > 2);
+    public static function word_count(string $t): int {
+        $t = self::normalize($t);
+        $words = preg_split('/\s+/u', trim($t), -1, PREG_SPLIT_NO_EMPTY);
+        return count($words);
+    }
+
+    public static function extract_keywords(string $t, int $limit = 20): array {        $tokens = array_filter(self::tokenize($t), fn($w) => !in_array($w, self::$stops, true) && mb_strlen($w) > 2);
         $freq = array_count_values(array_map('mb_strtolower', $tokens));
         arsort($freq);
         return array_slice($freq, 0, $limit, true);

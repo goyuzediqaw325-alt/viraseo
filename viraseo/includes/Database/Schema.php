@@ -192,6 +192,25 @@ class Schema {
             KEY idx_st (status)
         ) {$c};");
 
+        dbDelta("CREATE TABLE {$p}rank_tracking (
+            id bigint unsigned NOT NULL AUTO_INCREMENT,
+            keyword varchar(500) NOT NULL,
+            keyword_hash char(32) NOT NULL,
+            target_url varchar(2048) DEFAULT NULL,
+            current_rank smallint DEFAULT NULL,
+            previous_rank smallint DEFAULT NULL,
+            best_rank smallint DEFAULT NULL,
+            found_url varchar(2048) DEFAULT NULL,
+            history longtext DEFAULT NULL,
+            frequency enum('daily','2days','weekly') DEFAULT 'daily',
+            last_checked datetime DEFAULT NULL,
+            status enum('active','paused') DEFAULT 'active',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_kw (keyword_hash),
+            KEY idx_st (status)
+        ) {$c};");
+
         dbDelta("CREATE TABLE {$p}activity_log (
             id bigint unsigned NOT NULL AUTO_INCREMENT,
             action varchar(100) NOT NULL,

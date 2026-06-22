@@ -617,3 +617,32 @@
     .vs-header { flex-direction: column; align-items: flex-start; gap: 12px; }
     .vs-modal-box { width: 95%; max-width: none; }
 }
+
+
+/* === SERP deep inspect === */
+.vs-serp-row { cursor: pointer; transition: background .15s; }
+.vs-serp-row:hover { background: rgba(99,102,241,.08); }
+.vs-snippet-note { font-size: 10px; color: var(--vs-text-muted); }
+.vs-serp-detail > td { background: rgba(15,23,42,.5); padding: 0 !important; }
+.vs-inspect { padding: 18px; }
+.vs-inspect-loading, .vs-inspect-err { padding: 18px; text-align: center; color: var(--vs-text-muted); }
+.vs-inspect-err { color: #fca5a5; }
+.vs-inspect-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: 12px; margin-bottom: 18px; }
+.vs-inspect-metric { background: var(--vs-bg-card,#1e293b); border: 1px solid rgba(148,163,184,.15); border-radius: 10px; padding: 12px; text-align: center; }
+.vs-im-num { display: block; font-size: 22px; font-weight: 800; color: var(--vs-primary,#818cf8); }
+.vs-im-lbl { display: block; font-size: 11px; color: var(--vs-text-muted); margin-top: 4px; }
+.vs-inspect-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.vs-inspect-cols h4 { margin: 10px 0 6px; font-size: 13px; color: #fff; }
+.vs-inspect-h2 { list-style: none; padding: 0; max-height: 220px; overflow-y: auto; }
+.vs-inspect-h2 li { padding: 6px 10px; border-right: 3px solid var(--vs-primary,#818cf8); background: rgba(148,163,184,.06); margin-bottom: 5px; border-radius: 0 6px 6px 0; font-size: 12px; }
+.vs-inspect-title, .vs-inspect-desc { font-size: 12px; color: var(--vs-text-muted); background: rgba(148,163,184,.06); padding: 8px; border-radius: 6px; }
+@media (max-width: 782px){ .vs-inspect-cols { grid-template-columns: 1fr; } }
+
+/* === Rank monitor === */
+.vs-rank-badge { display: inline-block; min-width: 34px; text-align: center; padding: 4px 8px; border-radius: 8px; font-weight: 800; background: rgba(99,102,241,.15); color: var(--vs-primary,#818cf8); }
+.vs-rank-up { color: #10b981; font-weight: 700; }
+.vs-rank-down { color: #ef4444; font-weight: 700; }
+.vs-rank-flat { color: var(--vs-text-muted); }
+.vs-spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 36px; }
+.vs-spark-bar { width: 5px; min-height: 3px; border-radius: 2px; background: #0ea5e9; opacity: .85; }
+.vs-spark-miss { height: 100% !important; background: repeating-linear-gradient(45deg,#475569,#475569 2px,transparent 2px,transparent 4px) !important; opacity: .4; }

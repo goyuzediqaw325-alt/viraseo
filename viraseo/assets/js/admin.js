@@ -205,7 +205,7 @@ function loadSerpResults(id) {
         $('#vs-serp-results').show();
         $('#vs-serp-stats').html(`<div class="vs-stat"><div class="vs-stat-icon"><span class="dashicons dashicons-editor-textcolor"></span></div><div><span class="vs-stat-num">${d.avg_words}</span><span class="vs-stat-label">میانگین کلمات</span></div></div><div class="vs-stat"><div class="vs-stat-icon green"><span class="dashicons dashicons-heading"></span></div><div><span class="vs-stat-num">${d.avg_headings}</span><span class="vs-stat-label">هدینگ</span></div></div><div class="vs-stat"><div class="vs-stat-icon cyan"><span class="dashicons dashicons-groups"></span></div><div><span class="vs-stat-num">${d.competitors.length}</span><span class="vs-stat-label">رقیب</span></div></div>`);
         const $t = $('#vs-serp-tbody').empty();
-        d.competitors.forEach(c => { $t.append(`<tr><td>${c.pos}</td><td>${c.domain}</td><td>${c.title||'-'}</td><td>${c.words}</td><td>${c.h1}/${c.h2}/${c.h3}</td><td>${c.images}</td></tr>`); });
+        d.competitors.forEach(c => { $t.append(`<tr class="vs-serp-row" data-url="${c.url}" title="برای تحلیل دقیق این صفحه کلیک کنید"><td>${c.pos}</td><td>${c.domain}</td><td>${c.title||'-'}</td><td>${c.words} <span class="vs-snippet-note">(اسنیپت)</span></td><td>${c.h1}/${c.h2}/${c.h3}</td><td><span class="dashicons dashicons-search" style="color:var(--vs-primary)"></span></td></tr>`); });
         const $l = $('#vs-lsi-tags').empty();
         (d.lsi||[]).forEach(w => $l.append(`<span class="vs-tag">${w}</span>`));
         const $g = $('#vs-gap-list').empty();
@@ -213,6 +213,98 @@ function loadSerpResults(id) {
     });
 }
 
+
+// === SERP DEEP INSPECT (on-demand per result) ===
+$(document).on('click', '.vs-serp-row', function(){
+    const $row = $(this);
+    const url = $row.data('url');
+    if (!url) return;
+    // Toggle: if detail already open, close it
+    const $next = $row.next('.vs-serp-detail');
+    if ($next.length) { $next.remove(); return; }
+    const colspan = $row.children('td').length;
+    const $detail = $('<tr class="vs-serp-detail"><td colspan="'+colspan+'"><div class="vs-inspect-loading">⏳ در حال دریافت و تحلیل صفحه...</div></td></tr>');
+    $row.after($detail);
+    post('viraseo_serp_inspect', {url: url}, r => {
+        if (!r.success) { $detail.find('td').html('<div class="vs-inspect-err">❌ '+(r.data||'خطا در تحلیل')+'</div>'); return; }
+        const d = r.data;
+        let h2list = (d.h2_texts||[]).map(t=>'<li>'+t+'</li>').join('') || '<li class="vs-empty">—</li>';
+        let schema = (d.schema||[]).length ? (d.schema||[]).map(s=>'<span class="vs-tag">'+s+'</span>').join('') : '<span class="vs-empty">ندارد</span>';
+        $detail.find('td').html(
+            '<div class="vs-inspect">'
+            + '<div class="vs-inspect-grid">'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.word_count_fa+'</span><span class="vs-im-lbl">تعداد دقیق کلمات</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.h1+'/'+d.h2+'/'+d.h3+'</span><span class="vs-im-lbl">H1/H2/H3</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.images+'</span><span class="vs-im-lbl">تصاویر ('+d.images_no_alt+' بدون alt)</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.internal_links+'/'+d.external_links+'</span><span class="vs-im-lbl">لینک داخلی/خارجی</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.paragraphs+'</span><span class="vs-im-lbl">پاراگراف</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.word_count_score+'/۱۰۰</span><span class="vs-im-lbl">امتیاز محتوا</span></div>'
+            + '</div>'
+            + '<div class="vs-inspect-cols">'
+            +   '<div><h4>ساختار هدینگ‌ها (H2):</h4><ul class="vs-inspect-h2">'+h2list+'</ul></div>'
+            +   '<div><h4>عنوان صفحه (Title):</h4><p class="vs-inspect-title">'+(d.title||'—')+'</p>'
+            +       '<h4>توضیحات متا:</h4><p class="vs-inspect-desc">'+(d.meta_desc||'—')+'</p>'
+            +       '<h4>اسکیما (Schema):</h4><div class="vs-tags">'+schema+'</div></div>'
+            + '</div></div>'
+        );
+    });
+});
+
+// === RANK MONITOR ===
+function loadRanks() {
+    post('viraseo_rank_list', {}, r => {
+        if (!r.success) return;
+        const $t = $('#vs-rank-tbody').empty();
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="9" class="vs-empty">هنوز کلمه‌ای اضافه نشده. از فرم بالا اضافه کنید.</td></tr>'); return; }
+        r.data.rows.forEach(k => {
+            let chg = '<span class="vs-rank-flat">—</span>';
+            if (k.change > 0) chg = '<span class="vs-rank-up">▲ '+k.change+'</span>';
+            else if (k.change < 0) chg = '<span class="vs-rank-down">▼ '+Math.abs(k.change)+'</span>';
+            let spark = rankSpark(k.history);
+            let urlCell = k.found_url ? '<a href="'+k.found_url+'" target="_blank">↗</a>' : '<span class="vs-empty">خارج از ۵۰</span>';
+            $t.append('<tr><td><strong>'+k.keyword+'</strong></td><td><span class="vs-rank-badge">'+k.current+'</span></td><td>'+chg+'</td><td>'+k.best+'</td><td>'+spark+'</td><td>'+urlCell+'</td><td>'+k.freq+'</td><td style="font-size:11px;color:var(--vs-text-muted)">'+k.last+'</td><td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-rank-check" data-id="'+k.id+'" title="بررسی الان">⟳</button> <button class="vs-btn vs-btn-sm vs-btn-danger vs-rank-del" data-id="'+k.id+'">×</button></td></tr>');
+        });
+    });
+}
+function rankSpark(history) {
+    if (!history || !history.length) return '<span class="vs-empty">—</span>';
+    let bars = history.map(h => {
+        let r = h.r;
+        if (r === null || r === undefined) return '<span class="vs-spark-bar vs-spark-miss" title="'+h.d+': خارج از ۵۰"></span>';
+        let pct = Math.max(8, 100 - (r * 2)); // rank 1 = tall, rank 50 = short
+        let color = r <= 3 ? '#10b981' : (r <= 10 ? '#0ea5e9' : (r <= 20 ? '#f59e0b' : '#ef4444'));
+        return '<span class="vs-spark-bar" style="height:'+pct+'%;background:'+color+'" title="'+h.d+': رتبه '+r+'"></span>';
+    }).join('');
+    return '<span class="vs-spark">'+bars+'</span>';
+}
+$(document).on('click', '#vs-rank-add', function(){
+    const kw = $('#vs-rank-kw').val().trim();
+    if (!kw) { toast('کلمه کلیدی وارد کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true);
+    post('viraseo_rank_add', {keyword:kw, frequency:$('#vs-rank-freq').val()}, r => {
+        $b.prop('disabled', false);
+        if (r.success) { toast(r.data.message,'success'); $('#vs-rank-kw').val(''); loadRanks(); }
+        else toast(r.data,'err');
+    });
+});
+$(document).on('click', '#vs-rank-checkall', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-rank-tbody').html('<tr><td colspan="9" class="vs-empty">⏳ در حال بررسی همه کلمات...</td></tr>');
+    post('viraseo_rank_check', {}, r => {
+        $b.prop('disabled', false);
+        if (r.success) { toast(r.data.message,'success'); loadRanks(); } else toast(r.data,'err');
+    });
+});
+$(document).on('click', '.vs-rank-check', function(){
+    const $b = $(this).prop('disabled', true).text('...');
+    post('viraseo_rank_check', {id:$(this).data('id')}, r => {
+        if (r.success) loadRanks(); else { toast(r.data,'err'); $b.prop('disabled',false).text('⟳'); }
+    });
+});
+$(document).on('click', '.vs-rank-del', function(){
+    if (!confirm('حذف این کلمه از رصد؟')) return;
+    post('viraseo_rank_remove', {id:$(this).data('id')}, ()=>loadRanks());
+});
 
 // === INTERNAL LINKS ===
 $(document).on('click', '#vs-scan-links', function(){
@@ -480,6 +572,8 @@ $(function(){
     if ($('#vs-bl-tbody').length) { loadBacklinks(); loadDisavow(); }
     // Workflows page
     if ($('#vs-wf-grid').length) loadWorkflows();
+    // Rank monitor page
+    if ($('#vs-rank-tbody').length) loadRanks();
     // WooCommerce page
     if ($('#vs-oos-tbody').length) { loadOOS(); loadFaceted(); }
 });

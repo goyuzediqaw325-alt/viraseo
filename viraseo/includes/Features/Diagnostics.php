@@ -37,7 +37,7 @@ class Diagnostics {
 
         // 1. Database tables
         global $wpdb;
-        $tables = ['gsc_keywords','cannibalization','serp_analysis','serp_competitors','internal_links','orphan_pages','link_suggestions','backlinks','disavow','oos_log','keyword_discoveries','keyword_ideas','activity_log'];
+        $tables = ['gsc_keywords','cannibalization','serp_analysis','serp_competitors','internal_links','orphan_pages','link_suggestions','backlinks','disavow','oos_log','keyword_discoveries','keyword_ideas','rank_tracking','activity_log'];
         $db_ok = true;
         $db_detail = [];
         foreach ($tables as $t) {

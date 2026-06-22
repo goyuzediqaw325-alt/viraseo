@@ -111,6 +111,29 @@ class WebhookHandler {
 
     // === OUTGOING TO N8N ===
 
+    /**
+     * Direct Serper.dev search from WP (lightweight, used by Rank Monitor).
+     * Always forces Iran location + Persian language.
+     */
+    public static function serper_search(string $keyword, int $num = 30): array {
+        $key = Dashboard::get('serper_api_key');
+        if (!$key) return ['error'=>'کلید Serper API در تنظیمات وارد نشده.'];
+        $r = wp_remote_post('https://google.serper.dev/search', [
+            'timeout'=>25,
+            'headers'=>['X-API-KEY'=>$key,'Content-Type'=>'application/json'],
+            'body'=>wp_json_encode(['q'=>$keyword,'gl'=>'ir','hl'=>'fa','location'=>'Iran','num'=>$num]),
+        ]);
+        if (is_wp_error($r)) return ['error'=>'خطا در اتصال به Serper: '.$r->get_error_message()];
+        $code = wp_remote_retrieve_response_code($r);
+        $body = json_decode(wp_remote_retrieve_body($r), true);
+        if ($code < 200 || $code >= 300) return ['error'=>"Serper HTTP {$code}: ".($body['message']??'کلید API را بررسی کنید')];
+        return [
+            'organic'=>$body['organic']??[],
+            'paa'=>$body['peopleAlsoAsk']??[],
+            'related'=>$body['relatedSearches']??[],
+        ];
+    }
+
     public static function to_n8n(string $path, array $body): array {
         $url = Dashboard::get('n8n_url');
         $secret = Dashboard::get('n8n_secret');
