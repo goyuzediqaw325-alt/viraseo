@@ -378,12 +378,45 @@ function loadSuggestions() {
         const $c = $('#vs-suggestions-list').empty();
         if (!r.data.rows.length) { $c.html('<div class="vs-empty">پیشنهادی نیست.</div>'); return; }
         r.data.rows.forEach(s => {
-            $c.append(`<div class="vs-suggestion"><div class="vs-suggestion-score"><div class="vs-suggestion-score-fill" style="width:${s.score}%"></div></div><div class="vs-suggestion-link"><span class="dashicons dashicons-arrow-left-alt"></span><strong>${s.source}</strong> → <strong>${s.target}</strong></div><div>انکر: <span class="vs-suggestion-anchor">${s.anchor}</span> (${Math.round(s.score)}%)</div><div class="vs-row"><button class="vs-btn vs-btn-sm vs-btn-success vs-accept-link" data-id="${s.id}">✓ پذیرش</button><button class="vs-btn vs-btn-sm vs-btn-danger vs-reject-link" data-id="${s.id}">✗ رد</button></div></div>`);
+            $c.append(`<div class="vs-suggestion"><div class="vs-suggestion-score"><div class="vs-suggestion-score-fill" style="width:${s.score}%"></div></div><div class="vs-suggestion-link"><span class="dashicons dashicons-arrow-left-alt"></span><strong>${s.source}</strong> → <strong>${s.target}</strong></div><div>انکر هوشمند: <span class="vs-suggestion-anchor">${s.anchor}</span> (${Math.round(s.score)}%)</div><div style="font-size:11px;color:var(--vs-text-muted)">${s.reason||''}</div><div class="vs-row"><button class="vs-btn vs-btn-sm vs-btn-primary vs-apply-link" data-id="${s.id}">⚡ درج خودکار</button><button class="vs-btn vs-btn-sm vs-btn-success vs-accept-link" data-id="${s.id}">✓ تأیید</button><button class="vs-btn vs-btn-sm vs-btn-danger vs-reject-link" data-id="${s.id}">✗ رد</button></div></div>`);
         });
     });
 }
 $(document).on('click', '.vs-accept-link', function(){ post('viraseo_accept_link',{id:$(this).data('id')},()=>loadSuggestions()); });
 $(document).on('click', '.vs-reject-link', function(){ post('viraseo_reject_link',{id:$(this).data('id')},()=>loadSuggestions()); });
+$(document).on('click', '.vs-apply-link', function(){
+    const $b = $(this).prop('disabled', true).text('در حال درج...');
+    post('viraseo_apply_link', {id:$(this).data('id')}, r => {
+        if (r.success) { toast(r.data.message,'success'); loadSuggestions(); }
+        else { toast(r.data,'err'); $b.prop('disabled',false).text('⚡ درج خودکار'); }
+    });
+});
+$(document).on('click', '#vs-apply-all-links', function(){
+    if (!confirm('لینک‌های پیشنهادی به‌صورت خودکار داخل محتوای صفحات درج می‌شوند. ادامه می‌دهید؟')) return;
+    const $b = $(this).prop('disabled', true);
+    $('#vs-apply-all-status').text('در حال درج همه لینک‌ها...');
+    post('viraseo_apply_all_links', {}, r => {
+        $b.prop('disabled', false);
+        $('#vs-apply-all-status').text(r.success ? r.data.message : 'خطا');
+        if (r.success) { toast(r.data.message,'success'); loadSuggestions(); }
+        else toast(r.data,'err');
+    });
+});
+// Topical clusters
+$(document).on('click', '#vs-load-clusters', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-clusters-list').html('<div class="vs-empty">در حال محاسبه خوشه‌ها...</div>');
+    post('viraseo_link_clusters', {}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { $('#vs-clusters-list').html('<div class="vs-empty">خطا</div>'); return; }
+        const $l = $('#vs-clusters-list').empty();
+        if (!r.data.clusters.length) { $l.html('<div class="vs-empty">خوشه‌ای یافت نشد (حداقل ۲ صفحه با موضوع مشترک لازم است).</div>'); return; }
+        r.data.clusters.forEach(c => {
+            let members = c.members.map(m => '<li><a href="'+m.url+'" target="_blank">'+m.title+'</a></li>').join('');
+            $l.append('<div class="vs-cluster"><div class="vs-cluster-head"><span class="vs-badge vs-badge-blue">'+c.keyword+'</span> <span class="vs-cluster-count">'+c.count+' صفحه</span></div><div class="vs-cluster-pillar">🏛️ ستون پیشنهادی: <a href="'+c.pillar.url+'" target="_blank"><strong>'+c.pillar.title+'</strong></a></div><ul class="vs-cluster-members">'+members+'</ul></div>');
+        });
+    });
+});
 
 // === BACKLINKS ===
 function loadBacklinks() {

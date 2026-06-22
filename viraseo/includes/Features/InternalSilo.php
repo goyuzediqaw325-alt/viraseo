@@ -14,6 +14,9 @@ class InternalSilo {
         add_action('wp_ajax_viraseo_get_suggestions', [$this, 'ajax_suggestions']);
         add_action('wp_ajax_viraseo_accept_link', [$this, 'ajax_accept']);
         add_action('wp_ajax_viraseo_reject_link', [$this, 'ajax_reject']);
+        add_action('wp_ajax_viraseo_apply_link', [$this, 'ajax_apply']);
+        add_action('wp_ajax_viraseo_link_clusters', [$this, 'ajax_clusters']);
+        add_action('wp_ajax_viraseo_apply_all_links', [$this, 'ajax_apply_all']);
     }
 
     public function ajax_scan(): void {
@@ -78,6 +81,135 @@ class InternalSilo {
         $id = absint($_POST['id']??0);
         if ($id) $wpdb->update($wpdb->prefix.'viraseo_link_suggestions', ['status'=>'rejected'], ['id'=>$id]);
         wp_send_json_success();
+    }
+
+    /** Auto-insert a single suggested link into the source post's content. */
+    public function ajax_apply(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        if (!current_user_can('edit_posts')) wp_send_json_error('دسترسی غیرمجاز.');
+        $id = absint($_POST['id']??0);
+        $res = $this->apply_suggestion($id);
+        if (isset($res['error'])) wp_send_json_error($res['error']);
+        wp_send_json_success($res);
+    }
+
+    /** Auto-insert ALL accepted/pending suggestions (bulk). */
+    public function ajax_apply_all(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        if (!current_user_can('edit_posts')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+        $ids = $wpdb->get_col("SELECT id FROM {$wpdb->prefix}viraseo_link_suggestions WHERE status='pending' ORDER BY score DESC LIMIT 50");
+        $done = 0; $fail = 0;
+        foreach ($ids as $sid) {
+            $r = $this->apply_suggestion((int)$sid);
+            if (isset($r['error'])) $fail++; else $done++;
+        }
+        wp_send_json_success(['message'=>sprintf('✅ %d لینک به‌صورت خودکار درج شد. (%d مورد قابل درج نبود)', $done, $fail)]);
+    }
+
+    /** Core: insert the link into post content + mark suggestion applied. */
+    private function apply_suggestion(int $id): array {
+        global $wpdb;
+        $st = $wpdb->prefix.'viraseo_link_suggestions';
+        $s = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$st} WHERE id=%d", $id));
+        if (!$s) return ['error'=>'پیشنهاد یافت نشد.'];
+
+        $post = get_post($s->source_id);
+        if (!$post) return ['error'=>'پست مبدا یافت نشد.'];
+        $url = get_permalink($s->target_id);
+        if (!$url) return ['error'=>'صفحه مقصد یافت نشد.'];
+
+        // Already linked to target? skip (avoid duplicates)
+        if (strpos($post->post_content, 'href="'.$url.'"') !== false || strpos($post->post_content, "href='".$url."'") !== false) {
+            $wpdb->update($st, ['status'=>'accepted'], ['id'=>$id]);
+            return ['error'=>'این لینک از قبل در محتوا وجود دارد.'];
+        }
+
+        $out = $this->insert_link_into_content($post->post_content, $s->anchor, $url);
+        if (!$out['inserted']) return ['error'=>'انکر «'.$s->anchor.'» در متن مبدا پیدا نشد (یا داخل لینک دیگری بود).'];
+
+        wp_update_post(['ID'=>$s->source_id, 'post_content'=>$out['content']]);
+        $wpdb->update($st, ['status'=>'accepted'], ['id'=>$id]);
+
+        // Record the new internal link so future scans/orphan counts are accurate
+        $wpdb->insert($wpdb->prefix.'viraseo_internal_links', [
+            'source_id'=>$s->source_id,'target_id'=>$s->target_id,
+            'anchor'=>mb_substr($s->anchor,0,500),'link_url'=>$url,
+        ]);
+        return ['message'=>'✅ لینک با انکر «'.$s->anchor.'» در محتوا درج شد.'];
+    }
+
+    /**
+     * Safely insert a link around the FIRST plain-text occurrence of $anchor.
+     * Skips text inside existing <a> tags and inside HTML tags (RTL/Persian safe).
+     */
+    private function insert_link_into_content(string $content, string $anchor, string $url): array {
+        $anchor = trim($anchor);
+        if ($anchor === '') return ['content'=>$content, 'inserted'=>false];
+
+        $tokens = preg_split('/(<[^>]+>)/u', $content, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $inside_a = false; $inserted = false;
+        $pattern = '/(?<![\p{L}\x{200C}])' . preg_quote($anchor, '/') . '(?![\p{L}\x{200C}])/u';
+
+        foreach ($tokens as &$tok) {
+            if ($tok === '') continue;
+            if ($tok[0] === '<') {
+                if (preg_match('/^<a\b/i', $tok)) $inside_a = true;
+                elseif (preg_match('/^<\/a>/i', $tok)) $inside_a = false;
+                continue;
+            }
+            if ($inserted || $inside_a) continue;
+            $new = preg_replace_callback($pattern, function($m) use ($url, &$inserted) {
+                if ($inserted) return $m[0];
+                $inserted = true;
+                return '<a href="'.esc_url($url).'">'.$m[0].'</a>';
+            }, $tok, 1);
+            if ($new !== null) $tok = $new;
+        }
+        unset($tok);
+        return ['content'=>implode('', $tokens), 'inserted'=>$inserted];
+    }
+
+    /** Topical clustering: group posts by their dominant shared keyword (silo view). */
+    public function ajax_clusters(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        global $wpdb;
+        $posts = $wpdb->get_results("SELECT ID,post_title,post_content FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT 300");
+        if (count($posts) < 2) { wp_send_json_success(['clusters'=>[]]); return; }
+
+        // Top keyword per post → cluster key
+        $clusters = [];
+        foreach ($posts as $p) {
+            $kw = PersianText::extract_keywords(wp_strip_all_tags($p->post_content).' '.$p->post_title, 5);
+            if (!$kw) continue;
+            $top = array_key_first($kw);
+            $clusters[$top][] = ['id'=>$p->ID, 'title'=>$p->post_title ?: get_the_title($p->ID), 'len'=>mb_strlen(wp_strip_all_tags($p->post_content))];
+        }
+
+        // Inlink counts to pick the pillar (most-linked page in each cluster)
+        $inlinks = [];
+        foreach ($wpdb->get_results("SELECT target_id, COUNT(*) c FROM {$wpdb->prefix}viraseo_internal_links GROUP BY target_id") as $r) {
+            $inlinks[(int)$r->target_id] = (int)$r->c;
+        }
+
+        $out = [];
+        foreach ($clusters as $kw => $members) {
+            if (count($members) < 2) continue; // only real clusters
+            // Pillar = most inlinks, tie-break longest content
+            usort($members, function($a, $b) use ($inlinks) {
+                $ia = $inlinks[$a['id']] ?? 0; $ib = $inlinks[$b['id']] ?? 0;
+                return $ib <=> $ia ?: $b['len'] <=> $a['len'];
+            });
+            $pillar = $members[0];
+            $out[] = [
+                'keyword'=>$kw,
+                'count'=>count($members),
+                'pillar'=>['title'=>$pillar['title'], 'url'=>get_permalink($pillar['id']), 'edit'=>get_edit_post_link($pillar['id'],'raw')],
+                'members'=>array_map(fn($m)=>['title'=>$m['title'], 'url'=>get_permalink($m['id'])], array_slice($members, 1, 12)),
+            ];
+        }
+        usort($out, fn($a, $b) => $b['count'] <=> $a['count']);
+        wp_send_json_success(['clusters'=>array_slice($out, 0, 30)]);
     }
 
     public function scan(): array {
@@ -172,8 +304,18 @@ class InternalSilo {
                 $score = round($sim*100,2);
                 $reason = 'کلمات مشترک: '.implode('، ', array_slice($shared,0,4));
 
-                $insert($a->ID, $b->ID, $anchor, $score, $reason);
-                if ($count<150) $insert($b->ID, $a->ID, $anchor, $score, $reason);
+                // Smart anchor: prefer a shared keyword that appears in the TARGET's title
+                // (more topically relevant), otherwise the highest-frequency shared keyword.
+                $pick = function(array $shared, string $title) {
+                    $tt = PersianText::tokenize($title);
+                    foreach ($shared as $kw) if (in_array($kw, $tt, true)) return $kw;
+                    return reset($shared);
+                };
+                $anchorAB = $pick($shared, $b->post_title);
+                $anchorBA = $pick($shared, $a->post_title);
+
+                $insert($a->ID, $b->ID, $anchorAB, $score, $reason);
+                if ($count<150) $insert($b->ID, $a->ID, $anchorBA, $score, $reason);
             }
         }
         return ['count'=>$count,'attempted'=>$attempted,'error'=>$error];
