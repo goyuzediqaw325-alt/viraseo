@@ -73,5 +73,6 @@ function viraseo_init(): void {
     new \ViraSEO\Features\FacetedNav();
     new \ViraSEO\Features\TrafficForecaster();
     new \ViraSEO\Features\KeywordDiscovery();
+    new \ViraSEO\Features\WorkflowManager();
 }
 add_action('plugins_loaded', 'viraseo_init');

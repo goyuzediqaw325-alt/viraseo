@@ -1,1 +1,565 @@
-/* ViraSEO Admin RTL */
+/* ViraSEO Admin RTL Stylesheet */
+:root {
+    --vs-primary: #2563eb;
+    --vs-primary-light: #dbeafe;
+    --vs-primary-dark: #1d4ed8;
+    --vs-success: #059669;
+    --vs-success-light: #d1fae5;
+    --vs-warning: #d97706;
+    --vs-warning-light: #fef3c7;
+    --vs-danger: #dc2626;
+    --vs-danger-light: #fee2e2;
+    --vs-info: #0891b2;
+    --vs-info-light: #cffafe;
+    --vs-gray-50: #f9fafb;
+    --vs-gray-100: #f3f4f6;
+    --vs-gray-200: #e5e7eb;
+    --vs-gray-300: #d1d5db;
+    --vs-gray-500: #6b7280;
+    --vs-gray-700: #374151;
+    --vs-gray-900: #111827;
+    --vs-radius: 8px;
+    --vs-shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+    --vs-shadow-md: 0 4px 6px -1px rgba(0,0,0,.1);
+}
+
+/* Base */
+.viraseo-wrap {
+    direction: rtl;
+    text-align: right;
+    font-family: 'IRANSans','Vazirmatn','Tahoma',sans-serif;
+    max-width: 1280px;
+    margin: 20px auto;
+    padding: 0 16px;
+}
+.viraseo-page-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--vs-gray-900);
+    margin-bottom: 8px;
+}
+.viraseo-page-title .dashicons {
+    color: var(--vs-primary);
+    font-size: 26px;
+    width: 26px;
+    height: 26px;
+}
+.viraseo-page-desc {
+    color: var(--vs-gray-500);
+    margin-bottom: 20px;
+    max-width: 700px;
+    line-height: 1.7;
+}
+
+
+/* Cards */
+.viraseo-card {
+    background: #fff;
+    border: 1px solid var(--vs-gray-200);
+    border-radius: var(--vs-radius);
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: var(--vs-shadow);
+}
+.viraseo-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--vs-gray-200);
+    color: var(--vs-gray-900);
+}
+.viraseo-card-title .dashicons { color: var(--vs-primary); }
+.viraseo-card-danger { border-right: 4px solid var(--vs-danger); }
+.viraseo-input-card { background: linear-gradient(135deg, var(--vs-primary-light), #fff); }
+
+/* Stats Grid */
+.viraseo-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+.viraseo-stat-card {
+    background: #fff;
+    border: 1px solid var(--vs-gray-200);
+    border-radius: var(--vs-radius);
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: var(--vs-shadow);
+    transition: transform .15s, box-shadow .15s;
+}
+.viraseo-stat-card:hover { transform: translateY(-2px); box-shadow: var(--vs-shadow-md); }
+.viraseo-stat-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--vs-primary-light);
+}
+.viraseo-stat-icon .dashicons { color: var(--vs-primary); font-size: 22px; width: 22px; height: 22px; }
+.viraseo-stat-icon.warning { background: var(--vs-warning-light); }
+.viraseo-stat-icon.warning .dashicons { color: var(--vs-warning); }
+.viraseo-stat-icon.danger { background: var(--vs-danger-light); }
+.viraseo-stat-icon.danger .dashicons { color: var(--vs-danger); }
+.viraseo-stat-icon.info { background: var(--vs-info-light); }
+.viraseo-stat-icon.info .dashicons { color: var(--vs-info); }
+.viraseo-stat-icon.success { background: var(--vs-success-light); }
+.viraseo-stat-icon.success .dashicons { color: var(--vs-success); }
+.viraseo-stat-number { display: block; font-size: 24px; font-weight: 700; color: var(--vs-gray-900); }
+.viraseo-stat-label { display: block; font-size: 12px; color: var(--vs-gray-500); margin-top: 2px; }
+
+
+/* Tabs */
+.viraseo-tabs-wrapper { margin-bottom: 24px; }
+.viraseo-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--vs-gray-200);
+    margin-bottom: 0;
+}
+.viraseo-tab {
+    padding: 12px 20px;
+    font-weight: 500;
+    color: var(--vs-gray-500);
+    text-decoration: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all .2s;
+    cursor: pointer;
+}
+.viraseo-tab:hover { color: var(--vs-primary); }
+.viraseo-tab.active {
+    color: var(--vs-primary);
+    border-bottom-color: var(--vs-primary);
+    font-weight: 600;
+}
+.viraseo-tab-content { display: none; padding-top: 20px; }
+.viraseo-tab-content.active { display: block; }
+
+/* Tables */
+.viraseo-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: #fff;
+    border-radius: var(--vs-radius);
+    overflow: hidden;
+    box-shadow: var(--vs-shadow);
+}
+.viraseo-table thead th {
+    background: var(--vs-gray-50);
+    font-weight: 600;
+    color: var(--vs-gray-700);
+    text-align: right;
+    padding: 12px 14px;
+    border-bottom: 2px solid var(--vs-gray-200);
+    white-space: nowrap;
+}
+.viraseo-table tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--vs-gray-100);
+    vertical-align: middle;
+}
+.viraseo-table tbody tr:hover td { background: var(--vs-primary-light); }
+.viraseo-empty-state {
+    text-align: center;
+    padding: 40px 20px !important;
+    color: var(--vs-gray-500);
+    font-style: italic;
+}
+.viraseo-empty-state-box {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--vs-gray-500);
+}
+.viraseo-empty-state-box .dashicons { font-size: 48px; width: 48px; height: 48px; margin-bottom: 12px; }
+
+/* Toolbar */
+.viraseo-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+.viraseo-inline-status {
+    font-size: 13px;
+    color: var(--vs-gray-500);
+}
+
+
+/* Info Boxes */
+.viraseo-info-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: var(--vs-radius);
+    background: var(--vs-info-light);
+    border-right: 4px solid var(--vs-info);
+    margin-bottom: 16px;
+    line-height: 1.7;
+}
+.viraseo-info-box .dashicons { color: var(--vs-info); margin-top: 2px; flex-shrink: 0; }
+.viraseo-info-box p { margin: 0; color: var(--vs-gray-700); }
+.viraseo-info-box.warning { background: var(--vs-warning-light); border-right-color: var(--vs-warning); }
+.viraseo-info-box.warning .dashicons { color: var(--vs-warning); }
+.viraseo-info-box.success { background: var(--vs-success-light); border-right-color: var(--vs-success); }
+.viraseo-info-box.success .dashicons { color: var(--vs-success); }
+
+/* Notice */
+.viraseo-notice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--vs-radius);
+    margin-bottom: 20px;
+}
+.viraseo-notice-warning {
+    background: var(--vs-warning-light);
+    border: 1px solid var(--vs-warning);
+}
+.viraseo-notice-warning .dashicons { color: var(--vs-warning); }
+
+/* Badges */
+.viraseo-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.viraseo-badge.success { background: var(--vs-success-light); color: var(--vs-success); }
+.viraseo-badge.warning { background: var(--vs-warning-light); color: var(--vs-warning); }
+.viraseo-badge.danger { background: var(--vs-danger-light); color: var(--vs-danger); }
+.viraseo-badge.info { background: var(--vs-info-light); color: var(--vs-info); }
+
+/* Tags */
+.viraseo-tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
+.viraseo-tag {
+    display: inline-block;
+    padding: 4px 12px;
+    background: var(--vs-primary-light);
+    color: var(--vs-primary-dark);
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 500;
+}
+.viraseo-gap-list { list-style: none; padding: 0; margin: 0; }
+.viraseo-gap-list li {
+    padding: 8px 12px;
+    background: var(--vs-warning-light);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+.viraseo-gap-list li::before { content: "◀ "; color: var(--vs-warning); }
+
+/* Input Elements */
+.viraseo-input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.viraseo-large-input {
+    flex: 1;
+    min-width: 250px;
+    padding: 10px 14px;
+    font-size: 15px;
+    border: 2px solid var(--vs-gray-300);
+    border-radius: 6px;
+    font-family: inherit;
+}
+.viraseo-large-input:focus {
+    border-color: var(--vs-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px var(--vs-primary-light);
+}
+.viraseo-medium-input {
+    padding: 7px 12px;
+    border: 1px solid var(--vs-gray-300);
+    border-radius: 6px;
+    font-family: inherit;
+    min-width: 160px;
+}
+.viraseo-select {
+    padding: 7px 12px;
+    border: 1px solid var(--vs-gray-300);
+    border-radius: 6px;
+    font-family: inherit;
+    background: #fff;
+}
+.viraseo-search-input {
+    padding: 8px 14px;
+    border: 1px solid var(--vs-gray-300);
+    border-radius: 6px;
+    font-family: inherit;
+    min-width: 240px;
+}
+.viraseo-filter-bar {
+    margin-bottom: 16px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.viraseo-form-row { margin-bottom: 14px; }
+.viraseo-form-row label { display: block; font-weight: 500; margin-bottom: 4px; color: var(--vs-gray-700); }
+
+
+/* Two-column layout */
+.viraseo-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+/* Quick Nav */
+.viraseo-quick-nav { margin-bottom: 24px; }
+.viraseo-quick-nav h2 { font-size: 16px; margin-bottom: 12px; }
+.viraseo-nav-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+}
+.viraseo-nav-item {
+    display: block;
+    padding: 16px 18px;
+    background: #fff;
+    border: 1px solid var(--vs-gray-200);
+    border-radius: var(--vs-radius);
+    text-decoration: none;
+    color: var(--vs-gray-700);
+    transition: all .15s;
+}
+.viraseo-nav-item:hover {
+    border-color: var(--vs-primary);
+    box-shadow: var(--vs-shadow-md);
+    transform: translateY(-2px);
+}
+.viraseo-nav-item .dashicons { color: var(--vs-primary); margin-bottom: 6px; }
+.viraseo-nav-item strong { display: block; margin-bottom: 4px; color: var(--vs-gray-900); }
+.viraseo-nav-item p { margin: 0; font-size: 12px; color: var(--vs-gray-500); }
+
+/* System Info Table */
+.viraseo-system-info h2 { font-size: 16px; margin-bottom: 12px; }
+.viraseo-info-table { width: 100%; max-width: 400px; }
+.viraseo-info-table td { padding: 8px 0; border-bottom: 1px solid var(--vs-gray-100); }
+.viraseo-info-table td:first-child { color: var(--vs-gray-500); font-weight: 500; }
+
+/* Progress */
+.viraseo-progress {
+    margin-top: 14px;
+    padding: 12px 16px;
+    background: var(--vs-gray-50);
+    border: 1px solid var(--vs-gray-200);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.viraseo-progress-bar {
+    width: 120px;
+    height: 4px;
+    background: var(--vs-gray-200);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+}
+.viraseo-progress-bar::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    width: 40%;
+    background: var(--vs-primary);
+    border-radius: 2px;
+    animation: vs-progress 1.5s infinite ease-in-out;
+}
+@keyframes vs-progress {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+}
+
+/* Suggestion Cards */
+.viraseo-cards-list { display: flex; flex-direction: column; gap: 12px; }
+.viraseo-suggestion-card {
+    background: #fff;
+    border: 1px solid var(--vs-gray-200);
+    border-radius: var(--vs-radius);
+    padding: 14px 18px;
+    line-height: 1.8;
+}
+.viraseo-suggestion-card:hover { box-shadow: var(--vs-shadow-md); }
+
+/* Code preview */
+.viraseo-code-preview {
+    background: var(--vs-gray-900);
+    color: #e5e7eb;
+    padding: 16px;
+    border-radius: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    max-height: 300px;
+    margin-top: 12px;
+}
+
+/* Test Status */
+.viraseo-test-status {
+    margin-right: 12px;
+    font-weight: 500;
+}
+
+
+/* Workflow Manager */
+.viraseo-workflows-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+.viraseo-workflow-card {
+    background: #fff;
+    border: 1px solid var(--vs-gray-200);
+    border-radius: var(--vs-radius);
+    padding: 20px;
+    box-shadow: var(--vs-shadow);
+    transition: transform .15s, box-shadow .15s;
+}
+.viraseo-workflow-card:hover { transform: translateY(-2px); box-shadow: var(--vs-shadow-md); }
+.viraseo-wf-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.viraseo-wf-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--vs-gray-900);
+}
+.viraseo-wf-title .dashicons { color: var(--vs-primary); }
+.viraseo-wf-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--vs-gray-500);
+    margin-bottom: 14px;
+}
+.viraseo-wf-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.viraseo-wf-actions .button { font-size: 12px; }
+
+/* Modal */
+.viraseo-modal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 100100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.viraseo-modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+}
+.viraseo-modal-content {
+    position: relative;
+    background: #fff;
+    border-radius: var(--vs-radius);
+    width: 90%;
+    max-width: 800px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,.25);
+}
+.viraseo-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--vs-gray-200);
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
+}
+.viraseo-modal-header h2 { margin: 0; font-size: 17px; }
+.viraseo-modal-close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    color: var(--vs-gray-500);
+    line-height: 1;
+}
+.viraseo-modal-close:hover { color: var(--vs-danger); }
+.viraseo-modal-body { padding: 24px; }
+.viraseo-modal-footer {
+    display: flex;
+    gap: 10px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--vs-gray-200);
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+}
+.viraseo-wf-info-bar {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--vs-gray-500);
+}
+.viraseo-code-editor {
+    width: 100%;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 14px;
+    border: 1px solid var(--vs-gray-300);
+    border-radius: 6px;
+    background: var(--vs-gray-50);
+    resize: vertical;
+}
+.viraseo-wf-tips {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: var(--vs-info-light);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.7;
+}
+.viraseo-wf-tips p { margin: 4px 0; }
+
+/* Settings form table override */
+.viraseo-settings-form .form-table th { text-align: right; font-weight: 500; }
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .viraseo-two-col { grid-template-columns: 1fr; }
+    .viraseo-nav-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 768px) {
+    .viraseo-stats-grid { grid-template-columns: 1fr 1fr; }
+    .viraseo-nav-grid { grid-template-columns: 1fr; }
+    .viraseo-workflows-grid { grid-template-columns: 1fr; }
+    .viraseo-input-row { flex-direction: column; align-items: stretch; }
+}

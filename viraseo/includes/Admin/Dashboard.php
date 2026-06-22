@@ -110,6 +110,15 @@ class Dashboard {
             self::MENU_SLUG . '-settings',
             [$this, 'page_settings']
         );
+
+        add_submenu_page(
+            self::MENU_SLUG,
+            'ورکفلوهای n8n',
+            'ورکفلوهای n8n',
+            'manage_options',
+            self::MENU_SLUG . '-workflows',
+            [$this, 'page_workflows']
+        );
     }
 
     /**
@@ -120,18 +129,16 @@ class Dashboard {
             return;
         }
 
-        $plugin_url = plugin_dir_url(dirname(__DIR__));
-
         wp_enqueue_style(
             'viraseo-admin',
-            $plugin_url . 'assets/css/admin.css',
+            VIRASEO_URL . 'assets/css/admin.css',
             [],
             VIRASEO_VERSION
         );
 
         wp_enqueue_script(
             'viraseo-admin',
-            $plugin_url . 'assets/js/admin.js',
+            VIRASEO_URL . 'assets/js/admin.js',
             ['jquery'],
             VIRASEO_VERSION,
             true
@@ -316,5 +323,12 @@ class Dashboard {
      */
     public function page_settings() {
         include VIRASEO_DIR . 'templates/admin/settings.php';
+    }
+
+    /**
+     * Render n8n workflows manager page.
+     */
+    public function page_workflows() {
+        include VIRASEO_DIR . 'templates/admin/workflows.php';
     }
 }
