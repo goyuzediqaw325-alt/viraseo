@@ -30,6 +30,12 @@
       <button class="vs-btn vs-btn-success" id="vs-apply-all-links"><span class="dashicons dashicons-superhero"></span> درج خودکار همه پیشنهادها</button>
       <span id="vs-apply-all-status"></span>
     </div>
+    <div class="vs-filter-chips" id="vs-sugg-filters">
+      <button class="vs-chip active" data-type="">همه <span id="vs-cnt-all">0</span></button>
+      <button class="vs-chip" data-type="exact">🎯 دقیق <span id="vs-cnt-exact">0</span></button>
+      <button class="vs-chip" data-type="partial">🧩 جزئی <span id="vs-cnt-partial">0</span></button>
+      <button class="vs-chip" data-type="semantic">🔗 معنایی <span id="vs-cnt-semantic">0</span></button>
+    </div>
     <div id="vs-suggestions-list"></div>
   </div>
 

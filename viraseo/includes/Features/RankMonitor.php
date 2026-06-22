@@ -163,6 +163,8 @@ class RankMonitor {
 
     /** Cron handler: check only keywords whose frequency interval has elapsed. */
     public function run_due(): void {
+        // Master switch: skip ALL background checks when auto-monitoring is off (saves Serper credits)
+        if (!\ViraSEO\Admin\Dashboard::get('rank_auto_enabled')) return;
         global $wpdb;
         $rows = $wpdb->get_results("SELECT id, frequency, last_checked FROM {$wpdb->prefix}viraseo_rank_tracking WHERE status='active'");
         $now = time();

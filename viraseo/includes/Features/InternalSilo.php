@@ -57,14 +57,29 @@ class InternalSilo {
     public function ajax_suggestions(): void {
         check_ajax_referer('viraseo_nonce','nonce');
         global $wpdb;
-        $rows = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}viraseo_link_suggestions WHERE status='pending' ORDER BY score DESC LIMIT 30");
+        $type = sanitize_text_field($_POST['type'] ?? '');
+        $where = "status='pending'";
+        if (in_array($type, ['exact','partial','semantic'], true)) $where .= $wpdb->prepare(" AND match_type=%s", $type);
+        $rows = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}viraseo_link_suggestions WHERE {$where} ORDER BY FIELD(match_type,'exact','partial','semantic'), score DESC LIMIT 80");
+        $labels = ['exact'=>'دقیق','partial'=>'جزئی','semantic'=>'معنایی'];
         $data = array_map(fn($r)=>[
             'id'=>$r->id,
-            'source'=>get_the_title($r->source_id),'source_edit'=>get_edit_post_link($r->source_id,'raw'),
-            'target'=>get_the_title($r->target_id),'target_url'=>get_permalink($r->target_id),
+            'source'=>get_the_title($r->source_id) ?: '(بدون عنوان)',
+            'source_edit'=>get_edit_post_link($r->source_id,'raw'),
+            'source_url'=>get_permalink($r->source_id),
+            'target'=>get_the_title($r->target_id) ?: '(بدون عنوان)',
+            'target_url'=>get_permalink($r->target_id),
+            'target_edit'=>get_edit_post_link($r->target_id,'raw'),
             'anchor'=>$r->anchor,'score'=>(float)$r->score,'reason'=>$r->reason,
+            'type'=>$r->match_type ?: 'semantic',
+            'type_label'=>$labels[$r->match_type ?? 'semantic'] ?? 'معنایی',
         ], $rows);
-        wp_send_json_success(['rows'=>$data]);
+        // Counts per type for the filter chips
+        $counts = ['all'=>0,'exact'=>0,'partial'=>0,'semantic'=>0];
+        foreach ($wpdb->get_results("SELECT match_type, COUNT(*) c FROM {$wpdb->prefix}viraseo_link_suggestions WHERE status='pending' GROUP BY match_type") as $c) {
+            $counts[$c->match_type] = (int)$c->c; $counts['all'] += (int)$c->c;
+        }
+        wp_send_json_success(['rows'=>$data, 'counts'=>$counts]);
     }
 
     public function ajax_accept(): void {
@@ -170,49 +185,61 @@ class InternalSilo {
         return ['content'=>implode('', $tokens), 'inserted'=>$inserted];
     }
 
-    /** Topical clustering: group posts by their dominant shared keyword (silo view). */
+    /** Topical clustering: group pages that share a significant keyword token (silo view). */
     public function ajax_clusters(): void {
         check_ajax_referer('viraseo_nonce','nonce');
         global $wpdb;
         $posts = $wpdb->get_results("SELECT ID,post_title,post_content FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT 300");
         if (count($posts) < 2) { wp_send_json_success(['clusters'=>[]]); return; }
 
-        // Top keyword per post → cluster key (prefer the target keyword, else top content keyword)
-        $clusters = [];
+        // Build a token set per post (target keyword tokens + top content keywords) and document frequency.
+        $tokens = []; $meta = []; $df = [];
         foreach ($posts as $p) {
-            $top = mb_strtolower(\ViraSEO\Features\TargetKeywords::get((int)$p->ID));
-            if ($top === '') {
-                $kw = PersianText::extract_keywords(wp_strip_all_tags($p->post_content).' '.$p->post_title, 5);
-                if (!$kw) continue;
-                $top = array_key_first($kw);
+            $set = [];
+            $tk = TargetKeywords::get((int)$p->ID);
+            foreach (PersianText::tokenize($tk) as $t) if (mb_strlen($t) > 2) $set[$t] = true;
+            foreach (array_keys(PersianText::extract_keywords(wp_strip_all_tags($p->post_content).' '.$p->post_title, 8)) as $t) {
+                if (mb_strlen($t) > 2) $set[$t] = true;
             }
-            $clusters[$top][] = ['id'=>$p->ID, 'title'=>$p->post_title ?: get_the_title($p->ID), 'len'=>mb_strlen(wp_strip_all_tags($p->post_content))];
+            $tokens[$p->ID] = $set;
+            $meta[$p->ID] = ['id'=>$p->ID, 'title'=>$p->post_title ?: get_the_title($p->ID), 'len'=>mb_strlen(wp_strip_all_tags($p->post_content))];
+            foreach (array_keys($set) as $t) $df[$t] = ($df[$t] ?? 0) + 1;
         }
 
-        // Inlink counts to pick the pillar (most-linked page in each cluster)
+        // Candidate topics = tokens shared by ≥2 pages, most frequent first.
+        $candidates = array_filter($df, fn($c) => $c >= 2);
+        arsort($candidates);
+
+        // Inlink counts for pillar selection
         $inlinks = [];
         foreach ($wpdb->get_results("SELECT target_id, COUNT(*) c FROM {$wpdb->prefix}viraseo_internal_links GROUP BY target_id") as $r) {
             $inlinks[(int)$r->target_id] = (int)$r->c;
         }
 
-        $out = [];
-        foreach ($clusters as $kw => $members) {
-            if (count($members) < 2) continue; // only real clusters
-            // Pillar = most inlinks, tie-break longest content
+        // Greedy assignment: each page joins the highest-DF topic token it contains (once).
+        $assigned = []; $out = [];
+        foreach (array_keys($candidates) as $topic) {
+            $members = [];
+            foreach ($posts as $p) {
+                if (isset($assigned[$p->ID])) continue;
+                if (isset($tokens[$p->ID][$topic])) $members[] = $meta[$p->ID];
+            }
+            if (count($members) < 2) continue;
+            foreach ($members as $m) $assigned[$m['id']] = true;
             usort($members, function($a, $b) use ($inlinks) {
                 $ia = $inlinks[$a['id']] ?? 0; $ib = $inlinks[$b['id']] ?? 0;
-                return $ib <=> $ia ?: $b['len'] <=> $a['len'];
+                return ($ib <=> $ia) ?: ($b['len'] <=> $a['len']);
             });
             $pillar = $members[0];
             $out[] = [
-                'keyword'=>$kw,
+                'keyword'=>$topic,
                 'count'=>count($members),
                 'pillar'=>['title'=>$pillar['title'], 'url'=>get_permalink($pillar['id']), 'edit'=>get_edit_post_link($pillar['id'],'raw')],
-                'members'=>array_map(fn($m)=>['title'=>$m['title'], 'url'=>get_permalink($m['id'])], array_slice($members, 1, 12)),
+                'members'=>array_map(fn($m)=>['title'=>$m['title'], 'url'=>get_permalink($m['id'])], array_slice($members, 1, 15)),
             ];
         }
         usort($out, fn($a, $b) => $b['count'] <=> $a['count']);
-        wp_send_json_success(['clusters'=>array_slice($out, 0, 30)]);
+        wp_send_json_success(['clusters'=>array_slice($out, 0, 40)]);
     }
 
     public function scan(): array {
@@ -270,7 +297,7 @@ class InternalSilo {
         $cols = $wpdb->get_col("SHOW COLUMNS FROM {$st}");
         $idx = $wpdb->get_results("SHOW INDEX FROM {$st}");
         $keynames = $idx ? array_map(fn($i)=>$i->Key_name, $idx) : [];
-        $needed = ['source_id','target_id','anchor','score','reason','status'];
+        $needed = ['source_id','target_id','anchor','score','match_type','reason','status'];
         $stale = (bool) array_diff($needed, $cols ?: [])
                  || !in_array('uq_pair', $keynames, true)
                  || in_array('unique_source_target', $keynames, true);
@@ -295,55 +322,65 @@ class InternalSilo {
         }
 
         $count = 0; $attempted = 0; $error = '';
-        $insert = function(int $src, int $tgt, string $anchor, float $score, string $reason) use ($wpdb, $st, $lt, &$count, &$attempted, &$error): bool {
+        $insert = function(int $src, int $tgt, string $anchor, float $score, string $type, string $reason) use ($wpdb, $st, $lt, &$count, &$attempted, &$error): bool {
             if ($src < 1 || $tgt < 1 || $src === $tgt) return false;
             if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$lt} WHERE source_id=%d AND target_id=%d", $src, $tgt))) return false;
             if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$st} WHERE source_id=%d AND target_id=%d", $src, $tgt))) return false;
             $attempted++;
-            $ok = $wpdb->insert($st, ['source_id'=>$src,'target_id'=>$tgt,'anchor'=>mb_substr($anchor,0,500),'score'=>$score,'reason'=>mb_substr($reason,0,200),'status'=>'pending']);
+            $ok = $wpdb->insert($st, ['source_id'=>$src,'target_id'=>$tgt,'anchor'=>mb_substr($anchor,0,500),'score'=>$score,'match_type'=>$type,'reason'=>mb_substr($reason,0,200),'status'=>'pending']);
             if ($ok === false) { if (!$error) $error = $wpdb->last_error; return false; }
             $count++; return true;
         };
 
-        // ===== PRIMARY: keyword-targeted linking =====
-        // For each target page B with a target keyword KW, link source pages that MENTION KW
-        // to B, using KW itself as the (ideal) anchor. This is the SEO-correct method.
+        // ===== PASS 1 & 2: keyword-targeted linking (EXACT + PARTIAL) =====
         foreach ($posts as $b) {
-            if ($count >= 150) break;
+            if ($count >= 200) break;
             $kw = $target[$b->ID];
             if ($kw === '' || mb_strlen($kw) < 3) continue;
+            $kwTokens = array_values(array_filter(PersianText::tokenize($kw), fn($w)=>mb_strlen($w) > 2));
+            $tokenCount = count($kwTokens);
             foreach ($posts as $a) {
-                if ($count >= 150) break;
+                if ($count >= 200) break;
                 if ($a->ID === $b->ID) continue;
-                if (mb_strpos($norm[$a->ID], $kw) === false) continue; // source must mention the keyword
-                // Score: prominence of keyword in source (frequency), capped to 100
-                $freq = substr_count($norm[$a->ID], $kw);
-                $score = min(100, 60 + $freq * 8);
-                $insert($a->ID, $b->ID, $kw, $score, 'صفحه مبدا شامل کلمه هدف مقصد («'.$kw.'») است — انکر دقیق.');
+                $content = $norm[$a->ID];
+
+                if (mb_strpos($content, $kw) !== false) {
+                    // EXACT: source contains the full target keyword phrase
+                    $freq = substr_count($content, $kw);
+                    $insert($a->ID, $b->ID, $kw, min(100, 80 + $freq * 4), 'exact', 'تطابق دقیق: متن مبدا شامل عبارت کامل «'.$kw.'» است.');
+                } elseif ($tokenCount >= 2) {
+                    // PARTIAL: source contains a significant share of the keyword's words
+                    $hit = 0;
+                    foreach ($kwTokens as $tok) if (mb_strpos($content, $tok) !== false) $hit++;
+                    $coverage = $hit / $tokenCount;
+                    if ($coverage >= 0.6) {
+                        $insert($a->ID, $b->ID, $kw, round(40 + $coverage * 30, 1), 'partial', 'تطابق جزئی: '.$hit.' از '.$tokenCount.' کلمه‌ی عبارت هدف در متن مبدا هست.');
+                    }
+                }
             }
         }
 
-        // ===== FALLBACK: keyword-similarity (for pages without target keywords) =====
-        for ($i=0; $i<count($posts) && $count<150; $i++) {
-            for ($j=$i+1; $j<count($posts) && $count<150; $j++) {
+        // ===== PASS 3: SEMANTIC (shared keywords / topical relatedness) =====
+        for ($i=0; $i<count($posts) && $count<200; $i++) {
+            for ($j=$i+1; $j<count($posts) && $count<200; $j++) {
                 $a=$posts[$i]; $b=$posts[$j];
                 $ka=array_keys($cache[$a->ID]); $kb=array_keys($cache[$b->ID]);
                 if (empty($ka) || empty($kb)) continue;
                 $shared=array_intersect($ka,$kb);
-                if (empty($shared)) continue;
+                if (count($shared) < 2) continue; // need real semantic overlap
                 $union=array_unique(array_merge($ka,$kb));
-                $sim = count($shared)/count($union);
-                if ($sim < 0.08) continue;
+                $sim = count($shared)/max(1,count($union));
+                if ($sim < 0.12) continue;
 
                 $score = round($sim*100,2);
-                $reason = 'کلمات مشترک: '.implode('، ', array_slice($shared,0,4));
+                $reason = 'ارتباط معنایی — کلمات مشترک: '.implode('، ', array_slice($shared,0,4));
                 $pick = function(array $shared, string $title) {
                     $tt = PersianText::tokenize($title);
                     foreach ($shared as $kw) if (in_array($kw, $tt, true)) return $kw;
                     return reset($shared);
                 };
-                $insert($a->ID, $b->ID, $pick($shared, $b->post_title), $score, $reason);
-                if ($count<150) $insert($b->ID, $a->ID, $pick($shared, $a->post_title), $score, $reason);
+                $insert($a->ID, $b->ID, $pick($shared, $b->post_title), $score, 'semantic', $reason);
+                if ($count<200) $insert($b->ID, $a->ID, $pick($shared, $a->post_title), $score, 'semantic', $reason);
             }
         }
         return ['count'=>$count,'attempted'=>$attempted,'error'=>$error];

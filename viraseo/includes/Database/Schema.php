@@ -115,6 +115,7 @@ class Schema {
             target_id bigint unsigned NOT NULL,
             anchor varchar(500) DEFAULT NULL,
             score decimal(5,2) DEFAULT 0,
+            match_type varchar(20) DEFAULT 'semantic',
             reason text DEFAULT NULL,
             status enum('pending','accepted','rejected') DEFAULT 'pending',
             created_at datetime DEFAULT CURRENT_TIMESTAMP,

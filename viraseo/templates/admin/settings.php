@@ -25,6 +25,7 @@
     </div>
     <h3 class="vs-card-title">هشدار افت رتبه</h3>
     <div class="vs-row">
+      <div class="vs-field"><label class="vs-label"><input type="checkbox" name="viraseo_settings[rank_auto_enabled]" value="1" <?php checked(!empty($s['rank_auto_enabled'])); ?>> فعال‌سازی بررسی خودکار رتبه (پس‌زمینه)</label><span class="vs-hint">اگر خاموش باشد، هیچ بررسی خودکاری انجام نمی‌شود و <strong>کردیت Serper مصرف نمی‌شود</strong>. بررسی دستی همچنان کار می‌کند.</span></div>
       <div class="vs-field"><label class="vs-label"><input type="checkbox" name="viraseo_settings[rank_alert_email]" value="1" <?php checked(!empty($s['rank_alert_email'])); ?>> ارسال ایمیل هنگام افت رتبه</label><span class="vs-hint">ایمیل به مدیر سایت (<?php echo esc_html(get_option('admin_email')); ?>)</span></div>
       <div class="vs-field"><label class="vs-label">آستانه افت (تعداد رتبه)</label><input class="vs-input" type="number" min="1" max="50" name="viraseo_settings[rank_alert_threshold]" value="<?php echo esc_attr($s['rank_alert_threshold'] ?? 3); ?>"><span class="vs-hint">اگر رتبه این مقدار یا بیشتر افت کند، هشدار ثبت می‌شود.</span></div>
     </div>

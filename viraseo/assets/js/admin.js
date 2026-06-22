@@ -409,15 +409,42 @@ function loadOrphans() {
     });
 }
 function loadSuggestions() {
-    post('viraseo_get_suggestions', {}, r => {
+    post('viraseo_get_suggestions', {type: window._vsSuggType||''}, r => {
         if (!r.success) return;
         const $c = $('#vs-suggestions-list').empty();
-        if (!r.data.rows.length) { $c.html('<div class="vs-empty">پیشنهادی نیست.</div>'); return; }
+        if (r.data.counts) {
+            $('#vs-cnt-all').text(r.data.counts.all||0);
+            $('#vs-cnt-exact').text(r.data.counts.exact||0);
+            $('#vs-cnt-partial').text(r.data.counts.partial||0);
+            $('#vs-cnt-semantic').text(r.data.counts.semantic||0);
+        }
+        if (!r.data.rows.length) { $c.html('<div class="vs-empty">پیشنهادی در این دسته نیست.</div>'); return; }
+        const typeColor = {exact:'green', partial:'blue', semantic:'orange'};
         r.data.rows.forEach(s => {
-            $c.append(`<div class="vs-suggestion"><div class="vs-suggestion-score"><div class="vs-suggestion-score-fill" style="width:${s.score}%"></div></div><div class="vs-suggestion-link"><span class="dashicons dashicons-arrow-left-alt"></span><strong>${s.source}</strong> → <strong>${s.target}</strong></div><div>انکر هوشمند: <span class="vs-suggestion-anchor">${s.anchor}</span> (${Math.round(s.score)}%)</div><div style="font-size:11px;color:var(--vs-text-muted)">${s.reason||''}</div><div class="vs-row"><button class="vs-btn vs-btn-sm vs-btn-primary vs-apply-link" data-id="${s.id}">⚡ درج خودکار</button><button class="vs-btn vs-btn-sm vs-btn-success vs-accept-link" data-id="${s.id}">✓ تأیید</button><button class="vs-btn vs-btn-sm vs-btn-danger vs-reject-link" data-id="${s.id}">✗ رد</button></div></div>`);
+            const tc = typeColor[s.type] || 'orange';
+            $c.append(`<div class="vs-suggestion">
+                <div class="vs-suggestion-head">
+                    <span class="vs-badge vs-badge-${tc}">${s.type_label}</span>
+                    <div class="vs-suggestion-score"><div class="vs-suggestion-score-fill" style="width:${s.score}%"></div></div>
+                    <span class="vs-suggestion-pct">${Math.round(s.score)}%</span>
+                </div>
+                <div class="vs-suggestion-flow">
+                    <div class="vs-flow-node"><small>از (مبدا):</small><a href="${s.source_edit}" target="_blank">${s.source}</a></div>
+                    <span class="vs-flow-arrow">→</span>
+                    <div class="vs-flow-node"><small>به (مقصد):</small><a href="${s.target_url}" target="_blank">${s.target}</a></div>
+                </div>
+                <div class="vs-suggestion-anchor-row">انکر پیشنهادی: <span class="vs-suggestion-anchor">${s.anchor}</span></div>
+                <div class="vs-suggestion-reason">${s.reason||''}</div>
+                <div class="vs-row"><button class="vs-btn vs-btn-sm vs-btn-primary vs-apply-link" data-id="${s.id}">⚡ درج خودکار</button><button class="vs-btn vs-btn-sm vs-btn-success vs-accept-link" data-id="${s.id}">✓ تأیید دستی</button><button class="vs-btn vs-btn-sm vs-btn-danger vs-reject-link" data-id="${s.id}">✗ رد</button></div>
+            </div>`);
         });
     });
 }
+$(document).on('click', '#vs-sugg-filters .vs-chip', function(){
+    $(this).addClass('active').siblings().removeClass('active');
+    window._vsSuggType = $(this).data('type') || '';
+    loadSuggestions();
+});
 $(document).on('click', '.vs-accept-link', function(){ post('viraseo_accept_link',{id:$(this).data('id')},()=>loadSuggestions()); });
 $(document).on('click', '.vs-reject-link', function(){ post('viraseo_reject_link',{id:$(this).data('id')},()=>loadSuggestions()); });
 $(document).on('click', '.vs-apply-link', function(){

@@ -1,12 +1,20 @@
 <?php
 defined('ABSPATH') || exit;
 $has_key = !empty(\ViraSEO\Admin\Dashboard::get('serper_api_key'));
+$auto = !empty(\ViraSEO\Admin\Dashboard::get('rank_auto_enabled'));
 ?>
 <div class="vs-wrap" dir="rtl">
   <div class="vs-header">
     <h1 class="vs-title"><span class="dashicons dashicons-chart-line"></span> مانیتورینگ رتبه کلمات کلیدی</h1>
-    <span class="vs-badge vs-badge-green">🟢 مستقل (Serper)</span>
+    <span class="vs-badge <?php echo $auto ? 'vs-badge-green' : 'vs-badge-orange'; ?>"><?php echo $auto ? '🟢 بررسی خودکار فعال' : '⏸️ بررسی خودکار خاموش'; ?></span>
   </div>
+
+  <?php if (!$auto): ?>
+  <div class="vs-alert vs-alert-info">
+    <span class="dashicons dashicons-info"></span>
+    <p>بررسی خودکار رتبه <strong>خاموش</strong> است؛ کردیت Serper به‌صورت خودکار مصرف نمی‌شود. فقط بررسی دستی کردیت مصرف می‌کند. برای فعال‌سازی بررسی روزانه‌ی خودکار به <a href="<?php echo admin_url('admin.php?page=viraseo-settings'); ?>">تنظیمات</a> بروید.</p>
+  </div>
+  <?php endif; ?>
 
   <?php if (!$has_key): ?>
   <div class="vs-alert vs-alert-warning">

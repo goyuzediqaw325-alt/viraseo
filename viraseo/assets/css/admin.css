@@ -672,3 +672,21 @@
 .vs-intent-bar > b { min-width: 42px; text-align: left; }
 .vs-intent-track { flex: 1; height: 10px; background: rgba(148,163,184,.15); border-radius: 6px; overflow: hidden; }
 .vs-intent-fill { height: 100%; border-radius: 6px; transition: width .4s; }
+
+
+/* === Link suggestion filter chips + flow === */
+.vs-filter-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.vs-chip { background: rgba(148,163,184,.1); border: 1px solid rgba(148,163,184,.2); color: var(--vs-text,#e2e8f0); border-radius: 20px; padding: 6px 14px; cursor: pointer; font-size: 12px; font-family: var(--vs-font); }
+.vs-chip.active { background: var(--vs-primary,#6366f1); border-color: var(--vs-primary,#6366f1); color: #fff; }
+.vs-chip span { opacity: .8; font-weight: 700; }
+.vs-suggestion-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.vs-suggestion-head .vs-suggestion-score { flex: 1; height: 6px; background: rgba(148,163,184,.15); border-radius: 4px; overflow: hidden; }
+.vs-suggestion-head .vs-suggestion-score-fill { height: 100%; background: linear-gradient(90deg,#6366f1,#10b981); }
+.vs-suggestion-pct { font-size: 12px; font-weight: 700; color: var(--vs-primary,#818cf8); }
+.vs-suggestion-flow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.vs-flow-node { display: flex; flex-direction: column; gap: 2px; }
+.vs-flow-node small { font-size: 10px; color: var(--vs-text-muted); }
+.vs-flow-node a { color: var(--vs-primary,#818cf8); text-decoration: none; font-weight: 600; }
+.vs-flow-arrow { font-size: 20px; color: #10b981; font-weight: 800; }
+.vs-suggestion-anchor-row { font-size: 13px; margin-bottom: 4px; }
+.vs-suggestion-reason { font-size: 11px; color: var(--vs-text-muted); margin-bottom: 8px; }
