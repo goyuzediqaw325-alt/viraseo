@@ -286,14 +286,15 @@ function loadRanks() {
     post('viraseo_rank_list', {}, r => {
         if (!r.success) return;
         const $t = $('#vs-rank-tbody').empty();
-        if (!r.data.rows.length) { $t.html('<tr><td colspan="9" class="vs-empty">هنوز کلمه‌ای اضافه نشده. از فرم بالا اضافه کنید.</td></tr>'); return; }
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="10" class="vs-empty">هنوز کلمه‌ای اضافه نشده. از فرم بالا اضافه کنید.</td></tr>'); return; }
         r.data.rows.forEach(k => {
             let chg = '<span class="vs-rank-flat">—</span>';
             if (k.change > 0) chg = '<span class="vs-rank-up">▲ '+k.change+'</span>';
             else if (k.change < 0) chg = '<span class="vs-rank-down">▼ '+Math.abs(k.change)+'</span>';
             let spark = rankSpark(k.history);
-            let urlCell = k.found_url ? '<a href="'+k.found_url+'" target="_blank">↗</a>' : '<span class="vs-empty">خارج از ۵۰</span>';
-            $t.append('<tr><td><strong>'+k.keyword+'</strong></td><td><span class="vs-rank-badge">'+k.current+'</span></td><td>'+chg+'</td><td>'+k.best+'</td><td>'+spark+'</td><td>'+urlCell+'</td><td>'+k.freq+'</td><td style="font-size:11px;color:var(--vs-text-muted)">'+k.last+'</td><td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-rank-check" data-id="'+k.id+'" title="بررسی الان">⟳</button> <button class="vs-btn vs-btn-sm vs-btn-danger vs-rank-del" data-id="'+k.id+'">×</button></td></tr>');
+            let urlCell = k.found_url ? '<a href="'+k.found_url+'" target="_blank">↗</a>' : '<span class="vs-empty">خارج از نتایج</span>';
+            let pagesCell = '<input type="number" class="vs-rank-pages-edit" data-id="'+k.id+'" min="1" max="10" value="'+k.pages+'" style="width:52px;padding:4px;text-align:center;" title="تعداد صفحات بررسی این کلمه">';
+            $t.append('<tr><td><strong>'+k.keyword+'</strong></td><td><span class="vs-rank-badge">'+k.current+'</span></td><td>'+chg+'</td><td>'+k.best+'</td><td>'+spark+'</td><td>'+urlCell+'</td><td>'+pagesCell+'</td><td>'+k.freq+'</td><td style="font-size:11px;color:var(--vs-text-muted)">'+k.last+'</td><td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-rank-check" data-id="'+k.id+'" title="بررسی الان">⟳</button> <button class="vs-btn vs-btn-sm vs-btn-danger vs-rank-del" data-id="'+k.id+'">×</button></td></tr>');
         });
     });
 }
@@ -312,10 +313,16 @@ $(document).on('click', '#vs-rank-add', function(){
     const kw = $('#vs-rank-kw').val().trim();
     if (!kw) { toast('کلمه کلیدی وارد کنید.','err'); return; }
     const $b = $(this).prop('disabled', true);
-    post('viraseo_rank_add', {keyword:kw, frequency:$('#vs-rank-freq').val()}, r => {
+    post('viraseo_rank_add', {keyword:kw, frequency:$('#vs-rank-freq').val(), max_pages:$('#vs-rank-pages').val()}, r => {
         $b.prop('disabled', false);
         if (r.success) { toast(r.data.message,'success'); $('#vs-rank-kw').val(''); loadRanks(); }
         else toast(r.data,'err');
+    });
+});
+// Edit per-keyword page count inline
+$(document).on('change', '.vs-rank-pages-edit', function(){
+    post('viraseo_rank_pages', {id:$(this).data('id'), max_pages:$(this).val()}, r => {
+        if (r.success) toast(r.data.message, 'success'); else toast(r.data, 'err');
     });
 });
 $(document).on('click', '#vs-rank-checkall', function(){

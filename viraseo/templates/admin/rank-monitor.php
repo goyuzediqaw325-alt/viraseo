@@ -31,10 +31,14 @@ $has_key = !empty(\ViraSEO\Admin\Dashboard::get('serper_api_key'));
           <option value="weekly">هفتگی</option>
         </select>
       </div>
+      <div class="vs-field" style="min-width:120px;margin-bottom:0;">
+        <label class="vs-label">صفحات بررسی:</label>
+        <input type="number" class="vs-input" id="vs-rank-pages" min="1" max="10" value="3" title="هر صفحه ۱۰ نتیجه و ۱ کردیت Serper">
+      </div>
       <button class="vs-btn vs-btn-primary" id="vs-rank-add"><span class="dashicons dashicons-plus-alt"></span> افزودن</button>
       <button class="vs-btn vs-btn-secondary" id="vs-rank-checkall"><span class="dashicons dashicons-update"></span> بررسی همه الان</button>
     </div>
-    <p style="font-size:11px;color:var(--vs-text-muted);margin-top:8px;">رتبه‌ها به‌صورت خودکار در پس‌زمینه (Action Scheduler) و بر اساس بازه‌ی انتخابی به‌روزرسانی می‌شوند. لوکیشن جستجو همیشه «ایران» است. تعداد صفحات بررسی (پیش‌فرض ۳ = تا رتبه ۳۰) در «تنظیمات» قابل تغییر است — بررسی به‌محض پیدا شدن سایت متوقف می‌شود تا کمترین کردیت Serper مصرف شود.</p>
+    <p style="font-size:11px;color:var(--vs-text-muted);margin-top:8px;">«صفحات بررسی» برای <strong>هر کلمه جداگانه</strong> تعیین می‌شود (مثلاً کلمه‌ای ۲ صفحه، کلمه‌ای ۶ صفحه). هر صفحه ۱۰ نتیجه و ۱ کردیت Serper است؛ بررسی به‌محض پیدا شدن سایت یا تمام شدن نتایج گوگل متوقف می‌شود. لوکیشن همیشه «ایران».</p>
   </div>
 
   <div class="vs-card">
@@ -43,9 +47,9 @@ $has_key = !empty(\ViraSEO\Admin\Dashboard::get('serper_api_key'));
     <table class="vs-table">
       <thead><tr>
         <th>کلمه کلیدی</th><th>رتبه فعلی</th><th>تغییر</th><th>بهترین رتبه</th>
-        <th>روند (۱۴ بررسی اخیر)</th><th>URL رتبه‌گرفته</th><th>دفعات</th><th>آخرین بررسی</th><th>عملیات</th>
+        <th>روند (۱۴ بررسی اخیر)</th><th>URL رتبه‌گرفته</th><th>صفحات</th><th>دفعات</th><th>آخرین بررسی</th><th>عملیات</th>
       </tr></thead>
-      <tbody id="vs-rank-tbody"><tr><td colspan="9" class="vs-empty">در حال بارگذاری...</td></tr></tbody>
+      <tbody id="vs-rank-tbody"><tr><td colspan="10" class="vs-empty">در حال بارگذاری...</td></tr></tbody>
     </table>
   </div>
 

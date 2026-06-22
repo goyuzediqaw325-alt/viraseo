@@ -20,6 +20,18 @@ class RankMonitor {
         add_action('wp_ajax_viraseo_rank_remove', [$this, 'ajax_remove']);
         add_action('wp_ajax_viraseo_rank_list', [$this, 'ajax_list']);
         add_action('wp_ajax_viraseo_rank_check', [$this, 'ajax_check']);
+        add_action('wp_ajax_viraseo_rank_pages', [$this, 'ajax_pages']);
+    }
+
+    /** Update the per-keyword page count. */
+    public function ajax_pages(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+        $id = absint($_POST['id'] ?? 0);
+        $pages = max(1, min(10, absint($_POST['max_pages'] ?? 3)));
+        if ($id) $wpdb->update($wpdb->prefix.'viraseo_rank_tracking', ['max_pages'=>$pages], ['id'=>$id]);
+        wp_send_json_success(['message'=>'تعداد صفحات این کلمه به '.$pages.' تغییر یافت.']);
     }
 
     /** Register a recurring background action that runs every 12h (decides due items inside). */
@@ -38,6 +50,9 @@ class RankMonitor {
         if (!$kw) wp_send_json_error('کلمه کلیدی وارد کنید.');
         $freq = in_array($_POST['frequency'] ?? '', ['daily','2days','weekly'], true) ? $_POST['frequency'] : 'daily';
         $target = esc_url_raw($_POST['target_url'] ?? '');
+        $pages = (int) ($_POST['max_pages'] ?? 0);
+        if ($pages < 1) $pages = (int) (\ViraSEO\Admin\Dashboard::get('rank_max_pages') ?: 3);
+        $pages = max(1, min(10, $pages));
 
         $t = $wpdb->prefix . 'viraseo_rank_tracking';
 
@@ -52,7 +67,7 @@ class RankMonitor {
         }
         $ok = $wpdb->insert($t, [
             'keyword'=>$kw, 'keyword_hash'=>$hash,
-            'target_url'=>$target ?: null, 'frequency'=>$freq, 'status'=>'active',
+            'target_url'=>$target ?: null, 'frequency'=>$freq, 'max_pages'=>$pages, 'status'=>'active',
         ]);
         if ($ok === false) wp_send_json_error('خطای پایگاه داده: ' . ($wpdb->last_error ?: 'جدول rank_tracking ساخته نشد. افزونه را غیرفعال/فعال کنید.'));
         $id = $wpdb->insert_id;
@@ -119,6 +134,7 @@ class RankMonitor {
                 'best'=> $r->best_rank === null ? '—' : JalaliDate::to_fa($r->best_rank),
                 'change'=> $change,
                 'found_url'=>$r->found_url,
+                'pages'=>(int)($r->max_pages ?: 3),
                 'freq'=>$freq_fa[$r->frequency] ?? $r->frequency,
                 'last'=> $r->last_checked ? JalaliDate::format($r->last_checked, 'relative') : 'هنوز بررسی نشده',
                 'history'=> array_values(array_slice((array)json_decode($r->history ?: '[]', true), -14)),
@@ -152,7 +168,7 @@ class RankMonitor {
         if (!$row) return ['error'=>'یافت نشد.'];
 
         $hosts = $this->site_hosts();
-        $max_pages = max(1, min(10, (int) (\ViraSEO\Admin\Dashboard::get('rank_max_pages') ?: 3)));
+        $max_pages = max(1, min(10, (int) ($row->max_pages ?: (\ViraSEO\Admin\Dashboard::get('rank_max_pages') ?: 3))));
 
         $rank = null; $found_url = null; $scanned = 0; $top = []; $pages_used = 0; $prev_first = '';
         $stop = 'max_pages';

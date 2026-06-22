@@ -197,6 +197,7 @@ class Schema {
             keyword varchar(500) NOT NULL,
             keyword_hash char(32) NOT NULL,
             target_url varchar(2048) DEFAULT NULL,
+            max_pages tinyint unsigned DEFAULT 3,
             current_rank smallint DEFAULT NULL,
             previous_rank smallint DEFAULT NULL,
             best_rank smallint DEFAULT NULL,
