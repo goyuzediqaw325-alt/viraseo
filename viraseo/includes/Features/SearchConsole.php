@@ -13,6 +13,59 @@ class SearchConsole {
         add_action('wp_ajax_viraseo_get_cannibal', [$this, 'ajax_cannibal']);
         add_action('wp_ajax_viraseo_resolve_cannibal', [$this, 'ajax_resolve']);
         add_action('wp_ajax_viraseo_detect_cannibal', [$this, 'ajax_detect']);
+        add_action('wp_ajax_viraseo_gsc_insights', [$this, 'ajax_insights']);
+    }
+
+    /**
+     * Deep GSC analysis — surfaces three high-value opportunity types:
+     *  - CTR anomalies: good rank (≤10) but low CTR → title/meta needs work.
+     *  - Quick wins: position 11-20 with impressions → small push to page 1.
+     *  - Zero-click high-impression: lots of impressions, no clicks.
+     */
+    public function ajax_insights(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        global $wpdb;
+        $t = $wpdb->prefix.'viraseo_gsc_keywords';
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$t}'") !== $t) wp_send_json_error('ابتدا داده‌های سرچ کنسول را همگام‌سازی کنید.');
+
+        // Expected CTR by rounded position (approximate Persian/Google curve)
+        $expected = [1=>0.28,2=>0.15,3=>0.11,4=>0.08,5=>0.06,6=>0.05,7=>0.04,8=>0.032,9=>0.028,10=>0.025];
+
+        $rows = $wpdb->get_results("SELECT keyword,page_url,clicks,impressions,ctr,position FROM {$t} WHERE impressions >= 30 ORDER BY impressions DESC LIMIT 2000");
+
+        $ctr_ops = []; $quick = []; $zero = [];
+        foreach ($rows as $r) {
+            $pos = (float)$r->position; $imp = (int)$r->impressions; $clk = (int)$r->clicks; $ctr = (float)$r->ctr;
+            $rp = max(1, min(10, (int)round($pos)));
+
+            if ($pos <= 10 && $imp >= 50) {
+                $exp = $expected[$rp] ?? 0.02;
+                if ($ctr < $exp * 0.6) { // notably under-performing for its position
+                    $ctr_ops[] = ['keyword'=>$r->keyword,'url'=>$r->page_url,
+                        'impr'=>$imp,'ctr'=>round($ctr*100,1),'exp'=>round($exp*100,1),'pos'=>round($pos,1)];
+                }
+            }
+            if ($pos > 10 && $pos <= 20 && $imp >= 30) {
+                $quick[] = ['keyword'=>$r->keyword,'url'=>$r->page_url,'impr'=>$imp,'pos'=>round($pos,1)];
+            }
+            if ($clk === 0 && $imp >= 100) {
+                $zero[] = ['keyword'=>$r->keyword,'url'=>$r->page_url,'impr'=>$imp,'pos'=>round($pos,1)];
+            }
+        }
+        usort($ctr_ops, fn($a,$b)=>$b['impr']<=>$a['impr']);
+        usort($quick, fn($a,$b)=>$b['impr']<=>$a['impr']);
+        usort($zero, fn($a,$b)=>$b['impr']<=>$a['impr']);
+
+        $fmt = fn($r) => array_map(fn($x)=>array_merge($x, [
+            'impr'=>PersianText::format_number($x['impr']),
+            'pos'=>JalaliDate::to_fa((string)$x['pos']),
+        ]), array_slice($r, 0, 40));
+
+        wp_send_json_success([
+            'ctr_ops'=>array_map(fn($x)=>array_merge($fmt([$x])[0], ['ctr'=>JalaliDate::to_fa((string)$x['ctr']).'%','exp'=>JalaliDate::to_fa((string)$x['exp']).'%']), array_slice($ctr_ops,0,40)),
+            'quick'=>$fmt($quick),
+            'zero'=>$fmt($zero),
+        ]);
     }
 
     public function ajax_keywords(): void {

@@ -98,6 +98,7 @@ $gsc_connected = !empty($_GET['gsc_connected']);
   <div class="vs-tabs">
     <button class="vs-tab active" data-tab="keywords">📊 کلمات کلیدی</button>
     <button class="vs-tab" data-tab="timeline">📅 نمای زمانی</button>
+    <button class="vs-tab" data-tab="insights">💡 تحلیل هوشمند</button>
     <button class="vs-tab" data-tab="striking">⭐ فرصت نزدیک (Striking)</button>
     <button class="vs-tab" data-tab="cannibal">⚠️ کنیبالایزیشن</button>
   </div>
@@ -134,6 +135,32 @@ $gsc_connected = !empty($_GET['gsc_connected']);
         <tr><td colspan="5" class="vs-empty">ابتدا داده‌ها را همگام‌سازی کنید.</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <div class="vs-tab-panel" id="panel-insights">
+    <div class="vs-alert vs-alert-info">
+      <span class="dashicons dashicons-lightbulb"></span>
+      <p>تحلیل هوشمند داده‌های سرچ کنسول برای یافتن سریع‌ترین فرصت‌های رشد ترافیک.</p>
+    </div>
+    <button class="vs-btn vs-btn-primary" id="vs-load-insights"><span class="dashicons dashicons-update"></span> اجرای تحلیل هوشمند</button>
+
+    <div class="vs-card" style="margin-top:16px;">
+      <h3 class="vs-card-title">🎯 فرصت بهبود CTR (جایگاه خوب، کلیک کم)</h3>
+      <p class="vs-hint">این کلمات رتبه‌ی خوبی دارند ولی نرخ کلیک‌شان پایین‌تر از حد انتظار است — عنوان و توضیحات متا را جذاب‌تر کنید.</p>
+      <table class="vs-table"><thead><tr><th>کلمه</th><th>صفحه</th><th>جایگاه</th><th>CTR فعلی</th><th>CTR مورد انتظار</th><th>نمایش</th></tr></thead><tbody id="vs-ins-ctr"></tbody></table>
+    </div>
+
+    <div class="vs-card" style="margin-top:16px;">
+      <h3 class="vs-card-title">🚀 بردهای سریع (جایگاه ۱۱ تا ۲۰)</h3>
+      <p class="vs-hint">با کمی بهبود، این کلمات به صفحه اول گوگل می‌رسند.</p>
+      <table class="vs-table"><thead><tr><th>کلمه</th><th>صفحه</th><th>جایگاه</th><th>نمایش</th></tr></thead><tbody id="vs-ins-quick"></tbody></table>
+    </div>
+
+    <div class="vs-card" style="margin-top:16px;">
+      <h3 class="vs-card-title">👀 پرنمایش بدون کلیک</h3>
+      <p class="vs-hint">نمایش زیاد ولی صفر کلیک — نیازمند بازنگری جدی در عنوان/محتوا یا هدف‌گذاری کلمه.</p>
+      <table class="vs-table"><thead><tr><th>کلمه</th><th>صفحه</th><th>جایگاه</th><th>نمایش</th></tr></thead><tbody id="vs-ins-zero"></tbody></table>
+    </div>
   </div>
 
   <div class="vs-tab-panel" id="panel-striking">

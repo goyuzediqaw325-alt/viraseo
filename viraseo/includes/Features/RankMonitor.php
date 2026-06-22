@@ -21,6 +21,24 @@ class RankMonitor {
         add_action('wp_ajax_viraseo_rank_list', [$this, 'ajax_list']);
         add_action('wp_ajax_viraseo_rank_check', [$this, 'ajax_check']);
         add_action('wp_ajax_viraseo_rank_pages', [$this, 'ajax_pages']);
+        add_action('wp_ajax_viraseo_rank_alerts', [$this, 'ajax_alerts']);
+    }
+
+    /** Return recent rank-drop alerts for the panel. */
+    public function ajax_alerts(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        global $wpdb;
+        $rows = $wpdb->get_results("SELECT detail, created_at FROM {$wpdb->prefix}viraseo_activity_log WHERE action='rank_drop' ORDER BY id DESC LIMIT 20");
+        $data = array_map(function($r) {
+            $d = json_decode($r->detail, true) ?: [];
+            return [
+                'keyword'=>$d['keyword'] ?? '',
+                'from'=>$d['from'] ?? '—',
+                'to'=>$d['to'] ?? '—',
+                'time'=>JalaliDate::format($r->created_at, 'relative'),
+            ];
+        }, $rows ?: []);
+        wp_send_json_success(['rows'=>$data]);
     }
 
     /** Update the per-keyword page count. */
@@ -274,5 +292,36 @@ class RankMonitor {
             'history'=>wp_json_encode($history),
             'last_checked'=>current_time('mysql'),
         ], ['id'=>$id]);
+
+        // Detect a significant rank drop and raise an alert (only after a prior measurement)
+        $prev = $row->current_rank;
+        if ($prev !== null) {
+            $threshold = max(1, (int) (\ViraSEO\Admin\Dashboard::get('rank_alert_threshold') ?: 3));
+            $dropped_out = ($rank === null);
+            $big_drop = ($rank !== null && ($rank - (int)$prev) >= $threshold);
+            if ($dropped_out || $big_drop) {
+                $this->raise_alert($row->keyword, (int)$prev, $rank);
+            }
+        }
+    }
+
+    /** Log a rank-drop alert and optionally email the admin. */
+    private function raise_alert(string $keyword, int $from, ?int $to): void {
+        global $wpdb;
+        $to_label = $to === null ? 'خارج از نتایج' : (string) $to;
+        $wpdb->insert($wpdb->prefix.'viraseo_activity_log', [
+            'action'=>'rank_drop',
+            'detail'=>wp_json_encode(['keyword'=>$keyword, 'from'=>$from, 'to'=>$to_label]),
+            'user_id'=>get_current_user_id() ?: null,
+        ]);
+        if (\ViraSEO\Admin\Dashboard::get('rank_alert_email')) {
+            $site = get_bloginfo('name');
+            $subject = "[{$site}] هشدار افت رتبه: {$keyword}";
+            $body = "کلمه کلیدی «{$keyword}» در گوگل افت کرد.\n\n"
+                  . "رتبه قبلی: {$from}\nرتبه فعلی: {$to_label}\n\n"
+                  . "زمان: " . JalaliDate::now_str() . "\n"
+                  . "سایت: " . get_site_url();
+            wp_mail(get_option('admin_email'), $subject, $body);
+        }
     }
 }

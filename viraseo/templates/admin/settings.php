@@ -23,6 +23,11 @@
       <div class="vs-field"><label class="vs-label">حداقل نمایش</label><input class="vs-input" type="number" name="viraseo_settings[min_impressions]" value="<?php echo esc_attr($s['min_impressions'] ?? 100); ?>"></div>
       <div class="vs-field"><label class="vs-label">تعداد صفحات بررسی رتبه</label><input class="vs-input" type="number" min="1" max="10" name="viraseo_settings[rank_max_pages]" value="<?php echo esc_attr($s['rank_max_pages'] ?? 3); ?>"><span class="vs-hint">هر صفحه ۱۰ نتیجه و ۱ کردیت Serper. بررسی به‌محض پیدا شدن سایت متوقف می‌شود.</span></div>
     </div>
+    <h3 class="vs-card-title">هشدار افت رتبه</h3>
+    <div class="vs-row">
+      <div class="vs-field"><label class="vs-label"><input type="checkbox" name="viraseo_settings[rank_alert_email]" value="1" <?php checked(!empty($s['rank_alert_email'])); ?>> ارسال ایمیل هنگام افت رتبه</label><span class="vs-hint">ایمیل به مدیر سایت (<?php echo esc_html(get_option('admin_email')); ?>)</span></div>
+      <div class="vs-field"><label class="vs-label">آستانه افت (تعداد رتبه)</label><input class="vs-input" type="number" min="1" max="50" name="viraseo_settings[rank_alert_threshold]" value="<?php echo esc_attr($s['rank_alert_threshold'] ?? 3); ?>"><span class="vs-hint">اگر رتبه این مقدار یا بیشتر افت کند، هشدار ثبت می‌شود.</span></div>
+    </div>
     <h3 class="vs-card-title">منطقه خطر</h3>
     <div class="vs-field"><label class="vs-label"><input type="checkbox" name="viraseo_settings[remove_data]" value="1"> حذف تمام داده‌ها هنگام حذف پلاگین</label></div>
     <?php submit_button('ذخیره تنظیمات', 'vs-btn vs-btn-success'); ?>

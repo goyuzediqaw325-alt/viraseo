@@ -308,6 +308,16 @@ $(document).on('click', '.vs-serp-row', function(){
 });
 
 // === RANK MONITOR ===
+function loadRankAlerts() {
+    if (!$('#vs-rank-alerts').length) return;
+    post('viraseo_rank_alerts', {}, r => {
+        if (!r.success || !r.data.rows.length) { $('#vs-rank-alerts').hide(); return; }
+        let items = r.data.rows.slice(0, 8).map(a =>
+            '<li>📉 <strong>'+a.keyword+'</strong>: از رتبه '+a.from+' به '+a.to+' افت کرد <span style="color:var(--vs-text-muted);font-size:11px">('+a.time+')</span></li>'
+        ).join('');
+        $('#vs-rank-alerts').show().html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-warning"></span><div><strong>هشدارهای افت رتبه اخیر:</strong><ul style="margin:6px 0 0;padding-right:18px">'+items+'</ul></div></div>');
+    });
+}
 function loadRanks() {
     post('viraseo_rank_list', {}, r => {
         if (!r.success) return;
@@ -697,7 +707,7 @@ $(function(){
     // Workflows page
     if ($('#vs-wf-grid').length) loadWorkflows();
     // Rank monitor page
-    if ($('#vs-rank-tbody').length) loadRanks();
+    if ($('#vs-rank-tbody').length) { loadRanks(); loadRankAlerts(); }
     // Target keywords page
     if ($('#vs-tg-tbody').length) loadTargets();
     // SERP auto-start when arriving from Target Keywords (?keyword=..&autostart=1)
@@ -729,6 +739,26 @@ function downloadFile(name, content) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
+
+// === GSC SMART INSIGHTS ===
+$(document).on('click', '#vs-load-insights', function(){
+    const $b = $(this).prop('disabled', true);
+    ['#vs-ins-ctr','#vs-ins-quick','#vs-ins-zero'].forEach(s=>$(s).html('<tr><td colspan="6" class="vs-empty">در حال تحلیل...</td></tr>'));
+    post('viraseo_gsc_insights', {}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { toast(r.data||'خطا','err'); return; }
+        const ctr = $('#vs-ins-ctr').empty();
+        if (!r.data.ctr_ops.length) ctr.html('<tr><td colspan="6" class="vs-empty">موردی نیست.</td></tr>');
+        r.data.ctr_ops.forEach(o => ctr.append('<tr><td><strong>'+o.keyword+'</strong></td><td><a href="'+o.url+'" target="_blank">↗</a></td><td>'+o.pos+'</td><td style="color:#ef4444">'+o.ctr+'</td><td style="color:#10b981">'+o.exp+'</td><td>'+o.impr+'</td></tr>'));
+        const q = $('#vs-ins-quick').empty();
+        if (!r.data.quick.length) q.html('<tr><td colspan="4" class="vs-empty">موردی نیست.</td></tr>');
+        r.data.quick.forEach(o => q.append('<tr><td><strong>'+o.keyword+'</strong></td><td><a href="'+o.url+'" target="_blank">↗</a></td><td><span class="vs-badge vs-badge-orange">'+o.pos+'</span></td><td>'+o.impr+'</td></tr>'));
+        const z = $('#vs-ins-zero').empty();
+        if (!r.data.zero.length) z.html('<tr><td colspan="4" class="vs-empty">موردی نیست.</td></tr>');
+        r.data.zero.forEach(o => z.append('<tr><td><strong>'+o.keyword+'</strong></td><td><a href="'+o.url+'" target="_blank">↗</a></td><td>'+o.pos+'</td><td>'+o.impr+'</td></tr>'));
+        toast('تحلیل هوشمند انجام شد','success');
+    });
+});
 
 // === SEO OPPORTUNITIES ===
 $(document).on('click', '#vs-load-linkopp', function(){
