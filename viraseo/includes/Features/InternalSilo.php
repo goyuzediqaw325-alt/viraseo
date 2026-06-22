@@ -22,10 +22,13 @@ class InternalSilo {
 
         try {
             $result = $this->scan();
+            // Generate link suggestions immediately (don't wait for cron)
+            $suggCount = $this->suggest();
             wp_send_json_success([
-                'message' => sprintf('✅ اسکن کامل شد. %d لینک داخلی یافت شد. %d صفحه یتیم شناسایی شد.', $result['links'], $result['orphans']),
+                'message' => sprintf('✅ اسکن کامل شد. %d لینک داخلی، %d صفحه یتیم، %d پیشنهاد لینک.', $result['links'], $result['orphans'], $suggCount),
                 'links' => $result['links'],
                 'orphans' => $result['orphans'],
+                'suggestions' => $suggCount,
             ]);
         } catch (\Throwable $e) {
             wp_send_json_error('خطا در اسکن: ' . $e->getMessage());
@@ -117,31 +120,50 @@ class InternalSilo {
         return ['links'=>$link_count, 'orphans'=>$orphan_count];
     }
 
-    public function suggest(): void {
+    public function suggest(): int {
         global $wpdb;
         $st = $wpdb->prefix.'viraseo_link_suggestions';
         $lt = $wpdb->prefix.'viraseo_internal_links';
-        $posts = $wpdb->get_results("SELECT ID,post_title,post_content FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page') LIMIT 200");
-        if (count($posts)<2) return;
 
+        // Clear old pending suggestions (keep accepted/rejected)
+        $wpdb->query("DELETE FROM {$st} WHERE status='pending'");
+
+        $posts = $wpdb->get_results("SELECT ID,post_title,post_content FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT 300");
+        if (count($posts)<2) return 0;
+
+        // Build keyword cache for each post
         $cache = [];
-        foreach ($posts as $p) $cache[$p->ID] = PersianText::extract_keywords(wp_strip_all_tags($p->post_content), 20);
+        foreach ($posts as $p) {
+            $text = wp_strip_all_tags($p->post_content) . ' ' . $p->post_title;
+            $cache[$p->ID] = PersianText::extract_keywords($text, 25);
+        }
 
         $count = 0;
-        for ($i=0; $i<count($posts) && $count<100; $i++) {
-            for ($j=$i+1; $j<count($posts) && $count<100; $j++) {
+        for ($i=0; $i<count($posts) && $count<150; $i++) {
+            for ($j=$i+1; $j<count($posts) && $count<150; $j++) {
                 $a=$posts[$i]; $b=$posts[$j];
-                if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$lt} WHERE source_id=%d AND target_id=%d",$a->ID,$b->ID))) continue;
                 $ka=array_keys($cache[$a->ID]); $kb=array_keys($cache[$b->ID]);
-                $shared=array_intersect($ka,$kb); $union=array_unique(array_merge($ka,$kb));
-                if (empty($union)) continue;
+                if (empty($ka) || empty($kb)) continue;
+                $shared=array_intersect($ka,$kb);
+                if (empty($shared)) continue;
+                $union=array_unique(array_merge($ka,$kb));
                 $sim = count($shared)/count($union);
-                if ($sim < 0.12) continue;
-                $anchor = $shared ? reset($shared) : $b->post_title;
-                if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$st} WHERE source_id=%d AND target_id=%d",$a->ID,$b->ID))) continue;
-                $wpdb->insert($st, ['source_id'=>$a->ID,'target_id'=>$b->ID,'anchor'=>mb_substr($anchor,0,500),'score'=>round($sim*100,2),'reason'=>'شباهت '.round($sim*100).'%']);
-                $count++;
+                if ($sim < 0.08) continue; // lower threshold = more suggestions
+
+                $anchor = reset($shared);
+
+                // Suggest A→B if no existing link
+                if (!$wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$lt} WHERE source_id=%d AND target_id=%d",$a->ID,$b->ID))) {
+                    $wpdb->insert($st, ['source_id'=>$a->ID,'target_id'=>$b->ID,'anchor'=>mb_substr($anchor,0,500),'score'=>round($sim*100,2),'reason'=>'کلمات مشترک: '.mb_substr(implode('، ', array_slice($shared,0,4)),0,200),'status'=>'pending']);
+                    $count++;
+                }
+                // Suggest B→A too if no existing link
+                if ($count<150 && !$wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$lt} WHERE source_id=%d AND target_id=%d",$b->ID,$a->ID))) {
+                    $wpdb->insert($st, ['source_id'=>$b->ID,'target_id'=>$a->ID,'anchor'=>mb_substr($anchor,0,500),'score'=>round($sim*100,2),'reason'=>'کلمات مشترک: '.mb_substr(implode('، ', array_slice($shared,0,4)),0,200),'status'=>'pending']);
+                    $count++;
+                }
             }
         }
+        return $count;
     }
 }
