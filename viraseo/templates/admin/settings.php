@@ -6,9 +6,9 @@
   </div>
   <form method="post" action="options.php" class="vs-card">
     <?php settings_fields('viraseo_opts'); ?>
-    <h3 class="vs-card-title">سرچ کنسول گوگل</h3>
-    <div class="vs-field"><label class="vs-label">Client ID</label><input class="vs-input vs-input-ltr" name="viraseo_settings[gsc_client_id]" value="<?php echo esc_attr($s['gsc_client_id'] ?? ''); ?>"></div>
-    <div class="vs-field"><label class="vs-label">Client Secret</label><input class="vs-input vs-input-ltr" name="viraseo_settings[gsc_client_secret]" value="<?php echo esc_attr($s['gsc_client_secret'] ?? ''); ?>"></div>
+    <h3 class="vs-card-title">اتصال به سرچ کنسول (OAuth Proxy)</h3>
+    <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span><p>آدرس Cloudflare Worker خود را وارد کنید. کاربران فقط دکمه «اتصال به گوگل» می‌زنن — نیازی به Client ID ندارن.</p></div>
+    <div class="vs-field"><label class="vs-label">آدرس OAuth Proxy (Cloudflare Worker)</label><input class="vs-input vs-input-ltr" name="viraseo_settings[oauth_proxy_url]" value="<?php echo esc_attr($s['oauth_proxy_url'] ?? ''); ?>" placeholder="https://viraseo-auth.your-account.workers.dev"><span class="vs-hint">راهنمای نصب Worker در پوشه oauth-proxy/ موجود است</span></div>
     <h3 class="vs-card-title">n8n</h3>
     <div class="vs-field"><label class="vs-label">آدرس n8n</label><input class="vs-input vs-input-ltr" name="viraseo_settings[n8n_url]" value="<?php echo esc_attr($s['n8n_url'] ?? ''); ?>" placeholder="https://n8n.example.com"></div>
     <div class="vs-field"><label class="vs-label">Secret Webhook</label><input class="vs-input vs-input-ltr" name="viraseo_settings[n8n_secret]" value="<?php echo esc_attr($s['n8n_secret'] ?? ''); ?>"></div>

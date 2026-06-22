@@ -50,6 +50,7 @@ class Dashboard {
         return [
             'n8n_url' => esc_url_raw(rtrim($i['n8n_url'] ?? '', '/')),
             'n8n_secret' => sanitize_text_field($i['n8n_secret'] ?? ''),
+            'oauth_proxy_url' => esc_url_raw(rtrim($i['oauth_proxy_url'] ?? '', '/')),
             'gsc_client_id' => sanitize_text_field($i['gsc_client_id'] ?? ''),
             'gsc_client_secret' => sanitize_text_field($i['gsc_client_secret'] ?? ''),
             'striking_min' => max(1, absint($i['striking_min'] ?? 11)),
@@ -61,7 +62,7 @@ class Dashboard {
 
     public static function get(string $key = ''): mixed {
         $s = wp_parse_args(get_option(self::OPT, []), [
-            'n8n_url'=>'','n8n_secret'=>'',
+            'n8n_url'=>'','n8n_secret'=>'','oauth_proxy_url'=>'',
             'gsc_client_id'=>'','gsc_client_secret'=>'',
             'striking_min'=>11,'striking_max'=>20,'min_impressions'=>10,'remove_data'=>false,
         ]);

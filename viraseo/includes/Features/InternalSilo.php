@@ -18,8 +18,18 @@ class InternalSilo {
 
     public function ajax_scan(): void {
         check_ajax_referer('viraseo_nonce','nonce');
-        $this->scan();
-        wp_send_json_success(['message'=>'اسکن انجام شد.']);
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+
+        try {
+            $result = $this->scan();
+            wp_send_json_success([
+                'message' => sprintf('✅ اسکن کامل شد. %d لینک داخلی یافت شد. %d صفحه یتیم شناسایی شد.', $result['links'], $result['orphans']),
+                'links' => $result['links'],
+                'orphans' => $result['orphans'],
+            ]);
+        } catch (\Throwable $e) {
+            wp_send_json_error('خطا در اسکن: ' . $e->getMessage());
+        }
     }
 
     public function ajax_orphans(): void {
@@ -63,17 +73,19 @@ class InternalSilo {
         wp_send_json_success();
     }
 
-    public function scan(): void {
+    public function scan(): array {
         global $wpdb;
         $lt = $wpdb->prefix.'viraseo_internal_links';
         $ot = $wpdb->prefix.'viraseo_orphan_pages';
         $host = wp_parse_url(get_site_url(), PHP_URL_HOST);
 
-        $posts = $wpdb->get_results("SELECT ID,post_title,post_content,post_type FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product')");
-        if (!$posts) return;
+        $posts = $wpdb->get_results("SELECT ID,post_title,post_content,post_type FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT 500");
+        if (!$posts) return ['links'=>0,'orphans'=>0];
 
-        $wpdb->query("TRUNCATE TABLE {$lt}");
+        $wpdb->query("DELETE FROM {$lt}");
+        $link_count = 0;
         foreach ($posts as $p) {
+            if (empty($p->post_content)) continue;
             preg_match_all('/<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)<\/a>/si', $p->post_content, $m, PREG_SET_ORDER);
             foreach ($m as $match) {
                 $href = $match[1]; $anchor = wp_strip_all_tags($match[2]);
@@ -83,10 +95,11 @@ class InternalSilo {
                 $tid = url_to_postid($href);
                 if (!$tid || $tid === $p->ID) continue;
                 $wpdb->insert($lt, ['source_id'=>$p->ID,'target_id'=>$tid,'anchor'=>mb_substr($anchor,0,500),'link_url'=>$href]);
+                $link_count++;
             }
         }
 
-        $wpdb->query("TRUNCATE TABLE {$ot}");
+        $wpdb->query("DELETE FROM {$ot}");
         $wpdb->query("
             INSERT INTO {$ot} (post_id,post_type,post_title,inlinks,outlinks,status)
             SELECT p.ID, p.post_type, p.post_title,
@@ -97,7 +110,11 @@ class InternalSilo {
             LEFT JOIN (SELECT source_id,COUNT(*) c FROM {$lt} GROUP BY source_id) o ON o.source_id=p.ID
             WHERE p.post_status='publish' AND p.post_type IN ('post','page','product') AND COALESCE(i.c,0)<=2
         ");
+
+        $orphan_count = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$ot} WHERE status='orphan'");
         update_option('viraseo_last_scan', current_time('mysql'));
+
+        return ['links'=>$link_count, 'orphans'=>$orphan_count];
     }
 
     public function suggest(): void {

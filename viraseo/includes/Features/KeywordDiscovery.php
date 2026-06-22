@@ -16,7 +16,14 @@ class KeywordDiscovery {
     public function ajax_start(): void {
         check_ajax_referer('viraseo_nonce','nonce');
         $seed = sanitize_text_field($_POST['seed']??'');
-        if (mb_strlen($seed)<2) wp_send_json_error('حداقل ۲ حرف.');
+        if (mb_strlen($seed)<2) wp_send_json_error('حداقل ۲ حرف وارد کنید.');
+
+        // Check n8n
+        $n8n_url = \ViraSEO\Admin\Dashboard::get('n8n_url');
+        if (!$n8n_url) {
+            wp_send_json_error('⚠️ آدرس n8n تنظیم نشده. این قابلیت نیاز به سرور n8n دارد. ابتدا n8n را راه‌اندازی و آدرس آن را در تنظیمات وارد کنید.');
+        }
+
         $seed = PersianText::normalize($seed);
 
         global $wpdb;
@@ -28,9 +35,9 @@ class KeywordDiscovery {
         $r = WebhookHandler::send_discovery_request($seed, $disc_id);
         if (isset($r['error'])) {
             $wpdb->update($wpdb->prefix.'viraseo_keyword_discoveries',['status'=>'failed'],['discovery_id'=>$disc_id]);
-            wp_send_json_error($r['error']);
+            wp_send_json_error('❌ خطا در ارسال به n8n: ' . $r['error']);
         }
-        wp_send_json_success(['discovery_id'=>$disc_id,'message'=>'جستجو شروع شد...']);
+        wp_send_json_success(['discovery_id'=>$disc_id,'message'=>'✅ جستجو شروع شد. n8n در حال جمع‌آوری کلمات...']);
     }
 
     public function ajax_ideas(): void {

@@ -17,10 +17,17 @@ class SerpAnalyzer {
         check_ajax_referer('viraseo_nonce','nonce');
         $kw = sanitize_text_field($_POST['keyword']??'');
         if (!$kw) wp_send_json_error('کلمه کلیدی وارد کنید.');
+
+        // Check n8n is configured
+        $n8n_url = Dashboard::get('n8n_url');
+        if (!$n8n_url) {
+            wp_send_json_error('⚠️ آدرس n8n تنظیم نشده. ابتدا به تنظیمات بروید و آدرس n8n را وارد کنید. (این قابلیت نیاز به n8n دارد)');
+        }
+
         $kw = PersianText::normalize($kw);
         $r = WebhookHandler::send_serp_request($kw, get_current_user_id());
-        if (isset($r['error'])) wp_send_json_error($r['error']);
-        wp_send_json_success(['analysis_id'=>$r['analysis_id'],'message'=>'تحلیل شروع شد...']);
+        if (isset($r['error'])) wp_send_json_error('❌ خطا: ' . $r['error']);
+        wp_send_json_success(['analysis_id'=>$r['analysis_id'],'message'=>'✅ درخواست ارسال شد. n8n در حال تحلیل...']);
     }
 
     public function ajax_status(): void {
