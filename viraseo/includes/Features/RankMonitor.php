@@ -198,8 +198,8 @@ class RankMonitor {
                     break 2; // found — stop paginating (saves credits)
                 }
             }
-            // Fewer than ~8 results means no further pages exist — stop early.
-            if (count($organic) < 8) { $stop = 'end_of_results'; break; }
+            // Note: we keep paginating up to the per-keyword page count. We only stop
+            // early on a completely EMPTY page (handled at the top) or a duplicate page.
         }
 
         $this->store_result($id, $row, $rank, $found_url);

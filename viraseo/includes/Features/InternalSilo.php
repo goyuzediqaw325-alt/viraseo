@@ -261,9 +261,18 @@ class InternalSilo {
         $st = $wpdb->prefix.'viraseo_link_suggestions';
         $lt = $wpdb->prefix.'viraseo_internal_links';
 
-        // Self-heal: ensure the table + columns are correct (older installs may be missing 'reason')
+        // Self-heal: older installs have an INCOMPATIBLE table (e.g. a unique key
+        // 'unique_source_target' on columns we don't populate → "Duplicate entry '0-0'").
+        // Since suggestions are regenerable, drop & recreate when the structure is stale.
         $cols = $wpdb->get_col("SHOW COLUMNS FROM {$st}");
-        if (!$cols || !in_array('reason', $cols, true) || !in_array('score', $cols, true)) {
+        $idx = $wpdb->get_results("SHOW INDEX FROM {$st}");
+        $keynames = $idx ? array_map(fn($i)=>$i->Key_name, $idx) : [];
+        $needed = ['source_id','target_id','anchor','score','reason','status'];
+        $stale = (bool) array_diff($needed, $cols ?: [])
+                 || !in_array('uq_pair', $keynames, true)
+                 || in_array('unique_source_target', $keynames, true);
+        if (!$cols || $stale) {
+            $wpdb->query("DROP TABLE IF EXISTS {$st}");
             (new \ViraSEO\Database\Schema())->create_all_tables();
         }
 
@@ -282,7 +291,9 @@ class InternalSilo {
 
         $count = 0; $attempted = 0; $error = '';
         $insert = function(int $src, int $tgt, string $anchor, float $score, string $reason) use ($wpdb, $st, $lt, &$count, &$attempted, &$error): void {
+            if ($src < 1 || $tgt < 1 || $src === $tgt) return;
             if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$lt} WHERE source_id=%d AND target_id=%d", $src, $tgt))) return;
+            if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$st} WHERE source_id=%d AND target_id=%d", $src, $tgt))) return;
             $attempted++;
             $ok = $wpdb->insert($st, ['source_id'=>$src,'target_id'=>$tgt,'anchor'=>mb_substr($anchor,0,500),'score'=>$score,'reason'=>mb_substr($reason,0,200),'status'=>'pending']);
             if ($ok === false) { if (!$error) $error = $wpdb->last_error; }
