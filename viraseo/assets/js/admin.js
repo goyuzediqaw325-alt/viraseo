@@ -412,6 +412,26 @@ $(document).on('submit', '#vs-bl-form', function(e){
 });
 
 
+// === BACKLINK IMPORT FROM GSC ===
+$(document).on('change', '#vs-bl-import-file', function(){
+    const f = this.files && this.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){ $('#vs-bl-import-csv').val(ev.target.result); toast('فایل خوانده شد — دکمه درون‌ریزی را بزنید','info'); };
+    reader.readAsText(f, 'UTF-8');
+});
+$(document).on('click', '#vs-bl-import-btn', function(){
+    const csv = $('#vs-bl-import-csv').val().trim();
+    if (!csv) { toast('فایل CSV را انتخاب یا محتوا را بچسبانید.','err'); return; }
+    const $b = $(this).prop('disabled', true);
+    $('#vs-bl-import-status').text('در حال درون‌ریزی...');
+    post('viraseo_bl_import_gsc', {csv: csv, target_url: $('#vs-bl-import-target').val()}, r => {
+        $b.prop('disabled', false);
+        if (r.success) { $('#vs-bl-import-status').text(r.data.message); toast(r.data.message,'success'); $('#vs-bl-import-csv').val(''); loadBacklinks(); }
+        else { $('#vs-bl-import-status').text(r.data||'خطا'); toast(r.data||'خطا','err'); }
+    });
+});
+
 // === DISAVOW ===
 function loadDisavow() {
     post('viraseo_get_disavow', {}, r => {

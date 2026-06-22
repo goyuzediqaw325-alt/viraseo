@@ -9,6 +9,22 @@
     <button class="vs-tab" data-tab="disavow">Disavow</button>
   </div>
   <div class="vs-tab-panel active" data-panel="backlinks">
+    <div class="vs-card vs-card-glow" style="margin-bottom:16px;">
+      <h3 class="vs-card-title">📥 درون‌ریزی خودکار از سرچ کنسول</h3>
+      <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span><p>
+        <strong>توجه:</strong> API سرچ کنسول گزارش بک‌لینک‌ها را ارائه نمی‌دهد (فقط در پنل گوگل موجود است). برای درون‌ریزی:
+        <br>۱. در سرچ کنسول → بخش <strong>«پیوندها» (Links)</strong> → <strong>«سایت‌های لینک‌دهنده برتر»</strong> را باز کنید.
+        <br>۲. روی <strong>«صادرات» (Export)</strong> کلیک و فایل CSV را دانلود کنید (یا جدول را کپی کنید).
+        <br>۳. فایل را اینجا انتخاب یا محتوای آن را در کادر زیر بچسبانید و «درون‌ریزی» را بزنید.
+      </p></div>
+      <div class="vs-row">
+        <div class="vs-field"><label class="vs-label">URL مقصد (سایت شما)</label><input class="vs-input vs-input-ltr" id="vs-bl-import-target" placeholder="<?php echo esc_attr(get_site_url()); ?>"></div>
+        <div class="vs-field"><label class="vs-label">فایل CSV سرچ کنسول</label><input type="file" class="vs-input" id="vs-bl-import-file" accept=".csv,text/csv,text/plain"></div>
+      </div>
+      <div class="vs-field"><label class="vs-label">یا محتوای CSV را اینجا بچسبانید:</label><textarea class="vs-input vs-input-ltr" id="vs-bl-import-csv" rows="4" placeholder="example.com,12&#10;another-site.ir,5"></textarea></div>
+      <button type="button" class="vs-btn vs-btn-primary" id="vs-bl-import-btn"><span class="dashicons dashicons-database-import"></span> درون‌ریزی بک‌لینک‌ها</button>
+      <span id="vs-bl-import-status" class="vs-status"></span>
+    </div>
     <form id="vs-bl-form" class="vs-card">
       <div class="vs-row">
         <div class="vs-field"><label class="vs-label">URL مبدا</label><input class="vs-input vs-input-ltr" name="source_url"></div>

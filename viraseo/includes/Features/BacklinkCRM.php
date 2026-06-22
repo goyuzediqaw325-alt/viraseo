@@ -14,6 +14,65 @@ class BacklinkCRM {
         add_action('wp_ajax_viraseo_add_disavow', [$this, 'ajax_add_disavow']);
         add_action('wp_ajax_viraseo_gen_disavow', [$this, 'ajax_gen_disavow']);
         add_action('wp_ajax_viraseo_bl_stats', [$this, 'ajax_stats']);
+        add_action('wp_ajax_viraseo_bl_import_gsc', [$this, 'ajax_import_gsc']);
+    }
+
+    /**
+     * Import backlinks from a Google Search Console "Links" export (CSV).
+     * The GSC API has NO Links endpoint, so users export the report from the GSC UI
+     * (Links > Top linking sites / Top linked pages) and paste/upload the CSV here.
+     * Parser is language-agnostic: it reads the first column as the source domain/URL.
+     */
+    public function ajax_import_gsc(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+
+        $csv = (string) wp_unslash($_POST['csv'] ?? '');
+        if (trim($csv) === '') wp_send_json_error('محتوای CSV خالی است.');
+
+        $target = esc_url_raw($_POST['target_url'] ?? '') ?: get_site_url();
+        $t = $wpdb->prefix.'viraseo_backlinks';
+        $lines = preg_split('/\r\n|\r|\n/', $csv);
+
+        $imported = 0; $skipped = 0; $jalali = JalaliDate::now()['date'];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') continue;
+            // Detect delimiter (GSC CSV = comma; sheets paste = tab)
+            $delim = (strpos($line, "\t") !== false) ? "\t" : ',';
+            $cols = str_getcsv($line, $delim);
+            $first = trim($cols[0] ?? '', " \"'");
+            if ($first === '') { $skipped++; continue; }
+
+            // Build a host from the first column (domain or full URL)
+            $url = (preg_match('#^https?://#i', $first)) ? $first : 'http://' . $first;
+            $host = strtolower(preg_replace('/^www\./i', '', (string) wp_parse_url($url, PHP_URL_HOST)));
+            // Skip header rows / non-domain values (must contain a dot, no spaces)
+            if (!$host || strpos($host, '.') === false || preg_match('/\s/', $host)) { $skipped++; continue; }
+
+            // Optional 2nd column = number of linking pages (kept in notes)
+            $count = isset($cols[1]) ? preg_replace('/[^\d]/', '', $cols[1]) : '';
+            $note = 'وارد شده از سرچ کنسول' . ($count !== '' ? ' — ' . $count . ' صفحه لینک‌دهنده' : '');
+
+            // De-dup by source_domain + target
+            if ($wpdb->get_var($wpdb->prepare("SELECT id FROM {$t} WHERE source_domain=%s AND target_url=%s", $host, $target))) {
+                $skipped++; continue;
+            }
+            $ok = $wpdb->insert($t, [
+                'source_url'=>esc_url_raw($url), 'source_domain'=>$host,
+                'target_url'=>$target, 'anchor'=>'', 'link_type'=>'other',
+                'cost'=>0, 'dofollow'=>1, 'da'=>0, 'spam_score'=>0,
+                'link_status'=>'live', 'date_acquired'=>current_time('Y-m-d'),
+                'date_jalali'=>$jalali, 'notes'=>$note, 'created_by'=>get_current_user_id(),
+            ]);
+            if ($ok !== false) $imported++; else $skipped++;
+        }
+
+        wp_send_json_success([
+            'message'=> sprintf('✅ %d بک‌لینک از سرچ کنسول وارد شد. (%d مورد رد/تکراری)', $imported, $skipped),
+            'imported'=>$imported, 'skipped'=>$skipped,
+        ]);
     }
 
     public function ajax_list(): void {
