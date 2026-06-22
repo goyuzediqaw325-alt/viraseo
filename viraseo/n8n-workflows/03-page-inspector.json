@@ -1,0 +1,36 @@
+{
+  "name": "ViraSEO — Page Inspector (deep per-result analysis)",
+  "nodes": [
+    {
+      "parameters": {"httpMethod": "POST", "path": "viraseo-page-inspect", "responseMode": "responseNode"},
+      "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 1.1, "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $node.Webhook.json.body.url }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [
+          {"name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"},
+          {"name": "Accept-Language", "value": "fa,en;q=0.8"}
+        ]},
+        "options": {"response": {"response": {"neverError": true, "responseFormat": "text"}}, "redirect": {"redirect": {"followRedirects": true, "maxRedirects": 3}}, "timeout": 20000}
+      },
+      "name": "Fetch Page", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [430, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {"jsCode": "const url = $node.Webhook.json.body.url || '';\nlet html = '';\nconst raw = $input.first().json;\nif (typeof raw === 'string') html = raw;\nelse if (typeof raw.data === 'string') html = raw.data;\nelse if (raw.body && typeof raw.body === 'string') html = raw.body;\nelse html = JSON.stringify(raw);\n\nif (!html || html.length < 50) {\n  return [{json: {error: 'صفحه قابل دریافت نبود یا خالی بود.', url: url}}];\n}\n\n// Isolate body\nlet body = html;\nconst bm = html.match(/<body[^>]*>([\\s\\S]*?)<\\/body>/i);\nif (bm) body = bm[1];\n// Remove non-content tags\nconst clean = body.replace(/<(script|style|noscript|svg|template|nav|footer|header)[^>]*>[\\s\\S]*?<\\/\\1>/gi, ' ');\n// Strip tags -> text\nlet text = clean.replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\\s+/g, ' ').trim();\nconst words = text ? text.split(/\\s+/).filter(Boolean) : [];\nconst wordCount = words.length;\n\n// Headings\nfunction grab(tag){ const re = new RegExp('<'+tag+'\\\\b[^>]*>([\\\\s\\\\S]*?)<\\\\/'+tag+'>','gi'); const out=[]; let m; while((m=re.exec(html))!==null){ const t=m[1].replace(/<[^>]+>/g,'').replace(/\\s+/g,' ').trim(); if(t) out.push(t.slice(0,120)); } return out; }\nconst h1 = grab('h1'), h2 = grab('h2'), h3 = grab('h3');\n\n// Images\nconst imgs = html.match(/<img\\b[^>]*>/gi) || [];\nlet noAlt = 0; imgs.forEach(t => { if(!/\\balt\\s*=\\s*[\"'][^\"']+[\"']/i.test(t)) noAlt++; });\n\n// Links\nlet host=''; try { host = new URL(url).hostname.replace(/^www\\./,''); } catch(e){}\nconst anchors = html.match(/<a\\b[^>]*href\\s*=\\s*[\"']([^\"']+)[\"']/gi) || [];\nlet internal=0, external=0;\nanchors.forEach(a => { const hm=a.match(/href\\s*=\\s*[\"']([^\"']+)[\"']/i); if(!hm) return; const href=hm[1]; if(href.startsWith('#')||/^javascript:/i.test(href)) return; let h=''; try{ h=new URL(href, url).hostname.replace(/^www\\./,''); }catch(e){} if(!h||h===host) internal++; else external++; });\n\n// Title + meta\nconst tm = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i);\nconst title = tm ? tm[1].replace(/<[^>]+>/g,'').trim() : '';\nlet metaDesc=''; const dm = html.match(/<meta[^>]+name\\s*=\\s*[\"']description[\"'][^>]*content\\s*=\\s*[\"']([^\"']*)[\"']/i) || html.match(/<meta[^>]+content\\s*=\\s*[\"']([^\"']*)[\"'][^>]*name\\s*=\\s*[\"']description[\"']/i); if(dm) metaDesc = dm[1].trim();\n\n// Schema\nconst schemaSet = new Set(); let sm; const sre=/\"@type\"\\s*:\\s*\"([^\"]+)\"/gi; while((sm=sre.exec(html))!==null){ schemaSet.add(sm[1]); }\nconst schema = Array.from(schemaSet).slice(0,10);\n\n// Paragraphs\nconst paragraphs = (html.match(/<p\\b[^>]*>/gi) || []).length;\n\n// Score\nlet score = Math.min(50, Math.round(wordCount/30)) + (h1.length>=1?10:0) + Math.min(20,h2.length*3) + Math.min(10,h3.length*2) + Math.min(10,imgs.length*2);\nscore = Math.min(100, score);\n\nreturn [{json: {\n  url: url,\n  word_count: wordCount,\n  h1: h1.length, h2: h2.length, h3: h3.length,\n  h1_texts: h1.slice(0,3), h2_texts: h2.slice(0,12),\n  images: imgs.length, images_no_alt: noAlt,\n  internal_links: internal, external_links: external,\n  title: title, meta_desc: metaDesc,\n  schema: schema, paragraphs: paragraphs,\n  word_count_score: score\n}}];"},
+      "name": "Parse Page", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [660, 300]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}"},
+      "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [890, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {"main": [[{"node": "Fetch Page", "type": "main", "index": 0}]]},
+    "Fetch Page": {"main": [[{"node": "Parse Page", "type": "main", "index": 0}]]},
+    "Parse Page": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionTimeout": 30}
+}

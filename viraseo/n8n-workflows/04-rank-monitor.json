@@ -1,0 +1,40 @@
+{
+  "name": "ViraSEO — Rank Monitor (keyword position tracker)",
+  "nodes": [
+    {
+      "parameters": {"httpMethod": "POST", "path": "viraseo-rank-check", "responseMode": "responseNode"},
+      "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 1.1, "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/search",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [
+          {"name": "X-API-KEY", "value": "={{ $node.Webhook.json.body.serper_api_key }}"},
+          {"name": "Content-Type", "value": "application/json"}
+        ]},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({q: $node.Webhook.json.body.keyword, gl: 'ir', hl: 'fa', location: 'Iran', num: 50}) }}",
+        "options": {"response": {"response": {"neverError": true}}}
+      },
+      "name": "Serper Search", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [430, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {"jsCode": "const raw = $input.first().json;\nlet d = raw;\nif (typeof raw.data === 'string') { try { d = JSON.parse(raw.data); } catch(e){} }\nelse if (raw.data && typeof raw.data === 'object') d = raw.data;\n\nlet errMsg = '';\nif (d && d.message && !d.organic) errMsg = 'Serper: ' + d.message;\n\nconst siteHost = (($node.Webhook.json.body.site_host) || '').replace(/^www\\./,'').toLowerCase();\nconst organic = d.organic || [];\nlet rank = null, foundUrl = null;\nfor (let i = 0; i < organic.length; i++) {\n  const link = organic[i].link || '';\n  let h = '';\n  try { h = new URL(link).hostname.replace(/^www\\./,'').toLowerCase(); } catch(e){}\n  if (h && siteHost && h === siteHost) { rank = organic[i].position || (i + 1); foundUrl = link; break; }\n}\n\nreturn [{json: {\n  keyword: $node.Webhook.json.body.keyword || '',\n  rank: rank,\n  found_url: foundUrl,\n  total_results: organic.length,\n  error: errMsg\n}}];"},
+      "name": "Find Rank", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [660, 300]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}"},
+      "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [890, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {"main": [[{"node": "Serper Search", "type": "main", "index": 0}]]},
+    "Serper Search": {"main": [[{"node": "Find Rank", "type": "main", "index": 0}]]},
+    "Find Rank": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionTimeout": 45}
+}

@@ -26,8 +26,42 @@ class SerpInspector {
         wp_send_json_success($res);
     }
 
-    /** Fetch a remote page and extract detailed SEO metrics. */
+    /** Fetch a remote page and extract detailed SEO metrics.
+     *  Primary path: dedicated n8n workflow (offloads the WP server, avoids host WAF limits).
+     *  Fallback: direct server-side fetch from WP. */
     public function analyze(string $url): array {
+        // 1) Try the dedicated n8n Page Inspector workflow (synchronous response)
+        if (\ViraSEO\Admin\Dashboard::get('n8n_url')) {
+            $res = \ViraSEO\Api\WebhookHandler::to_n8n('viraseo-page-inspect', ['url' => $url]);
+            if (!isset($res['error']) && is_array($res['data'] ?? null)) {
+                $d = $res['data'];
+                if (empty($d['error']) && isset($d['word_count']) && (int)$d['word_count'] > 0) {
+                    return $this->decorate($d);
+                }
+            }
+            // n8n failed or returned nothing useful — fall through to direct fetch
+        }
+        return $this->analyze_direct($url);
+    }
+
+    /** Add Persian-formatted helpers to a metrics array. */
+    private function decorate(array $d): array {
+        $d['word_count']     = (int)($d['word_count'] ?? 0);
+        $d['word_count_fa']  = PersianText::format_number($d['word_count']);
+        $d['word_count_score'] = (int)($d['word_count_score'] ?? 0);
+        foreach (['h1','h2','h3','images','images_no_alt','internal_links','external_links','paragraphs'] as $k) {
+            $d[$k] = (int)($d[$k] ?? 0);
+        }
+        $d['h1_texts'] = array_slice((array)($d['h1_texts'] ?? []), 0, 3);
+        $d['h2_texts'] = array_slice((array)($d['h2_texts'] ?? []), 0, 12);
+        $d['schema']   = array_slice((array)($d['schema'] ?? []), 0, 10);
+        $d['title']    = (string)($d['title'] ?? '');
+        $d['meta_desc']= (string)($d['meta_desc'] ?? '');
+        return $d;
+    }
+
+    /** Direct server-side fetch + parse (fallback when n8n is unavailable). */
+    public function analyze_direct(string $url): array {
         $r = wp_remote_get($url, [
             'timeout'    => 15,
             'redirection'=> 3,

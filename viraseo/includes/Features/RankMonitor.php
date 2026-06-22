@@ -40,11 +40,21 @@ class RankMonitor {
         $target = esc_url_raw($_POST['target_url'] ?? '');
 
         $t = $wpdb->prefix . 'viraseo_rank_tracking';
+
+        // Self-heal: create the table if a plugin update hasn't migrated it yet
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$t}'") !== $t) {
+            (new \ViraSEO\Database\Schema())->create_all_tables();
+        }
+
+        $hash = md5(mb_strtolower($kw));
+        if ($wpdb->get_var($wpdb->prepare("SELECT id FROM {$t} WHERE keyword_hash=%s", $hash))) {
+            wp_send_json_error('این کلمه قبلاً اضافه شده است.');
+        }
         $ok = $wpdb->insert($t, [
-            'keyword'=>$kw, 'keyword_hash'=>md5(mb_strtolower($kw)),
+            'keyword'=>$kw, 'keyword_hash'=>$hash,
             'target_url'=>$target ?: null, 'frequency'=>$freq, 'status'=>'active',
         ]);
-        if ($ok === false) wp_send_json_error('این کلمه قبلاً اضافه شده است.');
+        if ($ok === false) wp_send_json_error('خطای پایگاه داده: ' . ($wpdb->last_error ?: 'جدول rank_tracking ساخته نشد. افزونه را غیرفعال/فعال کنید.'));
         $id = $wpdb->insert_id;
         // Check immediately so the user sees a rank right away
         $this->check_keyword($id);
@@ -117,31 +127,56 @@ class RankMonitor {
         }
     }
 
-    /** Query Serper for a keyword and locate this site's best position. */
+    /** Query for a keyword and locate this site's best position.
+     *  Primary: dedicated n8n Rank Monitor workflow. Fallback: direct Serper from WP. */
     public function check_keyword(int $id): array {
         global $wpdb;
         $t = $wpdb->prefix . 'viraseo_rank_tracking';
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$t} WHERE id=%d", $id));
         if (!$row) return ['error'=>'یافت نشد.'];
 
-        $res = WebhookHandler::serper_search($row->keyword, 50);
-        if (isset($res['error'])) return $res;
+        $site_host = preg_replace('/^www\./', '', (string) wp_parse_url(get_site_url(), PHP_URL_HOST));
+        $rank = null; $found_url = null; $err = '';
 
-        $site_host = wp_parse_url(get_site_url(), PHP_URL_HOST);
-        $site_host = preg_replace('/^www\./', '', (string)$site_host);
-
-        $rank = null; $found_url = null;
-        foreach ($res['organic'] as $i => $item) {
-            $link = $item['link'] ?? '';
-            $h = preg_replace('/^www\./', '', (string) wp_parse_url($link, PHP_URL_HOST));
-            if ($h && $h === $site_host) {
-                $rank = (int)($item['position'] ?? ($i + 1));
-                $found_url = $link;
-                break;
+        // 1) Try dedicated n8n workflow (synchronous)
+        if (\ViraSEO\Admin\Dashboard::get('n8n_url')) {
+            $res = WebhookHandler::to_n8n('viraseo-rank-check', [
+                'keyword'=>$row->keyword,
+                'site_host'=>$site_host,
+                'serper_api_key'=>\ViraSEO\Admin\Dashboard::get('serper_api_key'),
+            ]);
+            if (!isset($res['error']) && is_array($res['data'] ?? null)) {
+                $d = $res['data'];
+                if (empty($d['error'])) {
+                    $rank = isset($d['rank']) && $d['rank'] !== null ? (int)$d['rank'] : null;
+                    $found_url = $d['found_url'] ?? null;
+                    $this->store_result($id, $row, $rank, $found_url);
+                    return ['rank'=>$rank];
+                }
+                $err = $d['error'];
+            } else {
+                $err = $res['error'] ?? '';
             }
         }
 
-        // Build history (keep last 60 points)
+        // 2) Fallback: direct Serper call from WP
+        $res = WebhookHandler::serper_search($row->keyword, 50);
+        if (isset($res['error'])) return ['error'=>$err ?: $res['error']];
+        foreach ($res['organic'] as $i => $item) {
+            $h = preg_replace('/^www\./', '', (string) wp_parse_url($item['link'] ?? '', PHP_URL_HOST));
+            if ($h && $h === $site_host) {
+                $rank = (int)($item['position'] ?? ($i + 1));
+                $found_url = $item['link'];
+                break;
+            }
+        }
+        $this->store_result($id, $row, $rank, $found_url);
+        return ['rank'=>$rank];
+    }
+
+    /** Persist a rank check result + append to history. */
+    private function store_result(int $id, object $row, ?int $rank, ?string $found_url): void {
+        global $wpdb;
         $history = (array) json_decode($row->history ?: '[]', true);
         $history[] = ['d'=>JalaliDate::now()['date'], 'r'=>$rank];
         if (count($history) > 60) $history = array_slice($history, -60);
@@ -149,7 +184,7 @@ class RankMonitor {
         $best = $row->best_rank;
         if ($rank !== null && ($best === null || $rank < (int)$best)) $best = $rank;
 
-        $wpdb->update($t, [
+        $wpdb->update($wpdb->prefix . 'viraseo_rank_tracking', [
             'previous_rank'=>$row->current_rank,
             'current_rank'=>$rank,
             'best_rank'=>$best,
@@ -157,7 +192,5 @@ class RankMonitor {
             'history'=>wp_json_encode($history),
             'last_checked'=>current_time('mysql'),
         ], ['id'=>$id]);
-
-        return ['rank'=>$rank];
     }
 }
