@@ -215,6 +215,22 @@ class Schema {
             KEY idx_st (status)
         ) {$c};");
 
+        dbDelta("CREATE TABLE {$p}keyword_plan (
+            id bigint unsigned NOT NULL AUTO_INCREMENT,
+            keyword varchar(500) NOT NULL,
+            keyword_hash char(32) NOT NULL,
+            cluster varchar(255) DEFAULT NULL,
+            intent varchar(50) DEFAULT NULL,
+            priority tinyint unsigned DEFAULT 0,
+            status enum('planned','in_progress','done') DEFAULT 'planned',
+            post_id bigint unsigned DEFAULT NULL,
+            notes text DEFAULT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_kw (keyword_hash),
+            KEY idx_status (status)
+        ) {$c};");
+
         dbDelta("CREATE TABLE {$p}ai_outputs (
             id bigint unsigned NOT NULL AUTO_INCREMENT,
             kind varchar(50) DEFAULT 'general',

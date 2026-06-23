@@ -25,6 +25,7 @@ class Dashboard {
         add_submenu_page($s,'🤖 ابزارهای AI','🤖 ابزارهای AI','manage_options',$s.'-ai',[$this,'page_ai']);
         add_submenu_page($s,'وضعیت ایندکس 🟢','وضعیت ایندکس','manage_options',$s.'-index',[$this,'page_index']);
         add_submenu_page($s,'کلمات هدف 🟢','کلمات هدف','manage_options',$s.'-targets',[$this,'page_targets']);
+        add_submenu_page($s,'استراتژی کلمات 🟢','استراتژی کلمات','manage_options',$s.'-strategy',[$this,'page_strategy']);
         add_submenu_page($s,'لینک‌سازی 🟢','لینک‌سازی','manage_options',$s.'-links',[$this,'page_links']);
         add_submenu_page($s,'بک‌لینک CRM 🟢','بک‌لینک','manage_options',$s.'-backlinks',[$this,'page_backlinks']);
         add_submenu_page($s,'پیش‌بینی ترافیک 🟢','پیش‌بینی','manage_options',$s.'-forecast',[$this,'page_forecast']);
@@ -136,6 +137,7 @@ class Dashboard {
     public function page_ai(): void { include VIRASEO_DIR.'templates/admin/ai-tools.php'; }
     public function page_index(): void { include VIRASEO_DIR.'templates/admin/index-status.php'; }
     public function page_targets(): void { include VIRASEO_DIR.'templates/admin/targets.php'; }
+    public function page_strategy(): void { include VIRASEO_DIR.'templates/admin/strategy.php'; }
     public function page_links(): void { include VIRASEO_DIR.'templates/admin/links.php'; }
     public function page_backlinks(): void { include VIRASEO_DIR.'templates/admin/backlinks.php'; }
     public function page_forecast(): void { include VIRASEO_DIR.'templates/admin/forecast.php'; }

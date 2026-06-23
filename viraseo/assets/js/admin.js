@@ -70,6 +70,72 @@ $(document).on('click', '.vs-saved-del', function(){
     post('viraseo_ai_saved_delete', {id:$(this).data('id')}, ()=>loadAiSaved());
 });
 
+// === KEYWORD STRATEGY / PLAN ===
+function loadPlan() {
+    if (!$('#vs-stg-list').length) return;
+    $('#vs-stg-list').html('<div class="vs-empty">در حال بارگذاری...</div>');
+    post('viraseo_plan_list', {}, r => {
+        const $l = $('#vs-stg-list').empty();
+        if (!r.success) { $l.html('<div class="vs-empty">'+(r.data||'خطا')+'</div>'); return; }
+        if (!r.data.clusters.length) { $l.html('<div class="vs-empty">هنوز کلمه‌ای در برنامه نیست. با AI یا دستی اضافه کنید.</div>'); return; }
+        r.data.clusters.forEach(c => {
+            let rows = c.items.map(it => {
+                const stColor = it.status==='done'?'green':(it.status==='in_progress'?'orange':'blue');
+                const postCell = it.post ? '<a href="'+it.post.edit+'" target="_blank">'+(it.post.title||'پیش‌نویس')+'</a>' : '<button class="vs-btn vs-btn-sm vs-btn-secondary vs-plan-draft" data-id="'+it.id+'">📝 ساخت پیش‌نویس</button>';
+                return '<tr><td><strong>'+it.keyword+'</strong></td><td>'+it.intent+'</td>'
+                    + '<td><select class="vs-input vs-plan-status" data-id="'+it.id+'"><option value="planned"'+(it.status==='planned'?' selected':'')+'>برنامه‌ریزی‌شده</option><option value="in_progress"'+(it.status==='in_progress'?' selected':'')+'>در حال تولید</option><option value="done"'+(it.status==='done'?' selected':'')+'>انجام‌شده</option></select></td>'
+                    + '<td>'+postCell+'</td>'
+                    + '<td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-plan-ai" data-kw="'+escAttr(it.keyword)+'" title="طرح محتوا با AI">🤖</button> <button class="vs-btn vs-btn-sm vs-btn-danger vs-plan-del" data-id="'+it.id+'">×</button></td></tr>';
+            }).join('');
+            $l.append('<div class="vs-cluster"><div class="vs-cluster-head"><span class="vs-badge vs-badge-blue">'+c.cluster+'</span> <span class="vs-cluster-count">'+c.count+' کلمه</span></div>'
+                + '<table class="vs-table"><thead><tr><th>کلمه</th><th>هدف</th><th>وضعیت</th><th>محتوا</th><th>عملیات</th></tr></thead><tbody>'+rows+'</tbody></table>'
+                + '<div class="vs-plan-ai-box"></div></div>');
+        });
+    });
+}
+$(document).on('click', '#vs-stg-reload', loadPlan);
+$(document).on('click', '#vs-stg-add', function(){
+    const kws = $('#vs-stg-kws').val().trim();
+    if (!kws) { toast('کلمات را وارد کنید.','err'); return; }
+    post('viraseo_plan_add', {keywords:kws, cluster:$('#vs-stg-cluster').val(), intent:$('#vs-stg-intent').val()}, r => {
+        if (r.success) { toast(r.data.message,'success'); $('#vs-stg-kws').val(''); loadPlan(); } else toast(r.data,'err');
+    });
+});
+$(document).on('click', '#vs-stg-ai', function(){
+    const seed = $('#vs-stg-seed').val().trim();
+    if (!seed) { toast('موضوع را وارد کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true);
+    $('#vs-stg-ai-status').text('🤖 در حال ساخت استراتژی... (تا یک دقیقه)');
+    post('viraseo_plan_ai', {seed:seed, business:$('#vs-stg-biz').val()}, r => {
+        $b.prop('disabled', false);
+        $('#vs-stg-ai-status').text(r.success ? r.data.message : (r.data||'خطا'));
+        if (r.success) { toast(r.data.message,'success'); loadPlan(); } else toast(r.data,'err');
+    });
+});
+$(document).on('change', '.vs-plan-status', function(){
+    post('viraseo_plan_update', {id:$(this).data('id'), field:'status', value:$(this).val()}, ()=>{});
+});
+$(document).on('click', '.vs-plan-del', function(){
+    if (!confirm('حذف این کلمه؟')) return;
+    post('viraseo_plan_delete', {id:$(this).data('id')}, ()=>loadPlan());
+});
+$(document).on('click', '.vs-plan-draft', function(){
+    const $b = $(this).prop('disabled', true).text('...');
+    const withAi = confirm('محتوای اولیه با هوش مصنوعی هم ساخته شود؟ (OK = بله)');
+    post('viraseo_plan_draft', {id:$(this).data('id'), with_ai: withAi?1:0}, r => {
+        if (r.success) { toast('پیش‌نویس ساخته شد','success'); loadPlan(); window.open(r.data.edit, '_blank'); }
+        else { toast(r.data,'err'); $b.prop('disabled',false).text('📝 ساخت پیش‌نویس'); }
+    });
+});
+$(document).on('click', '.vs-plan-ai', function(){
+    const $box = $(this).closest('.vs-cluster').find('.vs-plan-ai-box').html('<div class="vs-empty">🤖 در حال تهیه طرح محتوا...</div>');
+    post('viraseo_ai_content', {keyword:$(this).data('kw'), mode:'outline'}, r => {
+        if (!r.success) { $box.html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+        $box.html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 طرح محتوا <span class="vs-hint">هزینه: $'+(r.data.cost||0)+'</span></div><div class="vs-ai-body">'+html+'</div><button class="vs-btn vs-btn-sm vs-btn-success vs-ai-save" data-kind="content">💾 ذخیره</button></div>');
+    });
+});
+
 // === INDEX STATUS (GSC URL Inspection) ===
 function vsIdxRow(o) {
     const badge = o.indexed ? '<span class="vs-badge vs-badge-green">ایندکس‌شده</span>' : '<span class="vs-badge vs-badge-red">ایندکس نشده</span>';
@@ -673,6 +739,16 @@ $(document).on('click', '.vs-apply-link', function(){
         else { toast(r.data,'err'); $b.prop('disabled',false).text('⚡ درج خودکار'); }
     });
 });
+$(document).on('click', '#vs-ai-suggestions', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-ai-sugg-box').show().html('<div class="vs-empty">🤖 هوش مصنوعی در حال تحلیل پیشنهادها...</div>');
+    post('viraseo_ai_suggestions', {}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { $('#vs-ai-sugg-box').html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+        $('#vs-ai-sugg-box').html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 تحلیل پیشنهادهای لینک <span class="vs-hint">هزینه: $'+(r.data.cost||0)+'</span></div><div class="vs-ai-body">'+html+'</div><button class="vs-btn vs-btn-sm vs-btn-success vs-ai-save" data-kind="general">💾 ذخیره</button></div>');
+    });
+});
 $(document).on('click', '#vs-apply-all-links', function(){
     if (!confirm('لینک‌های پیشنهادی به‌صورت خودکار داخل محتوای صفحات درج می‌شوند. ادامه می‌دهید؟')) return;
     const $b = $(this).prop('disabled', true);
@@ -1086,6 +1162,8 @@ $(function(){
     if ($('#vs-woo-tbody').length) loadWooCats();
     // AI saved outputs
     if ($('#vs-saved-list').length) loadAiSaved();
+    // Keyword strategy plan
+    if ($('#vs-stg-list').length) loadPlan();
     // Modern SEO: show llms.txt URL
     if ($('#vs-llms-url').length) $('#vs-llms-url').text(window.location.origin + '/llms.txt');
     // SERP auto-start when arriving from Target Keywords (?keyword=..&autostart=1)

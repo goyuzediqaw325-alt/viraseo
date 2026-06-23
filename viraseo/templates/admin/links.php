@@ -30,8 +30,10 @@
     </div>
     <div class="vs-toolbar">
       <button class="vs-btn vs-btn-success" id="vs-apply-all-links"><span class="dashicons dashicons-superhero"></span> درج خودکار همه پیشنهادها</button>
+      <button class="vs-btn vs-btn-secondary" id="vs-ai-suggestions">🤖 بهینه‌سازی پیشنهادها با AI</button>
       <span id="vs-apply-all-status"></span>
     </div>
+    <div id="vs-ai-sugg-box" style="margin-bottom:12px;"></div>
     <div class="vs-filter-chips" id="vs-sugg-filters">
       <button class="vs-chip active" data-type="">همه <span id="vs-cnt-all">0</span></button>
       <button class="vs-chip" data-type="exact">🎯 دقیق <span id="vs-cnt-exact">0</span></button>

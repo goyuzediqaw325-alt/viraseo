@@ -22,6 +22,30 @@ class InternalSilo {
         add_action('wp_ajax_viraseo_cluster_link', [$this, 'ajax_cluster_link']);
         add_action('wp_ajax_viraseo_broken_links', [$this, 'ajax_broken_links']);
         add_action('wp_ajax_viraseo_ai_cluster', [$this, 'ajax_ai_cluster']);
+        add_action('wp_ajax_viraseo_ai_suggestions', [$this, 'ajax_ai_suggestions']);
+    }
+
+    /** AI review of pending link suggestions: prioritize, improve anchors, flag over-optimization. */
+    public function ajax_ai_suggestions(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        if (!\ViraSEO\Api\AiClient::is_enabled()) wp_send_json_error('هوش مصنوعی فعال نیست. در تنظیمات فعال کنید.');
+        global $wpdb;
+        $rows = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}viraseo_link_suggestions WHERE status='pending' ORDER BY FIELD(match_type,'exact','partial','semantic'), score DESC LIMIT 40");
+        if (!$rows) wp_send_json_error('پیشنهادی برای تحلیل نیست. ابتدا «اسکن لینک‌ها» را بزنید.');
+        $list = '';
+        foreach ($rows as $i => $r) {
+            $list .= ($i+1).". از «".get_the_title($r->source_id)."» → به «".get_the_title($r->target_id)."» | انکر: {$r->anchor} | نوع: {$r->match_type} | امتیاز: {$r->score}\n";
+        }
+        $system = 'شما متخصص لینک‌سازی داخلی فارسی و معماری سئو هستید. فقط فارسی و ساختارمند پاسخ بده.';
+        $user = "این پیشنهادهای لینک داخلی را بررسی کن:\n{$list}\n"
+              . "۱) کدام پیشنهادها بیشترین ارزش سئو را دارند و باید اول اعمال شوند؟\n"
+              . "۲) برای کدام لینک‌ها انکرتکست بهتری پیشنهاد می‌دهی (با تنوع انکر برای جلوگیری از Over-Optimization)؟\n"
+              . "۳) کدام پیشنهادها را رد کنیم (کم‌ربط یا تکراری)؟\n"
+              . "۴) آیا لینک مهمی جا افتاده که باید اضافه شود؟";
+        $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.4);
+        if (isset($res['error'])) wp_send_json_error($res['error']);
+        wp_send_json_success(['text'=>$res['text'], 'cost'=>$res['cost'], 'tokens'=>$res['tokens']]);
     }
 
     /** Detect internal links pointing to non-published posts or 404 URLs. */
