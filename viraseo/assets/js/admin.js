@@ -631,6 +631,18 @@ function drawLinkGraph() {
     });
 }
 
+$(document).on('click', '.vs-cl-ai', function(){
+    const ci = $(this).data('cl');
+    const kw = $(this).data('kw');
+    const pages = (window._vsClusters && window._vsClusters[ci]) || [];
+    if (!pages.length) return;
+    const $box = $('.vs-cl-ai-box[data-cl="'+ci+'"]').html('<div class="vs-empty">🤖 هوش مصنوعی در حال طراحی نقشه‌ی لینک سیلو...</div>');
+    post('viraseo_ai_cluster', {keyword: kw, pages: JSON.stringify(pages)}, r => {
+        if (!r.success) { $box.html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+        $box.html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 نقشه‌ی لینک سیلو <span class="vs-hint">هزینه: $'+(r.data.cost||0)+'</span></div><div class="vs-ai-body">'+html+'</div></div>');
+    });
+});
 // Topical clusters
 $(document).on('click', '#vs-load-clusters', function(){
     const $b = $(this).prop('disabled', true);
@@ -648,8 +660,12 @@ $(document).on('click', '#vs-load-clusters', function(){
                 + '<div class="vs-cluster-head"><span class="vs-badge vs-badge-blue">'+c.keyword+'</span> <span class="vs-cluster-count">'+c.count+' صفحه</span> <span class="vs-badge vs-badge-'+covColor+'">پوشش سیلو: '+c.coverage+'%</span> <span class="vs-cluster-count">👁️ '+c.impressions+' نمایش</span></div>'
                 + '<div class="vs-cluster-pillar">🏛️ ستون (Pillar): <select class="vs-input vs-cl-pillar" data-cl="'+ci+'" style="max-width:320px;display:inline-block"><option value="'+c.pillar.id+'">'+c.pillar.title+' ['+c.pillar.type+'] (پیشنهادی)</option>'+memberOpts+'</select> <a href="'+c.pillar.url+'" target="_blank">↗</a></div>'
                 + '<ul class="vs-cluster-members vs-cluster-members-list">'+members+'</ul>'
-                + '<div class="vs-row"><button class="vs-btn vs-btn-sm vs-btn-primary vs-cl-link" data-cl="'+ci+'">🔗 لینک اعضای انتخابی به ستون</button><label class="vs-hint"><input type="checkbox" class="vs-cl-all" data-cl="'+ci+'"> انتخاب همه</label></div>'
+                + '<div class="vs-row"><button class="vs-btn vs-btn-sm vs-btn-primary vs-cl-link" data-cl="'+ci+'">🔗 لینک اعضای انتخابی به ستون</button><button class="vs-btn vs-btn-sm vs-btn-secondary vs-cl-ai" data-cl="'+ci+'" data-kw="'+escAttr(c.keyword)+'">🤖 نقشه‌ی لینک هوش مصنوعی</button><label class="vs-hint"><input type="checkbox" class="vs-cl-all" data-cl="'+ci+'"> انتخاب همه</label></div>'
+                + '<div class="vs-cl-ai-box" data-cl="'+ci+'"></div>'
                 + '</div>');
+            // Stash cluster page data for the AI request
+            window._vsClusters = window._vsClusters || {};
+            window._vsClusters[ci] = c.members.map(m => ({title:m.title, url:m.url, type:m.type})).concat([{title:c.pillar.title, url:c.pillar.url, type:c.pillar.type}]);
         });
     });
 });
@@ -703,6 +719,23 @@ $(document).on('submit', '#vs-bl-form', function(e){
     });
 });
 
+
+// === BROKEN INTERNAL LINKS ===
+$(document).on('click', '#vs-load-broken', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-broken-status').text('در حال بررسی محتوای صفحات...');
+    $('#vs-broken-tbody').html('<tr><td colspan="5" class="vs-empty">در حال بررسی...</td></tr>');
+    post('viraseo_broken_links', {}, r => {
+        $b.prop('disabled', false);
+        const $t = $('#vs-broken-tbody').empty();
+        if (!r.success) { $('#vs-broken-status').text(''); $t.html('<tr><td colspan="5" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        $('#vs-broken-status').text(r.data.checked + ' صفحه بررسی شد.');
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="5" class="vs-empty">🎉 لینک شکسته‌ای یافت نشد.</td></tr>'); return; }
+        r.data.rows.forEach(o => {
+            $t.append('<tr><td><a href="'+o.edit+'">'+o.source+'</a></td><td dir="ltr" style="font-size:11px"><a href="'+o.url+'" target="_blank">'+o.url+'</a></td><td>'+o.anchor+'</td><td><span class="vs-badge vs-badge-red">'+o.reason+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
+        });
+    });
+});
 
 // === BACKLINK IMPORT FROM GSC ===
 $(document).on('change', '#vs-bl-import-file', function(){

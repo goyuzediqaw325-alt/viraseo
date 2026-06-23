@@ -11,6 +11,12 @@ use ViraSEO\Admin\Dashboard;
 class AiClient {
     const ENDPOINT = 'https://openrouter.ai/api/v1';
 
+    /** Base URL — routes through a Cloudflare Worker proxy if configured (for Iran hosts). */
+    private static function base(): string {
+        $proxy = Dashboard::get('ai_proxy_url');
+        return $proxy ? rtrim($proxy, '/') . '/v1' : self::ENDPOINT;
+    }
+
     public static function is_enabled(): bool {
         return Dashboard::get('ai_enabled') && Dashboard::get('openrouter_key');
     }
@@ -26,7 +32,7 @@ class AiClient {
         $cache = get_transient('viraseo_or_models');
         if ($cache && !$force) return ['models' => $cache];
 
-        $r = wp_remote_get(self::ENDPOINT . '/models', [
+        $r = wp_remote_get(self::base() . '/models', [
             'timeout' => 25,
             'headers' => ['Authorization' => 'Bearer ' . $key],
         ]);
@@ -59,7 +65,7 @@ class AiClient {
         if (!$key) return ['error' => 'کلید OpenRouter وارد نشده.'];
         $model = self::model();
 
-        $r = wp_remote_post(self::ENDPOINT . '/chat/completions', [
+        $r = wp_remote_post(self::base() . '/chat/completions', [
             'timeout' => 90,
             'headers' => [
                 'Authorization' => 'Bearer ' . $key,

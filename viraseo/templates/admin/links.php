@@ -13,6 +13,7 @@
     <button class="vs-tab" data-tab="suggestions">پیشنهادات لینک</button>
     <button class="vs-tab" data-tab="clusters">🧩 خوشه‌های موضوعی</button>
     <button class="vs-tab" data-tab="power">💪 قدرت و گراف لینک‌ها</button>
+    <button class="vs-tab" data-tab="broken">🚫 لینک‌های شکسته</button>
   </div>
 
   <div class="vs-tab-panel active" data-panel="orphans">
@@ -66,5 +67,18 @@
         <tbody id="vs-power-tbody"><tr><td colspan="3" class="vs-empty">ابتدا «اسکن لینک‌ها» را اجرا کنید.</td></tr></tbody>
       </table>
     </div>
+  </div>
+
+  <div class="vs-tab-panel" data-panel="broken">
+    <div class="vs-alert vs-alert-info">
+      <span class="dashicons dashicons-warning"></span>
+      <p>لینک‌های داخلی که به صفحات <strong>حذف‌شده، پیش‌نویس یا ۴۰۴</strong> اشاره می‌کنند. این‌ها هم تجربه‌ی کاربر و هم خزش گوگل را خراب می‌کنند — اصلاح یا حذف کنید.</p>
+    </div>
+    <button class="vs-btn vs-btn-primary" id="vs-load-broken"><span class="dashicons dashicons-search"></span> بررسی لینک‌های شکسته</button>
+    <span id="vs-broken-status" class="vs-hint"></span>
+    <table class="vs-table" style="margin-top:12px;">
+      <thead><tr><th>صفحه‌ی مبدا</th><th>لینک شکسته</th><th>انکر</th><th>مشکل</th><th>عملیات</th></tr></thead>
+      <tbody id="vs-broken-tbody"><tr><td colspan="5" class="vs-empty">دکمه «بررسی لینک‌های شکسته» را بزنید.</td></tr></tbody>
+    </table>
   </div>
 </div>

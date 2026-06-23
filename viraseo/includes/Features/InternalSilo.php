@@ -20,6 +20,80 @@ class InternalSilo {
         add_action('wp_ajax_viraseo_link_graph', [$this, 'ajax_link_graph']);
         add_action('wp_ajax_viraseo_link_scores', [$this, 'ajax_link_scores']);
         add_action('wp_ajax_viraseo_cluster_link', [$this, 'ajax_cluster_link']);
+        add_action('wp_ajax_viraseo_broken_links', [$this, 'ajax_broken_links']);
+        add_action('wp_ajax_viraseo_ai_cluster', [$this, 'ajax_ai_cluster']);
+    }
+
+    /** Detect internal links pointing to non-published posts or 404 URLs. */
+    public function ajax_broken_links(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+        $host = wp_parse_url(get_site_url(), PHP_URL_HOST);
+        $posts = $wpdb->get_results("SELECT ID,post_title,post_content FROM {$wpdb->posts} WHERE post_status='publish' AND post_content LIKE '%<a %' LIMIT 800");
+
+        $broken = []; $headChecks = 0; $headCache = [];
+        foreach ($posts as $p) {
+            if (!preg_match_all('/<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)<\/a>/si', $p->post_content, $m, PREG_SET_ORDER)) continue;
+            foreach ($m as $match) {
+                $href = trim($match[1]); $anchor = wp_strip_all_tags($match[2]);
+                if ($href === '' || $href[0] === '#' || stripos($href, 'mailto:') === 0 || stripos($href, 'tel:') === 0 || stripos($href, 'javascript:') === 0) continue;
+                $abs = (strpos($href, '/') === 0) ? get_site_url() . $href : $href;
+                $h = wp_parse_url($abs, PHP_URL_HOST);
+                if ($h && $h !== $host) continue; // internal only
+                $reason = '';
+                $tid = url_to_postid($abs);
+                if ($tid) {
+                    $st = get_post_status($tid);
+                    if ($st !== 'publish') $reason = 'مقصد منتشر نشده ('.$st.')';
+                } else {
+                    // Unknown internal URL — verify with a cached HEAD request (capped)
+                    $key = strtok($abs, '#');
+                    if (isset($headCache[$key])) { $reason = $headCache[$key]; }
+                    elseif ($headChecks < 120) {
+                        $headChecks++;
+                        $resp = wp_remote_head($key, ['timeout'=>8, 'redirection'=>3, 'sslverify'=>false]);
+                        $code = is_wp_error($resp) ? 0 : (int) wp_remote_retrieve_response_code($resp);
+                        $r = ($code >= 400 || $code === 0) ? ('کد پاسخ '.($code ?: 'خطا').' (احتمال ۴۰۴)') : '';
+                        $headCache[$key] = $r; $reason = $r;
+                    }
+                }
+                if ($reason !== '') {
+                    $broken[] = [
+                        'source'=>get_the_title($p->ID) ?: '#'.$p->ID,
+                        'edit'=>get_edit_post_link($p->ID,'raw'),
+                        'url'=>$abs, 'anchor'=>$anchor ?: '(بدون انکر)', 'reason'=>$reason,
+                    ];
+                    if (count($broken) >= 200) break 2;
+                }
+            }
+        }
+        wp_send_json_success(['rows'=>$broken, 'checked'=>count($posts)]);
+    }
+
+    /** AI-powered cluster/silo analysis: best pillar + internal link plan + anchors. */
+    public function ajax_ai_cluster(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        if (!\ViraSEO\Api\AiClient::is_enabled()) wp_send_json_error('هوش مصنوعی فعال نیست. در تنظیمات فعال کنید.');
+        $keyword = sanitize_text_field($_POST['keyword'] ?? '');
+        $pages = json_decode(wp_unslash($_POST['pages'] ?? '[]'), true);
+        if (!is_array($pages) || !$pages) wp_send_json_error('داده ناقص.');
+
+        $list = '';
+        foreach (array_slice($pages, 0, 25) as $i => $pg) {
+            $list .= ($i+1).". {$pg['title']} [{$pg['type']}] — {$pg['url']}\n";
+        }
+        $system = 'شما معمار سئوی فارسی و متخصص ساختار Silo و لینک‌سازی داخلی هستید. فقط فارسی و ساختارمند پاسخ بده.';
+        $user = "موضوع خوشه: «{$keyword}»\nصفحات این خوشه (شامل انواع مقاله/محصول/برگه):\n{$list}\n"
+              . "یک نقشه‌ی لینک‌سازی داخلی Silo بده:\n"
+              . "۱) کدام صفحه باید «ستون» (Pillar) باشد و چرا\n"
+              . "۲) دقیقاً کدام صفحه به کدام صفحه لینک بدهد (شامل لینک بین محصول و مقاله و لندینگ)\n"
+              . "۳) انکرتکست پیشنهادی فارسی برای هر لینک\n"
+              . "۴) آیا محتوای جدیدی برای کامل‌شدن این خوشه لازم است؟";
+        $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.4);
+        if (isset($res['error'])) wp_send_json_error($res['error']);
+        wp_send_json_success(['text'=>$res['text'], 'cost'=>$res['cost'], 'tokens'=>$res['tokens']]);
     }
 
     /**
