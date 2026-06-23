@@ -395,11 +395,16 @@ class InternalSilo {
         $raw = $wpdb->get_results("SELECT ID,post_title,post_content,post_type FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ({$in}) LIMIT 800");
         $posts = [];
         foreach ($raw as $p) { if (!\ViraSEO\Features\TargetKeywords::is_excluded((int)$p->ID)) $posts[] = $p; }
-        if (count($posts) < 2) { wp_send_json_success(['clusters'=>[]]); return; }
 
-        // Token set per post: target keywords (primary+secondary, tokenized) weighted higher + top content keywords.
+        // Build unified NODES: posts + taxonomy terms (product_cat & category) so category
+        // pages can be cluster pillars (silo). Each node has a string key: 'p'+ID / 'pc'+termID / 'c'+termID.
         $tokens = []; $meta = []; $df = [];
+        $addTokens = function(string $key, array $set) use (&$tokens, &$df) {
+            $tokens[$key] = $set;
+            foreach (array_keys($set) as $t) $df[$t] = ($df[$t] ?? 0) + 1;
+        };
         foreach ($posts as $p) {
+            $key = 'p' . $p->ID;
             $set = [];
             foreach (\ViraSEO\Features\TargetKeywords::get_all((int)$p->ID) as $kwphrase) {
                 foreach (PersianText::tokenize($kwphrase) as $t) if (mb_strlen($t) > 2) $set[$t] = true;
@@ -407,108 +412,157 @@ class InternalSilo {
             foreach (array_keys(PersianText::extract_keywords(wp_strip_all_tags($p->post_content).' '.$p->post_title, 8)) as $t) {
                 if (mb_strlen($t) > 2) $set[$t] = true;
             }
-            $tokens[$p->ID] = $set;
             $pt = get_post_type_object($p->post_type);
-            $meta[$p->ID] = ['id'=>(int)$p->ID, 'title'=>$p->post_title ?: get_the_title($p->ID), 'len'=>mb_strlen(wp_strip_all_tags($p->post_content)), 'type'=>$pt ? $pt->labels->singular_name : $p->post_type];
-            foreach (array_keys($set) as $t) $df[$t] = ($df[$t] ?? 0) + 1;
+            $meta[$key] = ['key'=>$key, 'ref'=>(int)$p->ID, 'is_term'=>false,
+                'title'=>$p->post_title ?: get_the_title($p->ID), 'len'=>mb_strlen(wp_strip_all_tags($p->post_content)),
+                'type'=>$pt ? $pt->labels->singular_name : $p->post_type, 'url'=>get_permalink($p->ID)];
+            $addTokens($key, $set);
         }
+        // Taxonomy terms as silo pillars
+        $taxes = ['product_cat'=>'pc', 'category'=>'c'];
+        foreach ($taxes as $tax => $prefix) {
+            if (!taxonomy_exists($tax)) continue;
+            $terms = get_terms(['taxonomy'=>$tax, 'hide_empty'=>false, 'number'=>200]);
+            if (is_wp_error($terms)) continue;
+            $tobj = get_taxonomy($tax);
+            foreach ($terms as $term) {
+                $link = get_term_link($term);
+                if (is_wp_error($link)) continue;
+                $key = $prefix . $term->term_id;
+                $set = [];
+                $kw = (string) get_term_meta($term->term_id, '_viraseo_target_keyword', true);
+                foreach (PersianText::tokenize($kw . ' ' . $term->name) as $t) if (mb_strlen($t) > 2) $set[$t] = true;
+                foreach (array_keys(PersianText::extract_keywords($term->name.' '.$term->description, 6)) as $t) {
+                    if (mb_strlen($t) > 2) $set[$t] = true;
+                }
+                if (!$set) continue;
+                $meta[$key] = ['key'=>$key, 'ref'=>(int)$term->term_id, 'is_term'=>true, 'tax'=>$tax,
+                    'title'=>$term->name, 'len'=>mb_strlen($term->description),
+                    // Categories are favored as pillars (weight from product/post count)
+                    'weight'=> 50 + (int)$term->count * 2,
+                    'type'=> $tobj ? $tobj->labels->singular_name : $tax, 'url'=>$link];
+                $addTokens($key, $set);
+            }
+        }
+        if (count($meta) < 2) { wp_send_json_success(['clusters'=>[]]); return; }
 
-        // Candidate topics = tokens shared by ≥2 pages, most frequent first.
+        // Candidate topics = tokens shared by ≥2 nodes, most frequent first.
         $candidates = array_filter($df, fn($c) => $c >= 2);
         arsort($candidates);
 
-        // Inlink counts for pillar selection + existing link pairs (source->target) + GSC impressions
+        // Existing link pairs (post→post) + inlinks + GSC impressions for pillar weighting
         $inlinks = []; $pairs = [];
-        foreach ($wpdb->get_results("SELECT source_id, target_id, COUNT(*) c FROM {$wpdb->prefix}viraseo_internal_links GROUP BY source_id, target_id") as $r) {
-            $pairs[(int)$r->source_id . '-' . (int)$r->target_id] = true;
+        foreach ($wpdb->get_results("SELECT source_id, target_id FROM {$wpdb->prefix}viraseo_internal_links") as $r) {
+            $pairs['p'.(int)$r->source_id . '-p' . (int)$r->target_id] = true;
         }
         foreach ($wpdb->get_results("SELECT target_id, COUNT(*) c FROM {$wpdb->prefix}viraseo_internal_links GROUP BY target_id") as $r) {
-            $inlinks[(int)$r->target_id] = (int)$r->c;
+            $inlinks['p'.(int)$r->target_id] = (int)$r->c;
         }
         $impr = [];
         $gt = $wpdb->prefix.'viraseo_gsc_keywords';
         if ($wpdb->get_var("SHOW TABLES LIKE '{$gt}'") === $gt) {
             foreach ($wpdb->get_results("SELECT page_url, SUM(impressions) i FROM {$gt} GROUP BY page_url") as $r) {
-                $pid = url_to_postid($r->page_url); if ($pid) $impr[$pid] = (int)$r->i;
+                $pid = url_to_postid($r->page_url); if ($pid) $impr['p'.$pid] = (int)$r->i;
             }
         }
+        $weight = function(array $m) use ($inlinks, $impr) {
+            return ($m['weight'] ?? 0) + ($inlinks[$m['key']] ?? 0) + ($impr[$m['key']] ?? 0) / 100;
+        };
 
-        // Greedy assignment: each page joins the highest-DF topic token it contains (once).
+        // Greedy assignment: each node joins the highest-DF topic token it contains (once).
         $assigned = []; $out = [];
         foreach (array_keys($candidates) as $topic) {
             $members = [];
-            foreach ($posts as $p) {
-                if (isset($assigned[$p->ID])) continue;
-                if (isset($tokens[$p->ID][$topic])) $members[] = $meta[$p->ID];
+            foreach ($meta as $key => $node) {
+                if (isset($assigned[$key])) continue;
+                if (isset($tokens[$key][$topic])) $members[] = $node;
             }
             if (count($members) < 2) continue;
-            foreach ($members as $m) $assigned[$m['id']] = true;
-            usort($members, function($a, $b) use ($inlinks, $impr) {
-                $ia = ($inlinks[$a['id']] ?? 0) + ($impr[$a['id']] ?? 0)/100;
-                $ib = ($inlinks[$b['id']] ?? 0) + ($impr[$b['id']] ?? 0)/100;
-                return ($ib <=> $ia) ?: ($b['len'] <=> $a['len']);
+            foreach ($members as $m) $assigned[$m['key']] = true;
+            usort($members, function($a, $b) use ($weight) {
+                return ($weight($b) <=> $weight($a)) ?: (($b['len'] ?? 0) <=> ($a['len'] ?? 0));
             });
             $pillar = $members[0];
-            $pid = $pillar['id'];
+            $pkey = $pillar['key'];
             $rest = array_slice($members, 1, 30);
 
-            // How many members already link to the pillar (silo coverage)
             $linked = 0;
-            foreach ($rest as $m) if (isset($pairs[$m['id'] . '-' . $pid])) $linked++;
+            foreach ($rest as $m) if (isset($pairs[$m['key'] . '-' . $pkey])) $linked++;
             $coverage = count($rest) ? round($linked * 100 / count($rest)) : 100;
-            $clusterImpr = $impr[$pid] ?? 0;
-            foreach ($rest as $m) $clusterImpr += ($impr[$m['id']] ?? 0);
+            $clusterImpr = $impr[$pkey] ?? 0;
+            foreach ($rest as $m) $clusterImpr += ($impr[$m['key']] ?? 0);
 
+            $nodeOut = fn($m) => ['id'=>$m['key'], 'title'=>$m['title'], 'type'=>$m['type'], 'url'=>$m['url'], 'is_term'=>!empty($m['is_term'])];
             $out[] = [
                 'keyword'=>$topic,
                 'count'=>count($members),
                 'coverage'=>$coverage,
                 'impressions'=>PersianText::format_number($clusterImpr),
-                'pillar_id'=>$pid,
-                'pillar'=>['id'=>$pid, 'title'=>$pillar['title'], 'type'=>$pillar['type'], 'url'=>get_permalink($pid), 'edit'=>get_edit_post_link($pid,'raw')],
-                'members'=>array_map(fn($m)=>[
-                    'id'=>$m['id'], 'title'=>$m['title'], 'type'=>$m['type'], 'url'=>get_permalink($m['id']),
-                    'linked'=> isset($pairs[$m['id'] . '-' . $pid]),
-                ], $rest),
+                'pillar_id'=>$pkey,
+                'pillar'=>array_merge($nodeOut($pillar), ['edit'=> $pillar['is_term'] ? get_edit_term_link($pillar['ref'], $pillar['tax']) : get_edit_post_link($pillar['ref'],'raw')]),
+                'members'=>array_map(fn($m)=>array_merge($nodeOut($m), ['linked'=> isset($pairs[$m['key'] . '-' . $pkey])]), $rest),
             ];
         }
         usort($out, fn($a, $b) => $b['count'] <=> $a['count']);
         wp_send_json_success(['clusters'=>array_slice($out, 0, 40)]);
     }
 
-    /** Auto-link selected member pages UP to the cluster pillar (build the silo). */
+    /** Decode a cluster node key ('p123' post, 'pc12'/'c12' term) into [kind,id,tax]. */
+    private function decode_node(string $key): array {
+        if (preg_match('/^pc(\d+)$/', $key, $m)) return ['kind'=>'term', 'id'=>(int)$m[1], 'tax'=>'product_cat'];
+        if (preg_match('/^c(\d+)$/', $key, $m))  return ['kind'=>'term', 'id'=>(int)$m[1], 'tax'=>'category'];
+        if (preg_match('/^p(\d+)$/', $key, $m))  return ['kind'=>'post', 'id'=>(int)$m[1]];
+        return ['kind'=>'post', 'id'=>(int)$key];
+    }
+
+    /** Auto-link selected member pages UP to the cluster pillar (build the silo).
+     *  Pillar/members are node keys ('p123' post, 'pc12'/'c12' term). */
     public function ajax_cluster_link(): void {
         check_ajax_referer('viraseo_nonce','nonce');
         if (!current_user_can('edit_posts')) wp_send_json_error('دسترسی غیرمجاز.');
         global $wpdb;
-        $pillar_id = absint($_POST['pillar_id'] ?? 0);
-        $members = array_map('absint', (array)($_POST['members'] ?? []));
-        if (!$pillar_id || !$members) wp_send_json_error('داده ناقص.');
+        $pillar_key = sanitize_text_field($_POST['pillar_id'] ?? '');
+        $members = array_map('sanitize_text_field', (array)($_POST['members'] ?? []));
+        if (!$pillar_key || !$members) wp_send_json_error('داده ناقص.');
 
-        $url = get_permalink($pillar_id);
-        $anchor = TargetKeywords::get($pillar_id);
-        if ($anchor === '') {
-            $kw = PersianText::extract_keywords(get_the_title($pillar_id), 1);
-            $anchor = $kw ? array_key_first($kw) : get_the_title($pillar_id);
+        $pd = $this->decode_node($pillar_key);
+        if ($pd['kind'] === 'term') {
+            $link = get_term_link($pd['id'], $pd['tax']);
+            if (is_wp_error($link)) wp_send_json_error('صفحه دسته‌بندی یافت نشد.');
+            $url = $link;
+            $term = get_term($pd['id'], $pd['tax']);
+            $anchor = (string) get_term_meta($pd['id'], '_viraseo_target_keyword', true);
+            $title = $term ? $term->name : 'دسته‌بندی';
+            if ($anchor === '') $anchor = $title;
+        } else {
+            $url = get_permalink($pd['id']);
+            if (!$url) wp_send_json_error('صفحه ستون یافت نشد.');
+            $title = get_the_title($pd['id']);
+            $anchor = TargetKeywords::get($pd['id']);
+            if ($anchor === '') { $kw = PersianText::extract_keywords($title, 1); $anchor = $kw ? array_key_first($kw) : $title; }
         }
+
         $linked = 0; $skipped = 0;
-        foreach ($members as $mid) {
-            if ($mid === $pillar_id) continue;
+        foreach ($members as $mkey) {
+            if ($mkey === $pillar_key) continue;
+            $md = $this->decode_node($mkey);
+            if ($md['kind'] !== 'post') { $skipped++; continue; } // only posts can be edited as sources
+            $mid = $md['id'];
             $post = get_post($mid);
             if (!$post) { $skipped++; continue; }
             if (strpos($post->post_content, 'href="'.$url.'"') !== false) { $skipped++; continue; }
             $out = $this->insert_link_into_content($post->post_content, $anchor, $url);
-            // If anchor not found in body, append a contextual silo link
-            if (!$out['inserted']) {
-                $content = $post->post_content . "\n\n<p>بیشتر بخوانید: <a href=\"" . esc_url($url) . "\">" . esc_html(get_the_title($pillar_id)) . "</a></p>";
-            } else {
-                $content = $out['content'];
-            }
+            $content = $out['inserted'] ? $out['content']
+                : $post->post_content . "\n\n<p>بیشتر بخوانید: <a href=\"" . esc_url($url) . "\">" . esc_html($title) . "</a></p>";
             wp_update_post(['ID'=>$mid, 'post_content'=>$content]);
-            $wpdb->insert($wpdb->prefix.'viraseo_internal_links', ['source_id'=>$mid,'target_id'=>$pillar_id,'anchor'=>mb_substr($anchor,0,500),'link_url'=>$url]);
+            // Record only post→post links (internal_links target is a post id)
+            if ($pd['kind'] === 'post') {
+                $wpdb->insert($wpdb->prefix.'viraseo_internal_links', ['source_id'=>$mid,'target_id'=>$pd['id'],'anchor'=>mb_substr($anchor,0,500),'link_url'=>$url]);
+            }
             $linked++;
         }
-        wp_send_json_success(['message'=>sprintf('✅ %d صفحه به ستون خوشه لینک شد. (%d مورد رد/تکراری)', $linked, $skipped)]);
+        $note = $skipped ? " ($skipped مورد رد شد — فقط نوشته‌ها/برگه‌ها قابل ویرایش‌اند)" : '';
+        wp_send_json_success(['message'=>sprintf('✅ %d صفحه به ستون «%s» لینک شد.%s', $linked, $title, $note)]);
     }
 
     public function scan(): array {
