@@ -63,10 +63,11 @@ class SerpInspector {
     /** Direct server-side fetch + parse (fallback when n8n is unavailable). */
     public function analyze_direct(string $url): array {
         $r = wp_remote_get($url, [
-            'timeout'    => 15,
-            'redirection'=> 3,
+            'timeout'    => 20,
+            'redirection'=> 4,
+            'sslverify'  => false,
             'user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-            'headers'    => ['Accept-Language' => 'fa,en;q=0.8'],
+            'headers'    => ['Accept' => 'text/html,application/xhtml+xml', 'Accept-Language' => 'fa,en;q=0.8'],
         ]);
         if (is_wp_error($r)) return ['error' => 'خطا در دریافت صفحه: ' . $r->get_error_message()];
         $code = wp_remote_retrieve_response_code($r);
@@ -75,14 +76,18 @@ class SerpInspector {
         $html = wp_remote_retrieve_body($r);
         if (!$html) return ['error' => 'محتوای صفحه خالی بود.'];
 
-        // Isolate <body> and strip non-content tags for accurate word counting
-        $body = $html;
-        if (preg_match('/<body[^>]*>(.*?)<\/body>/si', $html, $bm)) $body = $bm[1];
-        $clean = preg_replace('/<(script|style|noscript|svg|template)[^>]*>.*?<\/\1>/si', ' ', $body);
+        // Strip non-content tags globally first, then isolate <body> (greedy to capture full body)
+        $noScripts = preg_replace('/<(script|style|noscript|svg|template|iframe)[^>]*>.*?<\/\1>/si', ' ', $html);
+        $body = $noScripts;
+        if (preg_match('/<body[^>]*>(.*)<\/body>/si', $noScripts, $bm)) $body = $bm[1];
+        $clean = preg_replace('/<(nav|footer|header)[^>]*>.*?<\/\1>/si', ' ', $body);
         $text  = wp_strip_all_tags($clean);
         $text  = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
 
         $word_count = PersianText::word_count($text);
+        // Detect JS-rendered pages (large HTML but almost no readable text)
+        $js_note = ($word_count < 30 && strlen($html) > 15000)
+            ? 'به نظر می‌رسد این صفحه محتوا را با جاوااسکریپت بارگذاری می‌کند؛ تحلیل سمت‌سرور ممکن نیست.' : '';
         $headings   = $this->headings($html);
         $images     = preg_match_all('/<img\b[^>]*>/i', $html, $im) ?: 0;
         $img_no_alt = 0;
@@ -107,6 +112,7 @@ class SerpInspector {
             'schema'      => $this->schema_types($html),
             'word_count_score' => $this->score($word_count, $headings, $images),
             'paragraphs'  => preg_match_all('/<p\b[^>]*>/i', $html) ?: 0,
+            'note'        => $js_note,
         ];
     }
 

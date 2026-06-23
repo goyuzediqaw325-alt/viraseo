@@ -1,4 +1,16 @@
-<?php defined('ABSPATH') || exit; ?>
+<?php
+defined('ABSPATH') || exit;
+global $wpdb;
+$p = $wpdb->prefix . 'viraseo_';
+$tbl = fn($t) => $wpdb->get_var("SHOW TABLES LIKE '{$p}{$t}'") === "{$p}{$t}";
+$cnt = fn($sql) => (int) $wpdb->get_var($sql);
+$d_kw = $tbl('gsc_keywords') ? $cnt("SELECT COUNT(*) FROM {$p}gsc_keywords") : 0;
+$d_strike = $tbl('gsc_keywords') ? $cnt("SELECT COUNT(*) FROM {$p}gsc_keywords WHERE position > 10 AND position <= 20") : 0;
+$d_can = $tbl('cannibalization') ? $cnt("SELECT COUNT(*) FROM {$p}cannibalization WHERE status='detected'") : 0;
+$d_orph = $tbl('orphan_pages') ? $cnt("SELECT COUNT(*) FROM {$p}orphan_pages WHERE status='orphan'") : 0;
+$d_bl = $tbl('backlinks') ? $cnt("SELECT COUNT(*) FROM {$p}backlinks") : 0;
+$fa = fn($n) => \ViraSEO\Utils\PersianText::format_number($n);
+?>
 <div class="vs-wrap" dir="rtl">
   <div class="vs-header">
     <h1 class="vs-title">داشبورد ویرا سئو</h1>
@@ -14,11 +26,11 @@
     <div id="vs-action-list"><div class="vs-empty">در حال محاسبه‌ی برنامه...</div></div>
   </div>
   <div class="vs-stats">
-    <div class="vs-stat" id="vs-stat-keywords"><span class="vs-stat-icon green">📊</span><span class="vs-stat-num">0</span><span class="vs-stat-label">کلمات کلیدی</span></div>
-    <div class="vs-stat" id="vs-stat-striking"><span class="vs-stat-icon orange">🎯</span><span class="vs-stat-num">0</span><span class="vs-stat-label">Striking Distance</span></div>
-    <div class="vs-stat" id="vs-stat-cannibalization"><span class="vs-stat-icon red">⚠️</span><span class="vs-stat-num">0</span><span class="vs-stat-label">کانیبالیزاسیون</span></div>
-    <div class="vs-stat" id="vs-stat-orphans"><span class="vs-stat-icon cyan">🔗</span><span class="vs-stat-num">0</span><span class="vs-stat-label">صفحات یتیم</span></div>
-    <div class="vs-stat" id="vs-stat-backlinks"><span class="vs-stat-icon green">🌐</span><span class="vs-stat-num">0</span><span class="vs-stat-label">بک‌لینک‌ها</span></div>
+    <div class="vs-stat" id="vs-stat-keywords"><span class="vs-stat-icon green">📊</span><span class="vs-stat-num"><?php echo $fa($d_kw); ?></span><span class="vs-stat-label">کلمات کلیدی</span></div>
+    <div class="vs-stat" id="vs-stat-striking"><span class="vs-stat-icon orange">🎯</span><span class="vs-stat-num"><?php echo $fa($d_strike); ?></span><span class="vs-stat-label">Striking Distance</span></div>
+    <div class="vs-stat" id="vs-stat-cannibalization"><span class="vs-stat-icon red">⚠️</span><span class="vs-stat-num"><?php echo $fa($d_can); ?></span><span class="vs-stat-label">کانیبالیزاسیون</span></div>
+    <div class="vs-stat" id="vs-stat-orphans"><span class="vs-stat-icon cyan">🔗</span><span class="vs-stat-num"><?php echo $fa($d_orph); ?></span><span class="vs-stat-label">صفحات یتیم</span></div>
+    <div class="vs-stat" id="vs-stat-backlinks"><span class="vs-stat-icon green">🌐</span><span class="vs-stat-num"><?php echo $fa($d_bl); ?></span><span class="vs-stat-label">بک‌لینک‌ها</span></div>
   </div>
   <h2 class="vs-card-title">بخش‌های پلاگین</h2>
   <div class="vs-nav-grid">

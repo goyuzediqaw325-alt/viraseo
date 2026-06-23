@@ -13,6 +13,64 @@ class SerpAnalyzer {
         add_action('wp_ajax_viraseo_serp_status', [$this, 'ajax_status']);
         add_action('wp_ajax_viraseo_serp_results', [$this, 'ajax_results']);
         add_action('wp_ajax_viraseo_serp_history', [$this, 'ajax_history']);
+        add_action('wp_ajax_viraseo_serp_deep_save', [$this, 'ajax_deep_save']);
+    }
+
+    /**
+     * Persist REAL per-competitor metrics (from deep page inspection of all 10 results),
+     * recompute averages + a "how to win" recommendation, and sync depth data to the page.
+     */
+    public function ajax_deep_save(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+        $id = absint($_POST['analysis_id'] ?? 0);
+        $items = json_decode(wp_unslash($_POST['items'] ?? '[]'), true);
+        if (!$id || !is_array($items) || !$items) wp_send_json_error('داده ناقص.');
+
+        $ct = $wpdb->prefix.'viraseo_serp_competitors';
+        $words = []; $heads = [];
+        foreach ($items as $it) {
+            $url = esc_url_raw($it['url'] ?? '');
+            if (!$url) continue;
+            $wc = absint($it['word_count'] ?? 0);
+            $h1 = absint($it['h1'] ?? 0); $h2 = absint($it['h2'] ?? 0); $h3 = absint($it['h3'] ?? 0);
+            $img = absint($it['images'] ?? 0);
+            if ($wc > 0) { $words[] = $wc; $heads[] = $h1 + $h2 + $h3; }
+            $wpdb->update($ct, [
+                'word_count'=>$wc, 'h1_count'=>$h1, 'h2_count'=>$h2, 'h3_count'=>$h3, 'images_count'=>$img,
+            ], ['analysis_id'=>$id, 'url'=>$url]);
+        }
+
+        $avg_words = $words ? (int) round(array_sum($words) / count($words)) : 0;
+        $max_words = $words ? max($words) : 0;
+        $avg_heads = $heads ? (int) round(array_sum($heads) / count($heads)) : 0;
+        $target_words = $max_words ? (int) round($max_words * 1.1) : $avg_words; // beat the longest
+
+        $a = $wpdb->get_row($wpdb->prepare("SELECT keyword, post_id, content_gap, lsi_keywords FROM {$wpdb->prefix}viraseo_serp_analysis WHERE id=%d", $id));
+        $wpdb->update($wpdb->prefix.'viraseo_serp_analysis', ['avg_word_count'=>$avg_words, 'avg_headings'=>$avg_heads], ['id'=>$id]);
+
+        $rec = sprintf('برای پیشی‌گرفتن از رقبا: محتوایی حدود %s کلمه (رقیب برتر: %s) با حداقل %s هدینگ بنویسید.',
+            PersianText::format_number($target_words), PersianText::format_number($max_words), PersianText::format_number(max(1,$avg_heads)));
+
+        // Sync depth metrics to the target page (used by Target Keywords / On-Page)
+        if ($a && $a->post_id) {
+            $si = get_post_meta((int)$a->post_id, '_viraseo_serp_intent', true);
+            if (!is_array($si)) $si = [];
+            $si['avg_words'] = $avg_words;
+            $si['target_words'] = $target_words;
+            $si['avg_headings'] = $avg_heads;
+            $si['analyzed_deep'] = true;
+            update_post_meta((int)$a->post_id, '_viraseo_serp_intent', $si);
+        }
+
+        wp_send_json_success([
+            'avg_words'=>PersianText::format_number($avg_words),
+            'target_words'=>PersianText::format_number($target_words),
+            'max_words'=>PersianText::format_number($max_words),
+            'avg_headings'=>PersianText::format_number($avg_heads),
+            'recommendation'=>$rec,
+        ]);
     }
 
     public function ajax_start(): void {

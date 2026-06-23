@@ -264,6 +264,7 @@ $(document).on('click', '.vs-hist-item', function(){
     $('html,body').animate({scrollTop: $('#vs-serp-results').offset() ? $('#vs-serp-results').offset().top - 60 : 0}, 300);
 });
 function loadSerpResults(id) {
+    window._vsSerpId = id;
     post('viraseo_serp_results', {analysis_id:id}, r => {
         $('#vs-serp-progress').hide(); $('#vs-serp-start').prop('disabled',false);
         if (!r.success || r.data.status!=='completed') return;
@@ -306,7 +307,7 @@ function loadSerpResults(id) {
         loadSerpHistory();
         $('#vs-serp-stats').html(`<div class="vs-stat"><div class="vs-stat-icon"><span class="dashicons dashicons-editor-textcolor"></span></div><div><span class="vs-stat-num">${d.avg_words}</span><span class="vs-stat-label">میانگین کلمات</span></div></div><div class="vs-stat"><div class="vs-stat-icon green"><span class="dashicons dashicons-heading"></span></div><div><span class="vs-stat-num">${d.avg_headings}</span><span class="vs-stat-label">هدینگ</span></div></div><div class="vs-stat"><div class="vs-stat-icon cyan"><span class="dashicons dashicons-groups"></span></div><div><span class="vs-stat-num">${d.competitors.length}</span><span class="vs-stat-label">رقیب</span></div></div>`);
         const $t = $('#vs-serp-tbody').empty();
-        d.competitors.forEach(c => { $t.append(`<tr class="vs-serp-row" data-url="${c.url}" title="برای تحلیل دقیق این صفحه کلیک کنید"><td>${c.pos}</td><td>${c.domain}</td><td>${c.title||'-'}</td><td>${c.words} <span class="vs-snippet-note">(اسنیپت)</span></td><td>${c.h1}/${c.h2}/${c.h3}</td><td><span class="dashicons dashicons-search" style="color:var(--vs-primary)"></span></td></tr>`); });
+        d.competitors.forEach(c => { $t.append(`<tr class="vs-serp-row" data-url="${c.url}" title="برای تحلیل دقیق این صفحه کلیک کنید"><td>${c.pos}</td><td>${c.domain}</td><td>${c.title||'-'}</td><td class="vs-c-words">${c.words>0?c.words:'<span class="vs-snippet-note">— (دکمه آنالیز دقیق)</span>'}</td><td class="vs-c-head">${c.h1}/${c.h2}/${c.h3}</td><td class="vs-c-img">${c.images||'-'}</td></tr>`); });
         const $l = $('#vs-lsi-tags').empty();
         (d.lsi||[]).forEach(w => $l.append(`<span class="vs-tag">${w}</span>`));
         const $g = $('#vs-gap-list').empty();
@@ -314,6 +315,45 @@ function loadSerpResults(id) {
     });
 }
 
+
+// === SERP: deep-analyze all 10 results (real data basis) ===
+$(document).on('click', '#vs-serp-deep', function(){
+    const $rows = $('#vs-serp-tbody .vs-serp-row');
+    if (!$rows.length) return;
+    const $b = $(this).prop('disabled', true);
+    const $st = $('#vs-serp-deep-status');
+    const items = [];
+    let idx = 0;
+    function next(){
+        if (idx >= $rows.length) {
+            $b.prop('disabled', false);
+            $st.text('ذخیره و نتیجه‌گیری...');
+            post('viraseo_serp_deep_save', {analysis_id: window._vsSerpId, items: JSON.stringify(items)}, r => {
+                $st.text('✅ آنالیز دقیق کامل شد.');
+                if (r.success) {
+                    $('#vs-serp-conclusion').show().html('<div class="vs-alert vs-alert-info"><span class="dashicons dashicons-awards"></span><div><strong>نتیجه‌گیری (بر اساس داده واقعی):</strong><br>میانگین کلمات رقبا: '+r.data.avg_words+' | بلندترین رقیب: '+r.data.max_words+' | میانگین هدینگ: '+r.data.avg_headings+'<br>🎯 '+r.data.recommendation+'</div></div>');
+                }
+            });
+            return;
+        }
+        const $row = $rows.eq(idx);
+        const url = $row.data('url');
+        $st.text('در حال آنالیز دقیق صفحه '+(idx+1)+' از '+$rows.length+'...');
+        post('viraseo_serp_inspect', {url: url}, r => {
+            if (r.success) {
+                const d = r.data;
+                $row.find('.vs-c-words').html(d.word_count_fa || d.word_count || 0);
+                $row.find('.vs-c-head').text(d.h1+'/'+d.h2+'/'+d.h3);
+                $row.find('.vs-c-img').text(d.images);
+                items.push({url:url, word_count:d.word_count, h1:d.h1, h2:d.h2, h3:d.h3, images:d.images});
+            } else {
+                $row.find('.vs-c-words').html('<span class="vs-snippet-note">نشد</span>');
+            }
+            idx++; next();
+        });
+    }
+    next();
+});
 
 // === SERP DEEP INSPECT (on-demand per result) ===
 $(document).on('click', '.vs-serp-row', function(){
