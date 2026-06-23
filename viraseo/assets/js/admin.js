@@ -908,12 +908,26 @@ $(document).on('click', '#vs-load-thin', function(){
 });
 
 // === TARGET KEYWORDS MANAGEMENT ===
+var vsTgPage = 1, vsTgTypesLoaded = false;
 function loadTargets() {
     if (!$('#vs-tg-tbody').length) return;
     $('#vs-tg-tbody').html('<tr><td colspan="8" class="vs-empty">در حال بارگذاری...</td></tr>');
-    post('viraseo_targets_list', {search: $('#vs-tg-search').val()||''}, r => {
+    post('viraseo_targets_list', {
+        search: $('#vs-tg-search').val()||'',
+        post_type: $('#vs-tg-type').val()||'all',
+        orderby: $('#vs-tg-orderby').val()||'modified',
+        order: 'desc',
+        page: vsTgPage
+    }, r => {
         const $t = $('#vs-tg-tbody').empty();
         if (!r.success) { $t.html('<tr><td colspan="8" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        // Populate type filter once
+        if (!vsTgTypesLoaded && r.data.types) {
+            r.data.types.forEach(ty => $('#vs-tg-type').append('<option value="'+ty.slug+'">'+ty.label+'</option>'));
+            vsTgTypesLoaded = true;
+        }
+        $('#vs-tg-count').text('مجموع: '+(r.data.total||0)+' صفحه — صفحه '+(r.data.page||1)+' از '+(r.data.pages||1));
+        renderTgPager(r.data.page||1, r.data.pages||1);
         if (!r.data.rows.length) { $t.html('<tr><td colspan="8" class="vs-empty">صفحه‌ای یافت نشد.</td></tr>'); return; }
         r.data.rows.forEach(o => {
             let stats = o.stats ? ('کلیک '+o.stats.clicks+' · نمایش '+o.stats.impressions+' · جایگاه '+o.stats.position) : '<span class="vs-empty">—</span>';
@@ -939,8 +953,18 @@ function linkScoreBar(score){
     var color = score >= 66 ? '#10b981' : (score >= 33 ? '#f59e0b' : '#ef4444');
     return '<div class="vs-score-bar" title="قدرت لینک داخلی: '+score+'/۱۰۰"><div class="vs-score-fill" style="width:'+score+'%;background:'+color+'"></div><span>'+score+'</span></div>';
 }
-$(document).on('click', '#vs-tg-reload', loadTargets);
-$(document).on('keyup', '#vs-tg-search', function(e){ if (e.key === 'Enter') loadTargets(); });
+$(document).on('click', '#vs-tg-reload', function(){ vsTgPage = 1; loadTargets(); });
+$(document).on('change', '#vs-tg-type, #vs-tg-orderby', function(){ vsTgPage = 1; loadTargets(); });
+$(document).on('keyup', '#vs-tg-search', function(e){ if (e.key === 'Enter') { vsTgPage = 1; loadTargets(); } });
+function renderTgPager(page, pages) {
+    const $p = $('#vs-tg-pager'); if (!$p.length) return;
+    $p.empty();
+    if (pages <= 1) return;
+    if (page > 1) $p.append('<button class="vs-btn vs-btn-sm vs-btn-secondary vs-tg-page" data-p="'+(page-1)+'">‹ قبلی</button>');
+    $p.append('<span class="vs-pager-info">صفحه '+page+' از '+pages+'</span>');
+    if (page < pages) $p.append('<button class="vs-btn vs-btn-sm vs-btn-secondary vs-tg-page" data-p="'+(page+1)+'">بعدی ›</button>');
+}
+$(document).on('click', '.vs-tg-page', function(){ vsTgPage = parseInt($(this).data('p'),10)||1; loadTargets(); $('html,body').animate({scrollTop:0},200); });
 $(document).on('click', '.vs-tg-use', function(){
     const $row = $(this).closest('tr');
     $row.find('.vs-tg-kw').val($(this).data('kw'));

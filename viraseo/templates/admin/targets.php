@@ -11,9 +11,17 @@
   </div>
 
   <div class="vs-toolbar">
-    <input type="text" class="vs-input" id="vs-tg-search" placeholder="جستجوی صفحه..." style="max-width:300px;">
-    <button class="vs-btn vs-btn-secondary vs-btn-sm" id="vs-tg-reload"><span class="dashicons dashicons-update"></span> بارگذاری</button>
+    <input type="text" class="vs-input" id="vs-tg-search" placeholder="جستجوی صفحه..." style="max-width:240px;">
+    <select class="vs-input" id="vs-tg-type" style="max-width:180px;"><option value="all">همه نوع‌ها</option></select>
+    <select class="vs-input" id="vs-tg-orderby" style="max-width:180px;">
+      <option value="modified">جدیدترین</option>
+      <option value="link_score">قدرت لینک</option>
+      <option value="impressions">نمایش GSC</option>
+      <option value="title">عنوان</option>
+    </select>
+    <button class="vs-btn vs-btn-secondary vs-btn-sm" id="vs-tg-reload"><span class="dashicons dashicons-update"></span> اعمال</button>
     <a class="vs-btn vs-btn-secondary vs-btn-sm" href="<?php echo admin_url('admin.php?page=viraseo-gsc'); ?>">🎯 تخصیص خودکار از سرچ کنسول</a>
+    <span id="vs-tg-count" class="vs-hint"></span>
   </div>
 
   <table class="vs-table">
@@ -22,4 +30,5 @@
     </tr></thead>
     <tbody id="vs-tg-tbody"><tr><td colspan="8" class="vs-empty">در حال بارگذاری...</td></tr></tbody>
   </table>
+  <div id="vs-tg-pager" class="vs-pager"></div>
 </div>

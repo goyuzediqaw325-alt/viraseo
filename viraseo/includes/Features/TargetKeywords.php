@@ -21,31 +21,93 @@ class TargetKeywords {
         add_action('wp_ajax_viraseo_target_save', [$this, 'ajax_target_save']);
     }
 
-    /** List pages with their target keyword, source, GSC suggestion + stats (for the management page). */
+    /** All public post types except attachment (so big/Woo sites show every page type). */
+    public static function public_types(): array {
+        $types = get_post_types(['public' => true], 'names');
+        unset($types['attachment']);
+        return array_values($types);
+    }
+
+    /** True if the page is marked noindex (Rank Math robots meta). */
+    public static function is_noindex(int $post_id): bool {
+        $robots = get_post_meta($post_id, 'rank_math_robots', true);
+        return is_array($robots) && in_array('noindex', $robots, true);
+    }
+
+    /** Map of post_id => total GSC impressions. */
+    private function gsc_impr_map(): array {
+        global $wpdb;
+        $gt = $wpdb->prefix . 'viraseo_gsc_keywords';
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$gt}'") !== $gt) return [];
+        $map = [];
+        foreach ($wpdb->get_results("SELECT page_url, SUM(impressions) i FROM {$gt} GROUP BY page_url") as $r) {
+            $pid = url_to_postid($r->page_url);
+            if ($pid) $map[$pid] = (int)$r->i;
+        }
+        return $map;
+    }
+
+    /** List pages with target keyword, source, GSC stats — all post types, filterable, sortable, paginated. */
     public function ajax_targets_list(): void {
         check_ajax_referer('viraseo_nonce', 'nonce');
         if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
         global $wpdb;
         $gt = $wpdb->prefix . 'viraseo_gsc_keywords';
         $has_gsc = ($wpdb->get_var("SHOW TABLES LIKE '{$gt}'") === $gt);
-        $search = sanitize_text_field($_POST['search'] ?? '');
 
-        $args = ['post_type'=>self::TYPES, 'post_status'=>'publish', 'numberposts'=>200, 'orderby'=>'modified', 'order'=>'DESC'];
-        if ($search) $args['s'] = $search;
-        $posts = get_posts($args);
+        $search = sanitize_text_field($_POST['search'] ?? '');
+        $type_filter = sanitize_text_field($_POST['post_type'] ?? '');
+        $orderby = in_array($_POST['orderby'] ?? '', ['modified','link_score','impressions','title'], true) ? $_POST['orderby'] : 'modified';
+        $order = (strtolower($_POST['order'] ?? 'desc') === 'asc') ? 'asc' : 'desc';
+        $page = max(1, absint($_POST['page'] ?? 1));
+        $per = 50;
+
+        $types = ($type_filter && $type_filter !== 'all') ? [$type_filter] : self::public_types();
+        $q = ['post_type'=>$types, 'post_status'=>'publish', 'numberposts'=>3000, 'fields'=>'ids', 'orderby'=>'modified', 'order'=>'DESC'];
+        if ($search) $q['s'] = $search;
+        $ids = get_posts($q);
+
         $link_scores = get_option('viraseo_link_scores', []);
         if (!is_array($link_scores)) $link_scores = [];
+        $impr_map = $has_gsc ? $this->gsc_impr_map() : [];
+
+        // Lightweight candidates (skip noindex), then sort by the chosen factor
+        $cand = [];
+        foreach ($ids as $id) {
+            $id = (int)$id;
+            if (self::is_noindex($id)) continue;
+            $cand[] = [
+                'id'=>$id,
+                'ls'=>(int)($link_scores[$id] ?? 0),
+                'impr'=>(int)($impr_map[$id] ?? 0),
+                'title'=>get_the_title($id),
+                'modified'=>(int)get_post_modified_time('U', true, $id),
+            ];
+        }
+        usort($cand, function($a, $b) use ($orderby, $order) {
+            $v = match($orderby) {
+                'link_score'  => $a['ls'] <=> $b['ls'],
+                'impressions' => $a['impr'] <=> $b['impr'],
+                'title'       => strcmp($a['title'], $b['title']),
+                default       => $a['modified'] <=> $b['modified'],
+            };
+            return $order === 'asc' ? $v : -$v;
+        });
+
+        $total = count($cand);
+        $slice = array_slice($cand, ($page - 1) * $per, $per);
 
         $rows = [];
-        foreach ($posts as $p) {
-            $own = (string) get_post_meta($p->ID, self::META, true);
-            $rm = self::rank_math_keyword($p->ID);
+        foreach ($slice as $c) {
+            $pid = $c['id'];
+            $own = (string) get_post_meta($pid, self::META, true);
+            $rm = self::rank_math_keyword($pid);
             $current = $own !== '' ? PersianText::normalize($own) : $rm;
             $source = $own !== '' ? 'دستی (ViraSEO)' : ($rm !== '' ? 'Rank Math' : '—');
 
             $suggest = ''; $stats = null;
             if ($has_gsc) {
-                $url = get_permalink($p->ID);
+                $url = get_permalink($pid);
                 $suggest = (string) $wpdb->get_var($wpdb->prepare(
                     "SELECT keyword FROM {$gt} WHERE page_url=%s ORDER BY clicks DESC, impressions DESC LIMIT 1", $url
                 ));
@@ -60,25 +122,32 @@ class TargetKeywords {
                     ];
                 }
             }
-
+            $ptype = get_post_type_object(get_post_type($pid));
+            $si = get_post_meta($pid, '_viraseo_serp_intent', true);
             $rows[] = [
-                'id'=>$p->ID,
-                'title'=>$p->post_title ?: '(بدون عنوان)',
-                'type'=>$p->post_type,
-                'edit'=>get_edit_post_link($p->ID, 'raw'),
+                'id'=>$pid,
+                'title'=>$c['title'] ?: '(بدون عنوان)',
+                'type'=> $ptype ? $ptype->labels->singular_name : get_post_type($pid),
+                'edit'=>get_edit_post_link($pid, 'raw'),
                 'current'=>$current,
                 'source'=>$source,
                 'suggest'=>$suggest,
                 'stats'=>$stats,
-                'link_score'=>(int)($link_scores[$p->ID] ?? 0),
-                'serp_intent'=>(function($pid){
-                    $si = get_post_meta($pid, '_viraseo_serp_intent', true);
-                    if (!is_array($si) || empty($si['label'])) return null;
-                    return ['label'=>$si['label'], 'rec'=>$si['recommendation'] ?? '', 'avg_words'=>$si['avg_words'] ?? 0];
-                })($p->ID),
+                'link_score'=>$c['ls'],
+                'serp_intent'=> is_array($si) && !empty($si['label']) ? ['label'=>$si['label'], 'rec'=>$si['recommendation'] ?? '', 'avg_words'=>$si['avg_words'] ?? 0] : null,
             ];
         }
-        wp_send_json_success(['rows'=>$rows, 'has_gsc'=>$has_gsc]);
+
+        $type_objs = [];
+        foreach (self::public_types() as $t) {
+            $o = get_post_type_object($t);
+            $type_objs[] = ['slug'=>$t, 'label'=>$o ? $o->labels->name : $t];
+        }
+
+        wp_send_json_success([
+            'rows'=>$rows, 'total'=>$total, 'pages'=>(int)ceil($total / $per), 'page'=>$page,
+            'types'=>$type_objs, 'has_gsc'=>$has_gsc,
+        ]);
     }
 
     /** Save a target keyword for a single post from the management page. */
@@ -94,7 +163,7 @@ class TargetKeywords {
     }
 
     public function add_box(): void {
-        foreach (self::TYPES as $t) {
+        foreach (self::public_types() as $t) {
             add_meta_box('viraseo_target_kw', 'ViraSEO — کلمه هدف', [$this, 'render'], $t, 'side', 'high');
         }
     }
@@ -117,7 +186,7 @@ class TargetKeywords {
         if (!isset($_POST['viraseo_target_kw_nonce']) || !wp_verify_nonce($_POST['viraseo_target_kw_nonce'], 'viraseo_target_kw')) return;
         if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
         if (!current_user_can('edit_post', $post_id)) return;
-        if (!in_array($post->post_type, self::TYPES, true)) return;
+        if (!in_array($post->post_type, self::public_types(), true)) return;
         $kw = isset($_POST['viraseo_target_keyword']) ? PersianText::normalize(sanitize_text_field($_POST['viraseo_target_keyword'])) : '';
         if ($kw === '') delete_post_meta($post_id, self::META);
         else update_post_meta($post_id, self::META, $kw);
@@ -149,9 +218,10 @@ class TargetKeywords {
         $gt = $wpdb->prefix . 'viraseo_gsc_keywords';
         if ($wpdb->get_var("SHOW TABLES LIKE '{$gt}'") !== $gt) wp_send_json_error('ابتدا داده‌های سرچ کنسول را همگام‌سازی کنید.');
 
-        $posts = get_posts(['post_type'=>self::TYPES, 'post_status'=>'publish', 'numberposts'=>500, 'fields'=>'ids']);
+        $posts = get_posts(['post_type'=>self::public_types(), 'post_status'=>'publish', 'numberposts'=>1000, 'fields'=>'ids']);
         $applied = 0; $skipped = 0;
         foreach ($posts as $pid) {
+            if (self::is_noindex((int)$pid)) { $skipped++; continue; }
             if (self::get((int)$pid) !== '') { $skipped++; continue; } // keep existing
             $url = get_permalink($pid);
             $kw = $wpdb->get_var($wpdb->prepare(
