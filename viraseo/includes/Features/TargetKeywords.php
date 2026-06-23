@@ -11,6 +11,7 @@ use ViraSEO\Utils\{PersianText, JalaliDate};
  */
 class TargetKeywords {
     const META = '_viraseo_target_keyword';
+    const META_SECONDARY = '_viraseo_target_keywords_secondary';
     const TYPES = ['post', 'page', 'product'];
 
     public function __construct() {
@@ -32,6 +33,60 @@ class TargetKeywords {
     public static function is_noindex(int $post_id): bool {
         $robots = get_post_meta($post_id, 'rank_math_robots', true);
         return is_array($robots) && in_array('noindex', $robots, true);
+    }
+
+    /** Functional/low-value pages to skip from analysis (cart, checkout, account, etc.). */
+    public static function excluded_ids(): array {
+        static $ids = null;
+        if ($ids !== null) return $ids;
+        $ids = [];
+        if (function_exists('wc_get_page_id')) {
+            foreach (['cart','checkout','myaccount','terms','view_order'] as $p) {
+                $id = (int) wc_get_page_id($p);
+                if ($id > 0) $ids[] = $id;
+            }
+        }
+        $pp = (int) get_option('wp_page_for_privacy_policy');
+        if ($pp) $ids[] = $pp;
+        $ids = array_values(array_unique(array_filter($ids)));
+        return $ids;
+    }
+
+    /** Should this page be excluded from SEO analysis (noindex or functional page)? */
+    public static function is_excluded(int $post_id): bool {
+        if (self::is_noindex($post_id)) return true;
+        return in_array($post_id, self::excluded_ids(), true);
+    }
+
+    /** Secondary target keywords: ViraSEO secondary meta + Rank Math additional focus keywords. */
+    public static function get_secondary(int $post_id): array {
+        $out = [];
+        $own = (string) get_post_meta($post_id, self::META_SECONDARY, true);
+        if ($own !== '') {
+            foreach (preg_split('/[,،\n]+/u', $own) as $k) {
+                $k = PersianText::normalize(trim($k));
+                if ($k !== '') $out[] = $k;
+            }
+        }
+        // Rank Math allows up to 5 focus keywords (comma-separated); 2nd+ are secondary
+        $rm = (string) get_post_meta($post_id, 'rank_math_focus_keyword', true);
+        if ($rm !== '') {
+            $parts = array_slice(explode(',', $rm), 1);
+            foreach ($parts as $k) {
+                $k = PersianText::normalize(trim($k));
+                if ($k !== '') $out[] = $k;
+            }
+        }
+        return array_values(array_unique(array_filter($out)));
+    }
+
+    /** All target keywords for a page: primary first, then secondary (unique). */
+    public static function get_all(int $post_id): array {
+        $all = [];
+        $primary = self::get($post_id);
+        if ($primary !== '') $all[] = $primary;
+        foreach (self::get_secondary($post_id) as $s) $all[] = $s;
+        return array_values(array_unique(array_filter($all)));
     }
 
     /** Map of post_id => total GSC impressions. */
@@ -75,7 +130,7 @@ class TargetKeywords {
         $cand = [];
         foreach ($ids as $id) {
             $id = (int)$id;
-            if (self::is_noindex($id)) continue;
+            if (self::is_excluded($id)) continue;
             $cand[] = [
                 'id'=>$id,
                 'ls'=>(int)($link_scores[$id] ?? 0),
@@ -130,6 +185,7 @@ class TargetKeywords {
                 'type'=> $ptype ? $ptype->labels->singular_name : get_post_type($pid),
                 'edit'=>get_edit_post_link($pid, 'raw'),
                 'current'=>$current,
+                'secondary'=>self::get_secondary($pid),
                 'source'=>$source,
                 'suggest'=>$suggest,
                 'stats'=>$stats,
@@ -159,6 +215,9 @@ class TargetKeywords {
         $kw = PersianText::normalize(sanitize_text_field($_POST['keyword'] ?? ''));
         if ($kw === '') delete_post_meta($id, self::META);
         else update_post_meta($id, self::META, $kw);
+        $sec = sanitize_textarea_field($_POST['secondary'] ?? '');
+        if (trim($sec) === '') delete_post_meta($id, self::META_SECONDARY);
+        else update_post_meta($id, self::META_SECONDARY, $sec);
         wp_send_json_success(['message'=>'ذخیره شد.']);
     }
 
@@ -171,14 +230,16 @@ class TargetKeywords {
     public function render(\WP_Post $post): void {
         wp_nonce_field('viraseo_target_kw', 'viraseo_target_kw_nonce');
         $val = get_post_meta($post->ID, self::META, true);
+        $sec = get_post_meta($post->ID, self::META_SECONDARY, true);
         $rm = self::rank_math_keyword($post->ID);
-        echo '<p style="direction:rtl"><label for="viraseo_tk"><strong>کلمه کلیدی هدف این صفحه:</strong></label></p>';
+        echo '<p style="direction:rtl"><label for="viraseo_tk"><strong>کلمه کلیدی هدف اصلی:</strong></label></p>';
         echo '<input type="text" id="viraseo_tk" name="viraseo_target_keyword" value="' . esc_attr($val) . '" style="width:100%;direction:rtl" placeholder="مثلا: طراحی سایت در تبریز">';
+        echo '<p style="direction:rtl;margin-top:8px"><label for="viraseo_tk_sec"><strong>کلمات کلیدی فرعی:</strong> (با کاما جدا کنید)</label></p>';
+        echo '<textarea id="viraseo_tk_sec" name="viraseo_target_keywords_secondary" rows="2" style="width:100%;direction:rtl" placeholder="مثلا: قیمت طراحی سایت، طراحی سایت ارزان">' . esc_textarea($sec) . '</textarea>';
         if ($rm) {
-            echo '<p style="direction:rtl;font-size:11px;color:#666;margin-top:6px">کلمه کانونی Rank Math: <code>' . esc_html($rm) . '</code>';
-            echo ' — اگر این فیلد را خالی بگذارید، از کلمه Rank Math استفاده می‌شود.</p>';
+            echo '<p style="direction:rtl;font-size:11px;color:#666;margin-top:6px">کلمه کانونی Rank Math: <code>' . esc_html($rm) . '</code> — اگر کلمه اصلی را خالی بگذارید، از Rank Math استفاده می‌شود.</p>';
         } else {
-            echo '<p style="direction:rtl;font-size:11px;color:#666;margin-top:6px">این کلمه برای لینک‌سازی هوشمند و خوشه‌بندی موضوعی استفاده می‌شود.</p>';
+            echo '<p style="direction:rtl;font-size:11px;color:#666;margin-top:6px">این کلمات برای لینک‌سازی هوشمند و خوشه‌بندی موضوعی استفاده می‌شوند.</p>';
         }
     }
 
@@ -190,6 +251,9 @@ class TargetKeywords {
         $kw = isset($_POST['viraseo_target_keyword']) ? PersianText::normalize(sanitize_text_field($_POST['viraseo_target_keyword'])) : '';
         if ($kw === '') delete_post_meta($post_id, self::META);
         else update_post_meta($post_id, self::META, $kw);
+        $sec = isset($_POST['viraseo_target_keywords_secondary']) ? sanitize_textarea_field($_POST['viraseo_target_keywords_secondary']) : '';
+        if (trim($sec) === '') delete_post_meta($post_id, self::META_SECONDARY);
+        else update_post_meta($post_id, self::META_SECONDARY, $sec);
     }
 
     /** First Rank Math focus keyword (comma-separated → take the first). */
@@ -221,7 +285,7 @@ class TargetKeywords {
         $posts = get_posts(['post_type'=>self::public_types(), 'post_status'=>'publish', 'numberposts'=>1000, 'fields'=>'ids']);
         $applied = 0; $skipped = 0;
         foreach ($posts as $pid) {
-            if (self::is_noindex((int)$pid)) { $skipped++; continue; }
+            if (self::is_excluded((int)$pid)) { $skipped++; continue; }
             if (self::get((int)$pid) !== '') { $skipped++; continue; } // keep existing
             $url = get_permalink($pid);
             $kw = $wpdb->get_var($wpdb->prepare(

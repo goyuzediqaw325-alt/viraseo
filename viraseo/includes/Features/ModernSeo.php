@@ -25,7 +25,8 @@ class ModernSeo {
 
     private function posts(int $limit = 400): array {
         global $wpdb;
-        return $wpdb->get_results("SELECT ID,post_title,post_content,post_modified FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT {$limit}");
+        $rows = $wpdb->get_results("SELECT ID,post_title,post_content,post_modified FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT {$limit}");
+        return array_values(array_filter($rows, fn($p) => !TargetKeywords::is_excluded((int)$p->ID)));
     }
 
     private function gsc_impr_map(): array {

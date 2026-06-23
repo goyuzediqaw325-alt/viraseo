@@ -54,6 +54,7 @@ class Opportunities {
 
         $rows = [];
         foreach ($gsc as $pid => $g) {
+            if (\ViraSEO\Features\TargetKeywords::is_excluded((int)$pid)) continue;
             $in = $inlinks[$pid] ?? 0;
             // Opportunity = decent impressions but ≤ 3 internal inbound links
             if ($g['impr'] < 50 || $in > 3) continue;
@@ -86,6 +87,7 @@ class Opportunities {
 
         $rows = [];
         foreach ($posts as $p) {
+            if (\ViraSEO\Features\TargetKeywords::is_excluded((int)$p->ID)) continue;
             $wc = PersianText::word_count(wp_strip_all_tags($p->post_content));
             if ($wc >= $threshold) continue;
             $impr = $gsc[$p->ID]['impr'] ?? 0;

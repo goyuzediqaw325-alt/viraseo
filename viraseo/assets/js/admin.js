@@ -562,12 +562,12 @@ $(document).on('click', '#vs-load-clusters', function(){
         const $l = $('#vs-clusters-list').empty();
         if (!r.data.clusters.length) { $l.html('<div class="vs-empty">خوشه‌ای یافت نشد (حداقل ۲ صفحه با موضوع مشترک لازم است).</div>'); return; }
         r.data.clusters.forEach((c, ci) => {
-            let memberOpts = c.members.map(m => '<option value="'+m.id+'">'+m.title+'</option>').join('');
-            let members = c.members.map(m => '<li><label><input type="checkbox" class="vs-cl-mem" data-cl="'+ci+'" value="'+m.id+'" '+(m.linked?'disabled checked':'')+'> <a href="'+m.url+'" target="_blank">'+m.title+'</a> '+(m.linked?'<span class="vs-badge vs-badge-green">لینک‌شده</span>':'')+'</label></li>').join('');
+            let memberOpts = c.members.map(m => '<option value="'+m.id+'">'+m.title+' ['+m.type+']</option>').join('');
+            let members = c.members.map(m => '<li><label><input type="checkbox" class="vs-cl-mem" data-cl="'+ci+'" value="'+m.id+'" '+(m.linked?'disabled checked':'')+'> <a href="'+m.url+'" target="_blank">'+m.title+'</a> <span class="vs-type-tag">'+m.type+'</span> '+(m.linked?'<span class="vs-badge vs-badge-green">لینک‌شده</span>':'')+'</label></li>').join('');
             const covColor = c.coverage >= 66 ? 'green' : (c.coverage >= 33 ? 'orange' : 'red');
             $l.append('<div class="vs-cluster" data-cl="'+ci+'" data-pillar="'+c.pillar_id+'">'
                 + '<div class="vs-cluster-head"><span class="vs-badge vs-badge-blue">'+c.keyword+'</span> <span class="vs-cluster-count">'+c.count+' صفحه</span> <span class="vs-badge vs-badge-'+covColor+'">پوشش سیلو: '+c.coverage+'%</span> <span class="vs-cluster-count">👁️ '+c.impressions+' نمایش</span></div>'
-                + '<div class="vs-cluster-pillar">🏛️ ستون (Pillar): <select class="vs-input vs-cl-pillar" data-cl="'+ci+'" style="max-width:280px;display:inline-block"><option value="'+c.pillar.id+'">'+c.pillar.title+' (پیشنهادی)</option>'+memberOpts+'</select> <a href="'+c.pillar.url+'" target="_blank">↗</a></div>'
+                + '<div class="vs-cluster-pillar">🏛️ ستون (Pillar): <select class="vs-input vs-cl-pillar" data-cl="'+ci+'" style="max-width:320px;display:inline-block"><option value="'+c.pillar.id+'">'+c.pillar.title+' ['+c.pillar.type+'] (پیشنهادی)</option>'+memberOpts+'</select> <a href="'+c.pillar.url+'" target="_blank">↗</a></div>'
                 + '<ul class="vs-cluster-members vs-cluster-members-list">'+members+'</ul>'
                 + '<div class="vs-row"><button class="vs-btn vs-btn-sm vs-btn-primary vs-cl-link" data-cl="'+ci+'">🔗 لینک اعضای انتخابی به ستون</button><label class="vs-hint"><input type="checkbox" class="vs-cl-all" data-cl="'+ci+'"> انتخاب همه</label></div>'
                 + '</div>');
@@ -988,7 +988,7 @@ function loadTargets() {
             let intentCell = o.serp_intent ? ('<span class="vs-badge vs-badge-blue">'+o.serp_intent.label+'</span>'+(o.serp_intent.avg_words?'<br><small style="color:var(--vs-text-muted)">میانگین کلمات رقبا: '+o.serp_intent.avg_words+'</small>':'')+(o.serp_intent.rec?'<br><small style="color:var(--vs-text-muted)">'+o.serp_intent.rec+'</small>':'')) : '<span class="vs-empty">هنوز تحلیل نشده</span>';
             $t.append('<tr>'
                 + '<td><a href="'+o.edit+'">'+o.title+'</a><br><small style="color:var(--vs-text-muted)">'+o.type+'</small></td>'
-                + '<td><input type="text" class="vs-input vs-tg-kw" data-id="'+o.id+'" value="'+escAttr(o.current)+'" style="min-width:160px" placeholder="کلمه هدف..."></td>'
+                + '<td><input type="text" class="vs-input vs-tg-kw" data-id="'+o.id+'" value="'+escAttr(o.current)+'" style="min-width:160px" placeholder="کلمه هدف اصلی..."><input type="text" class="vs-input vs-tg-sec" data-id="'+o.id+'" value="'+escAttr((o.secondary||[]).join('، '))+'" style="min-width:160px;margin-top:4px;font-size:11px" placeholder="کلمات فرعی (با کاما)..."></td>'
                 + '<td><span class="vs-badge vs-badge-blue">'+o.source+'</span></td>'
                 + '<td>'+linkScoreBar(o.link_score)+'</td>'
                 + '<td style="font-size:11px">'+stats+'</td>'
@@ -1023,9 +1023,11 @@ $(document).on('click', '.vs-tg-use', function(){
 });
 $(document).on('click', '.vs-tg-save', function(){
     const id = $(this).data('id');
-    const kw = $(this).closest('tr').find('.vs-tg-kw').val();
+    const $row = $(this).closest('tr');
+    const kw = $row.find('.vs-tg-kw').val();
+    const sec = $row.find('.vs-tg-sec').val();
     const $b = $(this).prop('disabled', true).text('...');
-    post('viraseo_target_save', {id: id, keyword: kw}, r => {
+    post('viraseo_target_save', {id: id, keyword: kw, secondary: sec}, r => {
         $b.prop('disabled', false).text('ذخیره');
         if (r.success) toast('کلمه هدف ذخیره شد','success'); else toast(r.data,'err');
         loadTargets();

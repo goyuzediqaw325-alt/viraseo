@@ -268,24 +268,31 @@ class InternalSilo {
         return ['content'=>implode('', $tokens), 'inserted'=>$inserted];
     }
 
-    /** Topical clustering: group pages that share a significant keyword token (silo view). */
+    /** Topical clustering: group pages that share significant keyword tokens — across ALL post types. */
     public function ajax_clusters(): void {
         check_ajax_referer('viraseo_nonce','nonce');
         global $wpdb;
-        $posts = $wpdb->get_results("SELECT ID,post_title,post_content FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT 600");
+        // ALL public types (product, post, page, landing CPTs...) — clustering is NOT bounded by type.
+        $types = \ViraSEO\Features\TargetKeywords::public_types();
+        $in = "'" . implode("','", array_map('esc_sql', $types)) . "'";
+        $raw = $wpdb->get_results("SELECT ID,post_title,post_content,post_type FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ({$in}) LIMIT 800");
+        $posts = [];
+        foreach ($raw as $p) { if (!\ViraSEO\Features\TargetKeywords::is_excluded((int)$p->ID)) $posts[] = $p; }
         if (count($posts) < 2) { wp_send_json_success(['clusters'=>[]]); return; }
 
-        // Build a token set per post (target keyword tokens + top content keywords) and document frequency.
+        // Token set per post: target keywords (primary+secondary, tokenized) weighted higher + top content keywords.
         $tokens = []; $meta = []; $df = [];
         foreach ($posts as $p) {
             $set = [];
-            $tk = TargetKeywords::get((int)$p->ID);
-            foreach (PersianText::tokenize($tk) as $t) if (mb_strlen($t) > 2) $set[$t] = true;
+            foreach (\ViraSEO\Features\TargetKeywords::get_all((int)$p->ID) as $kwphrase) {
+                foreach (PersianText::tokenize($kwphrase) as $t) if (mb_strlen($t) > 2) $set[$t] = true;
+            }
             foreach (array_keys(PersianText::extract_keywords(wp_strip_all_tags($p->post_content).' '.$p->post_title, 8)) as $t) {
                 if (mb_strlen($t) > 2) $set[$t] = true;
             }
             $tokens[$p->ID] = $set;
-            $meta[$p->ID] = ['id'=>$p->ID, 'title'=>$p->post_title ?: get_the_title($p->ID), 'len'=>mb_strlen(wp_strip_all_tags($p->post_content))];
+            $pt = get_post_type_object($p->post_type);
+            $meta[$p->ID] = ['id'=>(int)$p->ID, 'title'=>$p->post_title ?: get_the_title($p->ID), 'len'=>mb_strlen(wp_strip_all_tags($p->post_content)), 'type'=>$pt ? $pt->labels->singular_name : $p->post_type];
             foreach (array_keys($set) as $t) $df[$t] = ($df[$t] ?? 0) + 1;
         }
 
@@ -341,9 +348,9 @@ class InternalSilo {
                 'coverage'=>$coverage,
                 'impressions'=>PersianText::format_number($clusterImpr),
                 'pillar_id'=>$pid,
-                'pillar'=>['id'=>$pid, 'title'=>$pillar['title'], 'url'=>get_permalink($pid), 'edit'=>get_edit_post_link($pid,'raw')],
+                'pillar'=>['id'=>$pid, 'title'=>$pillar['title'], 'type'=>$pillar['type'], 'url'=>get_permalink($pid), 'edit'=>get_edit_post_link($pid,'raw')],
                 'members'=>array_map(fn($m)=>[
-                    'id'=>$m['id'], 'title'=>$m['title'], 'url'=>get_permalink($m['id']),
+                    'id'=>$m['id'], 'title'=>$m['title'], 'type'=>$m['type'], 'url'=>get_permalink($m['id']),
                     'linked'=> isset($pairs[$m['id'] . '-' . $pid]),
                 ], $rest),
             ];
@@ -458,13 +465,13 @@ class InternalSilo {
         $posts = $wpdb->get_results("SELECT ID,post_title,post_content FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT 300");
         if (count($posts)<2) return ['count'=>0,'attempted'=>0,'error'=>''];
 
-        // Pre-compute normalized text + keyword sets + target keyword per post
+        // Pre-compute normalized text + keyword sets + ALL target keywords (primary+secondary) per post
         $norm = []; $cache = []; $target = [];
         foreach ($posts as $p) {
             $text = wp_strip_all_tags($p->post_content) . ' ' . $p->post_title;
             $norm[$p->ID] = PersianText::normalize(mb_strtolower($text));
             $cache[$p->ID] = PersianText::extract_keywords($text, 25);
-            $target[$p->ID] = PersianText::normalize(mb_strtolower(TargetKeywords::get((int)$p->ID)));
+            $target[$p->ID] = array_slice(array_map(fn($k)=>mb_strtolower($k), TargetKeywords::get_all((int)$p->ID)), 0, 3);
         }
 
         $count = 0; $attempted = 0; $error = '';
@@ -478,29 +485,32 @@ class InternalSilo {
             $count++; return true;
         };
 
-        // ===== PASS 1 & 2: keyword-targeted linking (EXACT + PARTIAL) =====
+        // ===== PASS 1 & 2: keyword-targeted linking (EXACT + PARTIAL) — uses primary + secondary keywords =====
         foreach ($posts as $b) {
             if ($count >= 200) break;
-            $kw = $target[$b->ID];
-            if ($kw === '' || mb_strlen($kw) < 3) continue;
-            $kwTokens = array_values(array_filter(PersianText::tokenize($kw), fn($w)=>mb_strlen($w) > 2));
-            $tokenCount = count($kwTokens);
-            foreach ($posts as $a) {
+            if (TargetKeywords::is_excluded((int)$b->ID)) continue; // skip cart/checkout/account/noindex targets
+            foreach ($target[$b->ID] as $kw) {
                 if ($count >= 200) break;
-                if ($a->ID === $b->ID) continue;
-                $content = $norm[$a->ID];
+                if ($kw === '' || mb_strlen($kw) < 3) continue;
+                $kwTokens = array_values(array_filter(PersianText::tokenize($kw), fn($w)=>mb_strlen($w) > 2));
+                $tokenCount = count($kwTokens);
+                $isPrimary = ($kw === ($target[$b->ID][0] ?? ''));
+                foreach ($posts as $a) {
+                    if ($count >= 200) break;
+                    if ($a->ID === $b->ID) continue;
+                    $content = $norm[$a->ID];
+                    $tag = $isPrimary ? '' : ' (فرعی)';
 
-                if (mb_strpos($content, $kw) !== false) {
-                    // EXACT: source contains the full target keyword phrase
-                    $freq = substr_count($content, $kw);
-                    $insert($a->ID, $b->ID, $kw, min(100, 80 + $freq * 4), 'exact', 'تطابق دقیق: متن مبدا شامل عبارت کامل «'.$kw.'» است.');
-                } elseif ($tokenCount >= 2) {
-                    // PARTIAL: source contains a significant share of the keyword's words
-                    $hit = 0;
-                    foreach ($kwTokens as $tok) if (mb_strpos($content, $tok) !== false) $hit++;
-                    $coverage = $hit / $tokenCount;
-                    if ($coverage >= 0.6) {
-                        $insert($a->ID, $b->ID, $kw, round(40 + $coverage * 30, 1), 'partial', 'تطابق جزئی: '.$hit.' از '.$tokenCount.' کلمه‌ی عبارت هدف در متن مبدا هست.');
+                    if (mb_strpos($content, $kw) !== false) {
+                        $freq = substr_count($content, $kw);
+                        $insert($a->ID, $b->ID, $kw, min(100, ($isPrimary?80:70) + $freq * 4), 'exact', 'تطابق دقیق'.$tag.': متن مبدا شامل عبارت کامل «'.$kw.'» است.');
+                    } elseif ($tokenCount >= 2) {
+                        $hit = 0;
+                        foreach ($kwTokens as $tok) if (mb_strpos($content, $tok) !== false) $hit++;
+                        $coverage = $hit / $tokenCount;
+                        if ($coverage >= 0.6) {
+                            $insert($a->ID, $b->ID, $kw, round(40 + $coverage * 30, 1), 'partial', 'تطابق جزئی'.$tag.': '.$hit.' از '.$tokenCount.' کلمه‌ی عبارت هدف در متن مبدا هست.');
+                        }
                     }
                 }
             }
