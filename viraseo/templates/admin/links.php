@@ -36,6 +36,7 @@
       <button class="vs-chip" data-type="exact">🎯 دقیق <span id="vs-cnt-exact">0</span></button>
       <button class="vs-chip" data-type="partial">🧩 جزئی <span id="vs-cnt-partial">0</span></button>
       <button class="vs-chip" data-type="semantic">🔗 معنایی <span id="vs-cnt-semantic">0</span></button>
+      <select class="vs-input vs-type-filter" id="vs-sugg-type" style="max-width:200px;margin-right:8px;"><option value="all">همه نوع‌ها</option></select>
     </div>
     <div id="vs-suggestions-list"></div>
   </div>

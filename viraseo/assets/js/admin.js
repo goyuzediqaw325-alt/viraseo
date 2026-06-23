@@ -453,7 +453,7 @@ function loadOrphans() {
     });
 }
 function loadSuggestions() {
-    post('viraseo_get_suggestions', {type: window._vsSuggType||''}, r => {
+    post('viraseo_get_suggestions', {type: window._vsSuggType||'', post_type: $('#vs-sugg-type').val()||'all'}, r => {
         if (!r.success) return;
         const $c = $('#vs-suggestions-list').empty();
         if (r.data.counts) {
@@ -462,6 +462,7 @@ function loadSuggestions() {
             $('#vs-cnt-partial').text(r.data.counts.partial||0);
             $('#vs-cnt-semantic').text(r.data.counts.semantic||0);
         }
+        if (r.data.types) vsFillTypes('#vs-sugg-type', r.data.types);
         if (!r.data.rows.length) { $c.html('<div class="vs-empty">پیشنهادی در این دسته نیست.</div>'); return; }
         const typeColor = {exact:'green', partial:'blue', semantic:'orange'};
         r.data.rows.forEach(s => {
@@ -473,9 +474,9 @@ function loadSuggestions() {
                     <span class="vs-suggestion-pct">${Math.round(s.score)}%</span>
                 </div>
                 <div class="vs-suggestion-flow">
-                    <div class="vs-flow-node"><small>از (مبدا):</small><a href="${s.source_edit}" target="_blank">${s.source}</a></div>
+                    <div class="vs-flow-node"><small>از (مبدا):</small><a href="${s.source_edit}" target="_blank">${s.source}</a> <span class="vs-type-tag">${s.source_type}</span></div>
                     <span class="vs-flow-arrow">→</span>
-                    <div class="vs-flow-node"><small>به (مقصد):</small><a href="${s.target_url}" target="_blank">${s.target}</a></div>
+                    <div class="vs-flow-node"><small>به (مقصد):</small><a href="${s.target_url}" target="_blank">${s.target}</a> <span class="vs-type-tag">${s.target_type}</span></div>
                 </div>
                 <div class="vs-suggestion-anchor-row">انکر پیشنهادی: <span class="vs-suggestion-anchor">${s.anchor}</span></div>
                 <div class="vs-suggestion-reason">${s.reason||''}</div>
@@ -484,6 +485,7 @@ function loadSuggestions() {
         });
     });
 }
+$(document).on('change', '#vs-sugg-type', loadSuggestions);
 $(document).on('click', '#vs-sugg-filters .vs-chip', function(){
     $(this).addClass('active').siblings().removeClass('active');
     window._vsSuggType = $(this).data('type') || '';

@@ -141,28 +141,47 @@ class InternalSilo {
         check_ajax_referer('viraseo_nonce','nonce');
         global $wpdb;
         $type = sanitize_text_field($_POST['type'] ?? '');
+        $ptype = sanitize_text_field($_POST['post_type'] ?? '');
         $where = "status='pending'";
         if (in_array($type, ['exact','partial','semantic'], true)) $where .= $wpdb->prepare(" AND match_type=%s", $type);
-        $rows = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}viraseo_link_suggestions WHERE {$where} ORDER BY FIELD(match_type,'exact','partial','semantic'), score DESC LIMIT 80");
+        // Fetch a larger set so we can filter by post type in PHP, then cap to 100
+        $rows = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}viraseo_link_suggestions WHERE {$where} ORDER BY FIELD(match_type,'exact','partial','semantic'), score DESC LIMIT 500");
         $labels = ['exact'=>'دقیق','partial'=>'جزئی','semantic'=>'معنایی'];
-        $data = array_map(fn($r)=>[
-            'id'=>$r->id,
-            'source'=>get_the_title($r->source_id) ?: '(بدون عنوان)',
-            'source_edit'=>get_edit_post_link($r->source_id,'raw'),
-            'source_url'=>get_permalink($r->source_id),
-            'target'=>get_the_title($r->target_id) ?: '(بدون عنوان)',
-            'target_url'=>get_permalink($r->target_id),
-            'target_edit'=>get_edit_post_link($r->target_id,'raw'),
-            'anchor'=>$r->anchor,'score'=>(float)$r->score,'reason'=>$r->reason,
-            'type'=>$r->match_type ?: 'semantic',
-            'type_label'=>$labels[$r->match_type ?? 'semantic'] ?? 'معنایی',
-        ], $rows);
-        // Counts per type for the filter chips
+        $tlabel = function($id){ $o = get_post_type_object(get_post_type($id)); return $o ? $o->labels->singular_name : get_post_type($id); };
+
+        $data = [];
+        foreach ($rows as $r) {
+            $src_type = get_post_type($r->source_id);
+            $tgt_type = get_post_type($r->target_id);
+            // Filter: match if EITHER source or target is the selected type
+            if ($ptype && $ptype !== 'all' && $src_type !== $ptype && $tgt_type !== $ptype) continue;
+            $data[] = [
+                'id'=>$r->id,
+                'source'=>get_the_title($r->source_id) ?: '(بدون عنوان)',
+                'source_edit'=>get_edit_post_link($r->source_id,'raw'),
+                'source_url'=>get_permalink($r->source_id),
+                'source_type'=>$tlabel($r->source_id),
+                'target'=>get_the_title($r->target_id) ?: '(بدون عنوان)',
+                'target_url'=>get_permalink($r->target_id),
+                'target_edit'=>get_edit_post_link($r->target_id,'raw'),
+                'target_type'=>$tlabel($r->target_id),
+                'anchor'=>$r->anchor,'score'=>(float)$r->score,'reason'=>$r->reason,
+                'type'=>$r->match_type ?: 'semantic',
+                'type_label'=>$labels[$r->match_type ?? 'semantic'] ?? 'معنایی',
+            ];
+            if (count($data) >= 100) break;
+        }
+        // Counts per match type for the filter chips
         $counts = ['all'=>0,'exact'=>0,'partial'=>0,'semantic'=>0];
         foreach ($wpdb->get_results("SELECT match_type, COUNT(*) c FROM {$wpdb->prefix}viraseo_link_suggestions WHERE status='pending' GROUP BY match_type") as $c) {
             $counts[$c->match_type] = (int)$c->c; $counts['all'] += (int)$c->c;
         }
-        wp_send_json_success(['rows'=>$data, 'counts'=>$counts]);
+        $type_objs = [];
+        foreach (\ViraSEO\Features\TargetKeywords::public_types() as $t) {
+            $o = get_post_type_object($t);
+            $type_objs[] = ['slug'=>$t, 'label'=>$o ? $o->labels->name : $t];
+        }
+        wp_send_json_success(['rows'=>$data, 'counts'=>$counts, 'types'=>$type_objs]);
     }
 
     public function ajax_accept(): void {
