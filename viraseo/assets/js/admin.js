@@ -933,28 +933,30 @@ $(document).on('click', '#vs-load-insights', function(){
 // === SEO OPPORTUNITIES ===
 $(document).on('click', '#vs-load-linkopp', function(){
     const $b = $(this).prop('disabled', true);
-    $('#vs-linkopp-tbody').html('<tr><td colspan="6" class="vs-empty">در حال محاسبه...</td></tr>');
-    post('viraseo_link_opportunities', {}, r => {
+    $('#vs-linkopp-tbody').html('<tr><td colspan="7" class="vs-empty">در حال محاسبه...</td></tr>');
+    post('viraseo_link_opportunities', {post_type: $('#vs-linkopp-type').val()||'all'}, r => {
         $b.prop('disabled', false);
         const $t = $('#vs-linkopp-tbody').empty();
-        if (!r.success) { $t.html('<tr><td colspan="6" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
-        if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">🎉 فرصت پرپتانسیلی یافت نشد (همه صفحات پربازدید لینک کافی دارند).</td></tr>'); return; }
+        if (!r.success) { $t.html('<tr><td colspan="7" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        vsFillTypes('#vs-linkopp-type', r.data.types);
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="7" class="vs-empty">🎉 فرصت پرپتانسیلی یافت نشد (همه صفحات پربازدید لینک کافی دارند).</td></tr>'); return; }
         r.data.rows.forEach(o => {
-            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><strong style="color:var(--vs-success)">'+o.impressions+'</strong></td><td>'+o.clicks+'</td><td>'+o.position+'</td><td><span class="vs-badge vs-badge-'+(o.inlinks_raw===0?'red':'orange')+'">'+o.inlinks+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td><strong style="color:var(--vs-success)">'+o.impressions+'</strong></td><td>'+o.clicks+'</td><td>'+o.position+'</td><td><span class="vs-badge vs-badge-'+(o.inlinks_raw===0?'red':'orange')+'">'+o.inlinks+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
         });
     });
 });
 $(document).on('click', '#vs-load-thin', function(){
     const $b = $(this).prop('disabled', true);
     $('#vs-thin-tbody').html('<tr><td colspan="6" class="vs-empty">در حال بررسی...</td></tr>');
-    post('viraseo_thin_content', {threshold: $('#vs-thin-threshold').val()}, r => {
+    post('viraseo_thin_content', {threshold: $('#vs-thin-threshold').val(), post_type: $('#vs-thin-type').val()||'all'}, r => {
         $b.prop('disabled', false);
         const $t = $('#vs-thin-tbody').empty();
         if (!r.success) { $t.html('<tr><td colspan="6" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        vsFillTypes('#vs-thin-type', r.data.types);
         if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">🎉 محتوای ضعیفی یافت نشد.</td></tr>'); return; }
         r.data.rows.forEach(o => {
             const pc = o.priority === 'بالا' ? 'red' : (o.priority === 'متوسط' ? 'orange' : 'blue');
-            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td>'+o.type+'</td><td><strong style="color:'+(o.words<150?'#ef4444':'#f59e0b')+'">'+o.words_fa+'</strong></td><td>'+o.impressions+'</td><td><span class="vs-badge vs-badge-'+pc+'">'+o.priority+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بازنویسی</a></td></tr>');
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td><strong style="color:'+(o.words<150?'#ef4444':'#f59e0b')+'">'+o.words_fa+'</strong></td><td>'+o.impressions+'</td><td><span class="vs-badge vs-badge-'+pc+'">'+o.priority+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بازنویسی</a></td></tr>');
         });
     });
 });
@@ -1071,45 +1073,49 @@ $(document).on('click', '.vs-woo-autolink', function(){
 });
 
 // === MODERN SEO 2026 ===
+function vsFillTypes(sel, types){ const $s=$(sel); if($s.data('filled')||!types)return; types.forEach(t=>$s.append('<option value="'+t.slug+'">'+t.label+'</option>')); $s.data('filled',true); }
 $(document).on('click', '#vs-ai-load', function(){
     const $b = $(this).prop('disabled', true);
-    $('#vs-ai-tbody').html('<tr><td colspan="4" class="vs-empty">در حال تحلیل...</td></tr>');
-    post('viraseo_ai_readiness', {}, r => {
+    $('#vs-ai-tbody').html('<tr><td colspan="5" class="vs-empty">در حال تحلیل...</td></tr>');
+    post('viraseo_ai_readiness', {post_type: $('#vs-ai-type').val()||'all'}, r => {
         $b.prop('disabled', false);
         const $t = $('#vs-ai-tbody').empty();
-        if (!r.success) { $t.html('<tr><td colspan="4" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
-        if (!r.data.rows.length) { $t.html('<tr><td colspan="4" class="vs-empty">🎉 همه صفحات از نظر آمادگی AI خوب هستند.</td></tr>'); return; }
+        if (!r.success) { $t.html('<tr><td colspan="5" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        vsFillTypes('#vs-ai-type', r.data.types);
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="5" class="vs-empty">🎉 همه صفحات از نظر آمادگی AI خوب هستند.</td></tr>'); return; }
         r.data.rows.forEach(o => {
             const tips = o.tips.map(t=>'<li>'+t+'</li>').join('');
-            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td>'+linkScoreBar(o.score)+'</td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+tips+'</ul></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بهبود</a></td></tr>');
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+linkScoreBar(o.score)+'</td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+tips+'</ul></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بهبود</a></td></tr>');
         });
     });
 });
 $(document).on('click', '#vs-fresh-load', function(){
     const $b = $(this).prop('disabled', true);
-    $('#vs-fresh-tbody').html('<tr><td colspan="6" class="vs-empty">در حال بررسی...</td></tr>');
-    post('viraseo_freshness', {months: $('#vs-fresh-months').val()}, r => {
+    $('#vs-fresh-tbody').html('<tr><td colspan="7" class="vs-empty">در حال بررسی...</td></tr>');
+    post('viraseo_freshness', {months: $('#vs-fresh-months').val(), post_type: $('#vs-fresh-type').val()||'all'}, r => {
         $b.prop('disabled', false);
         const $t = $('#vs-fresh-tbody').empty();
-        if (!r.success) { $t.html('<tr><td colspan="6" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
-        if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">محتوای کهنه‌ای یافت نشد.</td></tr>'); return; }
+        if (!r.success) { $t.html('<tr><td colspan="7" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        vsFillTypes('#vs-fresh-type', r.data.types);
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="7" class="vs-empty">محتوای کهنه‌ای یافت نشد.</td></tr>'); return; }
         r.data.rows.forEach(o => {
             const pc = o.priority==='بالا'?'red':(o.priority==='متوسط'?'orange':'blue');
-            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td>'+o.modified+'</td><td>'+o.age+'</td><td>'+o.impressions+'</td><td><span class="vs-badge vs-badge-'+pc+'">'+o.priority+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">به‌روزرسانی</a></td></tr>');
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+o.modified+'</td><td>'+o.age+'</td><td>'+o.impressions+'</td><td><span class="vs-badge vs-badge-'+pc+'">'+o.priority+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">به‌روزرسانی</a></td></tr>');
         });
     });
 });
 $(document).on('click', '#vs-fa-load', function(){
     const $b = $(this).prop('disabled', true);
-    $('#vs-fa-tbody').html('<tr><td colspan="3" class="vs-empty">در حال بررسی...</td></tr>');
-    post('viraseo_persian_quality', {}, r => {
+    $('#vs-fa-tbody').html('<tr><td colspan="4" class="vs-empty">در حال بررسی...</td></tr>');
+    post('viraseo_persian_quality', {post_type: $('#vs-fa-type').val()||'all'}, r => {
         $b.prop('disabled', false);
         const $t = $('#vs-fa-tbody').empty();
-        if (!r.success) { $t.html('<tr><td colspan="3" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
-        if (!r.data.rows.length) { $t.html('<tr><td colspan="3" class="vs-empty">🎉 مشکل نگارشی مهمی یافت نشد.</td></tr>'); return; }
+        if (!r.success) { $t.html('<tr><td colspan="4" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        vsFillTypes('#vs-fa-type', r.data.types);
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="4" class="vs-empty">🎉 مشکل نگارشی مهمی یافت نشد.</td></tr>'); return; }
         r.data.rows.forEach(o => {
             const issues = o.issues.map(i=>'<li>'+i+'</li>').join('');
-            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+issues+'</ul></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+issues+'</ul></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
         });
     });
 });

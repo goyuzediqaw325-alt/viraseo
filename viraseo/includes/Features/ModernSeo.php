@@ -25,8 +25,32 @@ class ModernSeo {
 
     private function posts(int $limit = 400): array {
         global $wpdb;
-        $rows = $wpdb->get_results("SELECT ID,post_title,post_content,post_modified FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT {$limit}");
+        $types = $this->req_types();
+        $in = "'" . implode("','", array_map('esc_sql', $types)) . "'";
+        $rows = $wpdb->get_results("SELECT ID,post_title,post_content,post_modified,post_type FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ({$in}) LIMIT {$limit}");
         return array_values(array_filter($rows, fn($p) => !TargetKeywords::is_excluded((int)$p->ID)));
+    }
+
+    /** Post types from the request filter, defaulting to all public types. */
+    private function req_types(): array {
+        $pt = sanitize_text_field($_POST['post_type'] ?? '');
+        $all = TargetKeywords::public_types();
+        return ($pt && $pt !== 'all' && in_array($pt, $all, true)) ? [$pt] : $all;
+    }
+
+    /** Public post types for the filter dropdown. */
+    public static function type_options(): array {
+        $out = [];
+        foreach (TargetKeywords::public_types() as $t) {
+            $o = get_post_type_object($t);
+            $out[] = ['slug'=>$t, 'label'=>$o ? $o->labels->name : $t];
+        }
+        return $out;
+    }
+
+    private function type_label(int $pid): string {
+        $o = get_post_type_object(get_post_type($pid));
+        return $o ? $o->labels->singular_name : get_post_type($pid);
     }
 
     private function gsc_impr_map(): array {
@@ -69,13 +93,13 @@ class ModernSeo {
 
             if ($score >= 75) continue; // already good — show only pages needing work
             $rows[] = [
-                'id'=>$p->ID, 'title'=>$p->post_title ?: '(بدون عنوان)',
+                'id'=>$p->ID, 'title'=>$p->post_title ?: '(بدون عنوان)', 'type'=>$this->type_label($p->ID),
                 'url'=>get_permalink($p->ID), 'edit'=>get_edit_post_link($p->ID,'raw'),
                 'score'=>$score, 'tips'=>array_slice($tips, 0, 4),
             ];
         }
         usort($rows, fn($a,$b)=>$a['score']<=>$b['score']);
-        wp_send_json_success(['rows'=>array_slice($rows, 0, 300)]);
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'types'=>self::type_options()]);
     }
 
     /** Content freshness — stale pages that still rank (have impressions) → refresh ROI. */
@@ -92,7 +116,7 @@ class ModernSeo {
             $i = $impr[$p->ID] ?? 0;
             $age = (int) floor((time() - $mod) / 2629800); // months
             $rows[] = [
-                'id'=>$p->ID, 'title'=>$p->post_title ?: '(بدون عنوان)',
+                'id'=>$p->ID, 'title'=>$p->post_title ?: '(بدون عنوان)', 'type'=>$this->type_label($p->ID),
                 'url'=>get_permalink($p->ID), 'edit'=>get_edit_post_link($p->ID,'raw'),
                 'modified'=>JalaliDate::format($p->post_modified, 'long'),
                 'age'=>JalaliDate::to_fa((string)$age),
@@ -101,7 +125,7 @@ class ModernSeo {
             ];
         }
         usort($rows, fn($a,$b)=>$b['impr_raw']<=>$a['impr_raw']);
-        wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'months'=>$months]);
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'months'=>$months, 'types'=>self::type_options()]);
     }
 
     /** Persian text quality — ZWNJ (نیم‌فاصله), Arabic characters, readability. */
@@ -134,14 +158,14 @@ class ModernSeo {
 
             if (!$issues) continue;
             $rows[] = [
-                'id'=>$p->ID, 'title'=>$p->post_title ?: '(بدون عنوان)',
+                'id'=>$p->ID, 'title'=>$p->post_title ?: '(بدون عنوان)', 'type'=>$this->type_label($p->ID),
                 'edit'=>get_edit_post_link($p->ID,'raw'), 'url'=>get_permalink($p->ID),
                 'issues'=>array_map(fn($x)=>$x['type'].' ('.JalaliDate::to_fa((string)$x['count']).')'.' — '.$x['hint'], $issues),
                 'count'=>count($issues),
             ];
         }
         usort($rows, fn($a,$b)=>$b['count']<=>$a['count']);
-        wp_send_json_success(['rows'=>array_slice($rows, 0, 300)]);
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'types'=>self::type_options()]);
     }
 
     /** Build llms.txt content (markdown) listing key pages to guide AI crawlers. */

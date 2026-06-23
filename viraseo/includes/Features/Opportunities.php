@@ -44,6 +44,24 @@ class Opportunities {
         return $map;
     }
 
+    private function req_types(): array {
+        $pt = sanitize_text_field($_POST['post_type'] ?? '');
+        $all = \ViraSEO\Features\TargetKeywords::public_types();
+        return ($pt && $pt !== 'all' && in_array($pt, $all, true)) ? [$pt] : $all;
+    }
+    public static function type_options(): array {
+        $out = [];
+        foreach (\ViraSEO\Features\TargetKeywords::public_types() as $t) {
+            $o = get_post_type_object($t);
+            $out[] = ['slug'=>$t, 'label'=>$o ? $o->labels->name : $t];
+        }
+        return $out;
+    }
+    private function type_label(int $pid): string {
+        $o = get_post_type_object(get_post_type($pid));
+        return $o ? $o->labels->singular_name : get_post_type($pid);
+    }
+
     public function ajax_link_opportunities(): void {
         check_ajax_referer('viraseo_nonce', 'nonce');
         if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
@@ -51,16 +69,19 @@ class Opportunities {
         $gsc = $this->gsc_by_post();
         if (!$gsc) wp_send_json_error('ابتدا داده‌های سرچ کنسول را همگام‌سازی و سپس «اسکن لینک‌ها» را اجرا کنید.');
         $inlinks = $this->inlinks_by_post();
+        $types = $this->req_types();
 
         $rows = [];
         foreach ($gsc as $pid => $g) {
             if (\ViraSEO\Features\TargetKeywords::is_excluded((int)$pid)) continue;
+            if (!in_array(get_post_type($pid), $types, true)) continue;
             $in = $inlinks[$pid] ?? 0;
             // Opportunity = decent impressions but ≤ 3 internal inbound links
             if ($g['impr'] < 50 || $in > 3) continue;
             $rows[] = [
                 'id'=>$pid,
                 'title'=>get_the_title($pid) ?: '(بدون عنوان)',
+                'type'=>$this->type_label((int)$pid),
                 'url'=>get_permalink($pid),
                 'edit'=>get_edit_post_link($pid, 'raw'),
                 'impr_raw'=>$g['impr'],
@@ -73,7 +94,7 @@ class Opportunities {
         }
         // Highest impressions + fewest links first (biggest opportunity)
         usort($rows, fn($a, $b) => ($b['impr_raw'] <=> $a['impr_raw']));
-        wp_send_json_success(['rows'=>array_slice($rows, 0, 300)]);
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'types'=>self::type_options()]);
     }
 
     public function ajax_thin_content(): void {
@@ -83,7 +104,9 @@ class Opportunities {
 
         $threshold = max(50, absint($_POST['threshold'] ?? 300));
         $gsc = $this->gsc_by_post();
-        $posts = $wpdb->get_results("SELECT ID, post_title, post_content, post_type FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product') LIMIT 1000");
+        $types = $this->req_types();
+        $in = "'" . implode("','", array_map('esc_sql', $types)) . "'";
+        $posts = $wpdb->get_results("SELECT ID, post_title, post_content, post_type FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ({$in}) LIMIT 2000");
 
         $rows = [];
         foreach ($posts as $p) {
@@ -94,7 +117,7 @@ class Opportunities {
             $rows[] = [
                 'id'=>$p->ID,
                 'title'=>$p->post_title ?: '(بدون عنوان)',
-                'type'=>$p->post_type,
+                'type'=>$this->type_label((int)$p->ID),
                 'url'=>get_permalink($p->ID),
                 'edit'=>get_edit_post_link($p->ID, 'raw'),
                 'words'=>$wc,
@@ -106,6 +129,6 @@ class Opportunities {
         }
         // Pages that already get impressions but are thin = highest rewrite ROI
         usort($rows, fn($a, $b) => ($b['impr_raw'] <=> $a['impr_raw']) ?: ($a['words'] <=> $b['words']));
-        wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'threshold'=>$threshold]);
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'threshold'=>$threshold, 'types'=>self::type_options()]);
     }
 }

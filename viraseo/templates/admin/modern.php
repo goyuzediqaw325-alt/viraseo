@@ -16,24 +16,30 @@
     <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span>
       <p>بهینه‌سازی برای موتورهای پاسخ‌گو (AI Overviews گوگل، ChatGPT و...). صفحاتی که نیاز به بهبود دارند نمایش داده می‌شوند: پاراگراف پاسخ کوتاه، زیرعنوان‌های پرسشی، فهرست‌ها، بخش سوالات متداول و عمق محتوا.</p>
     </div>
-    <button class="vs-btn vs-btn-primary" id="vs-ai-load"><span class="dashicons dashicons-update"></span> تحلیل آمادگی AI</button>
-    <table class="vs-table" style="margin-top:12px;"><thead><tr><th>صفحه</th><th>امتیاز AI</th><th>پیشنهادها</th><th>عملیات</th></tr></thead><tbody id="vs-ai-tbody"><tr><td colspan="4" class="vs-empty">دکمه تحلیل را بزنید.</td></tr></tbody></table>
+    <div class="vs-toolbar">
+      <select class="vs-input vs-type-filter" id="vs-ai-type" style="max-width:180px;"><option value="all">همه نوع‌ها</option></select>
+      <button class="vs-btn vs-btn-primary" id="vs-ai-load"><span class="dashicons dashicons-update"></span> تحلیل آمادگی AI</button>
+    </div>
+    <table class="vs-table" style="margin-top:12px;"><thead><tr><th>صفحه</th><th>نوع</th><th>امتیاز AI</th><th>پیشنهادها</th><th>عملیات</th></tr></thead><tbody id="vs-ai-tbody"><tr><td colspan="5" class="vs-empty">دکمه تحلیل را بزنید.</td></tr></tbody></table>
   </div>
 
   <div class="vs-tab-panel" data-panel="fresh">
     <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span>
       <p>صفحاتی که مدت‌هاست به‌روز نشده‌اند ولی هنوز در گوگل نمایش می‌گیرند — به‌روزرسانی آن‌ها بیشترین تأثیر را دارد (سیگنال تازگی محتوا).</p>
     </div>
-    <div class="vs-toolbar"><label class="vs-hint">قدیمی‌تر از (ماه):</label><input type="number" class="vs-input" id="vs-fresh-months" value="6" min="1" max="48" style="max-width:90px;"><button class="vs-btn vs-btn-primary" id="vs-fresh-load">بررسی محتوای کهنه</button></div>
-    <table class="vs-table"><thead><tr><th>صفحه</th><th>آخرین به‌روزرسانی</th><th>قدمت (ماه)</th><th>نمایش GSC</th><th>اولویت</th><th>عملیات</th></tr></thead><tbody id="vs-fresh-tbody"><tr><td colspan="6" class="vs-empty">دکمه بررسی را بزنید.</td></tr></tbody></table>
+    <div class="vs-toolbar"><label class="vs-hint">قدیمی‌تر از (ماه):</label><input type="number" class="vs-input" id="vs-fresh-months" value="6" min="1" max="48" style="max-width:90px;"><select class="vs-input vs-type-filter" id="vs-fresh-type" style="max-width:180px;"><option value="all">همه نوع‌ها</option></select><button class="vs-btn vs-btn-primary" id="vs-fresh-load">بررسی محتوای کهنه</button></div>
+    <table class="vs-table"><thead><tr><th>صفحه</th><th>نوع</th><th>آخرین به‌روزرسانی</th><th>قدمت (ماه)</th><th>نمایش GSC</th><th>اولویت</th><th>عملیات</th></tr></thead><tbody id="vs-fresh-tbody"><tr><td colspan="7" class="vs-empty">دکمه بررسی را بزنید.</td></tr></tbody></table>
   </div>
 
   <div class="vs-tab-panel" data-panel="fa">
     <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span>
       <p>بررسی کیفیت نگارش فارسی: نیم‌فاصله (ZWNJ) در «می‌/نمی‌» و «ها»، حروف عربی (ي/ك) به‌جای فارسی (ی/ک)، و خوانایی (طول جملات).</p>
     </div>
-    <button class="vs-btn vs-btn-primary" id="vs-fa-load"><span class="dashicons dashicons-update"></span> بررسی کیفیت متن فارسی</button>
-    <table class="vs-table" style="margin-top:12px;"><thead><tr><th>صفحه</th><th>مشکلات نگارشی</th><th>عملیات</th></tr></thead><tbody id="vs-fa-tbody"><tr><td colspan="3" class="vs-empty">دکمه بررسی را بزنید.</td></tr></tbody></table>
+    <div class="vs-toolbar">
+      <select class="vs-input vs-type-filter" id="vs-fa-type" style="max-width:180px;"><option value="all">همه نوع‌ها</option></select>
+      <button class="vs-btn vs-btn-primary" id="vs-fa-load"><span class="dashicons dashicons-update"></span> بررسی کیفیت متن فارسی</button>
+    </div>
+    <table class="vs-table" style="margin-top:12px;"><thead><tr><th>صفحه</th><th>نوع</th><th>مشکلات نگارشی</th><th>عملیات</th></tr></thead><tbody id="vs-fa-tbody"><tr><td colspan="4" class="vs-empty">دکمه بررسی را بزنید.</td></tr></tbody></table>
   </div>
 
   <div class="vs-tab-panel" data-panel="llms">
