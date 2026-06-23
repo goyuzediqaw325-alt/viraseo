@@ -3,7 +3,7 @@
  * Plugin Name: ویرا سئو — دستیار هوشمند سئو فارسی
  * Plugin URI: https://github.com/goyuzediqaw325-alt/viraseo
  * Description: ابزار پیشرفته سئو فارسی: اتصال مستقیم به سرچ کنسول، تحلیل SERP، لینک‌سازی داخلی، بک‌لینک CRM، پیش‌بینی ترافیک و کشف کلمات کلیدی
- * Version: 3.28.0
+ * Version: 3.29.0
  * Author: ViraSEO
  * Author URI: https://github.com/goyuzediqaw325-alt
  * Text Domain: viraseo
@@ -16,7 +16,7 @@
 defined('ABSPATH') || exit;
 if (defined('VIRASEO_VERSION')) return;
 
-define('VIRASEO_VERSION', '3.28.0');
+define('VIRASEO_VERSION', '3.29.0');
 define('VIRASEO_FILE', __FILE__);
 define('VIRASEO_DIR', plugin_dir_path(__FILE__));
 define('VIRASEO_URL', plugin_dir_url(__FILE__));
@@ -63,6 +63,9 @@ add_action('plugins_loaded', function() {
     new \ViraSEO\Features\WooSeo();
     new \ViraSEO\Features\FacetedNav();
     new \ViraSEO\Features\TrafficForecaster();
+    new \ViraSEO\Features\CoreWebVitals();
+    new \ViraSEO\Features\Cannibalization();
+    new \ViraSEO\Features\CrawlHealth();
     new \ViraSEO\Features\KeywordDiscovery();
     new \ViraSEO\Features\WorkflowManager();
     new \ViraSEO\Features\Diagnostics();

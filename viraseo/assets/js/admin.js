@@ -76,6 +76,47 @@ $(function(){
         });
     });
 });
+// Action-plan customization: choose which task categories appear
+$(document).on('click', '#vs-ap-gear', function(){
+    const $p = $('#vs-ap-prefs');
+    if ($p.is(':visible')) { $p.slideUp(150); return; }
+    post('viraseo_ap_prefs', {}, r => {
+        if (!r.success) return;
+        const hidden = r.data.hidden || [];
+        const $list = $('#vs-ap-prefs-list').empty();
+        Object.keys(r.data.categories).forEach(k => {
+            const checked = hidden.indexOf(k) === -1 ? 'checked' : '';
+            $list.append('<label class="vs-ap-pref"><input type="checkbox" class="vs-ap-cb" value="'+k+'" '+checked+'> '+r.data.categories[k]+'</label>');
+        });
+        $p.slideDown(150);
+    });
+});
+$(document).on('click', '#vs-ap-save', function(){
+    const hidden = [];
+    $('#vs-ap-prefs-list .vs-ap-cb').each(function(){ if (!$(this).is(':checked')) hidden.push($(this).val()); });
+    const $b = $(this).prop('disabled', true);
+    post('viraseo_ap_prefs', {save:1, hidden:hidden}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { toast(r.data||'خطا','err'); return; }
+        toast('ذخیره شد. در حال به‌روزرسانی برنامه...','success');
+        $('#vs-ap-prefs').slideUp(150);
+        // Re-render the action plan with new prefs
+        post('viraseo_action_plan', {}, rr => {
+            if (!rr.success) return;
+            const $l = $('#vs-action-list').empty();
+            if (rr.data.done) { $l.html('<div class="vs-empty">🎉 عالی! در حال حاضر کار فوری مهمی نیست.</div>'); return; }
+            const sevColor = {critical:'red', high:'orange', warn:'orange', normal:'blue'};
+            const sc = rr.data.score, scColor = sc >= 75 ? '#10b981' : (sc >= 45 ? '#f59e0b' : '#ef4444');
+            $('#vs-health').html('<span class="vs-health-label">سلامت سئو</span><span class="vs-health-score" style="color:'+scColor+'">'+sc+'/۱۰۰</span>');
+            rr.data.tasks.forEach((t, i) => {
+                $l.append('<div class="vs-task vs-task-'+(sevColor[t.severity]||'blue')+'">'
+                    + '<div class="vs-task-num">'+(i+1)+'</div><div class="vs-task-icon">'+t.icon+'</div>'
+                    + '<div class="vs-task-body"><div class="vs-task-title">'+t.title+'</div><div class="vs-task-desc">'+t.desc+'</div></div>'
+                    + '<a class="vs-btn vs-btn-sm vs-btn-primary" href="'+t.url+'">'+t.btn+' ›</a></div>');
+            });
+        });
+    });
+});
 
 // === AI SAVED OUTPUTS ===
 function loadAiSaved() {
@@ -166,8 +207,26 @@ function vsIdxRow(o) {
     const badge = o.indexed ? '<span class="vs-badge vs-badge-green">ایندکس‌شده</span>' : '<span class="vs-badge vs-badge-red">ایندکس نشده</span>';
     const probs = (o.problems && o.problems.length) ? o.problems.map(p=>'<span class="vs-badge vs-badge-orange">'+p+'</span>').join(' ') : '<span class="vs-chk-ok">بدون مشکل</span>';
     const title = o.title ? '<a href="'+(o.edit||o.url)+'" target="_blank">'+o.title+'</a>' : '<span dir="ltr">'+o.url+'</span>';
-    return '<tr><td>'+title+'</td><td>'+badge+'</td><td>'+o.coverage+'</td><td>'+o.last_crawl+'</td><td>'+probs+'</td></tr>';
+    const reqBtn = '<button class="vs-btn vs-btn-sm vs-btn-success vs-idx-req" data-url="'+escAttr(o.url)+'">📤 درخواست ایندکس</button>';
+    return '<tr><td>'+title+'</td><td>'+badge+'</td><td>'+o.coverage+'</td><td>'+o.last_crawl+'</td><td>'+probs+'<div style="margin-top:6px">'+reqBtn+'</div></td></tr>';
 }
+$(document).on('click', '.vs-idx-req', function(){
+    const url = $(this).data('url');
+    const $b = $(this).prop('disabled', true).text('در حال ارسال...');
+    post('viraseo_index_request', {url:url}, r => {
+        $b.prop('disabled', false).text('📤 درخواست ایندکس');
+        toast(r.success ? r.data.message : (r.data||'خطا'), r.success ? 'success' : 'err');
+    });
+});
+$(document).on('click', '#vs-idx-request-one', function(){
+    const url = $('#vs-idx-url').val().trim();
+    if (!url) { toast('آدرس را وارد کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true).text('در حال ارسال...');
+    post('viraseo_index_request', {url:url}, r => {
+        $b.prop('disabled', false).text('📤 درخواست ایندکس');
+        toast(r.success ? r.data.message : (r.data||'خطا'), r.success ? 'success' : 'err');
+    });
+});
 $(document).on('click', '#vs-idx-one', function(){
     const url = $('#vs-idx-url').val().trim();
     if (!url) { toast('آدرس را وارد کنید.','err'); return; }
@@ -716,18 +775,24 @@ $(document).on('click', '#vs-scan-links', function(){
     });
 });
 function loadOrphans() {
-    post('viraseo_get_orphans', {}, r => {
+    post('viraseo_get_orphans', {post_type: $('#vs-orphan-type').val()||'all'}, r => {
         if (!r.success) return;
         const $t = $('#vs-orphans-tbody').empty();
-        if (!r.data.rows || !r.data.rows.length) { 
-            $t.html('<tr><td colspan="5" class="vs-empty">🎉 عالی! هیچ صفحه یتیمی یافت نشد. همه صفحات حداقل ۳ لینک ورودی دارند.</td></tr>'); 
-            return; 
+        vsFillTypes('#vs-orphan-type', r.data.types);
+        if (!r.data.rows || !r.data.rows.length) {
+            $t.html('<tr class="vs-empty"><td colspan="5" class="vs-empty">🎉 عالی! هیچ صفحه یتیمی (با این فیلتر) یافت نشد.</td></tr>');
+            $('#vs-orphan-count').text('');
+            $('#vs-orphans-pager').empty();
+            return;
         }
         r.data.rows.forEach(o => {
             $t.append(`<tr><td><a href="${o.url}" target="_blank">${o.title}</a></td><td>${o.type}</td><td>${o.inlinks}</td><td>${o.outlinks}</td><td><a href="${o.edit}" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>`);
         });
+        $('#vs-orphan-count').text(r.data.total + ' صفحه یتیم');
+        vsRowPaginate($('#vs-orphans-tbody'), $('#vs-orphans-pager'), 25);
     });
 }
+$(document).on('change', '#vs-orphan-type', loadOrphans);
 function loadSuggestions() {
     post('viraseo_get_suggestions', {type: window._vsSuggType||'', post_type: $('#vs-sugg-type').val()||'all'}, r => {
         if (!r.success) return;
@@ -1661,6 +1726,216 @@ $(document).on('click', '#vs-repair-tables', function(){
     post('viraseo_repair_tables', {}, function(r) {
         $btn.prop('disabled', false).html('<span class="dashicons dashicons-admin-tools"></span> بازسازی جداول');
         alert(r.success ? r.data.message : (r.data || 'خطا'));
+    });
+});
+
+// === CORE WEB VITALS ===
+function vsCwvMetric(label, val, verdict) {
+    const cls = verdict==='good'?'vs-cwv-good':(verdict==='poor'?'vs-cwv-poor':'vs-cwv-ni');
+    return '<div class="vs-cwv-metric '+cls+'"><span class="vs-cwv-m-label">'+label+'</span><span class="vs-cwv-m-val">'+val+'</span></div>';
+}
+function vsCwvVerdictBadge(v, fa) {
+    const cls = v==='good'?'vs-badge-green':(v==='poor'?'vs-badge-red':'vs-badge-orange');
+    return '<span class="vs-badge '+cls+'">'+fa+'</span>';
+}
+function vsCwvDetailHtml(o) {
+    let sug = (o.suggestions && o.suggestions.length)
+        ? '<ul class="vs-checklist">'+o.suggestions.map(s=>'<li>'+s+'</li>').join('')+'</ul>'
+        : '<div class="vs-chk-ok">✅ مشکل عمده‌ای یافت نشد.</div>';
+    return '<div class="vs-cwv-detail-box">'
+        + '<div class="vs-cwv-metrics">'
+        + vsCwvMetric('LCP', o.lcp, o.v_lcp)
+        + vsCwvMetric('INP', o.inp, o.v_inp)
+        + vsCwvMetric('CLS', o.cls, o.v_cls)
+        + vsCwvMetric('TTFB', o.ttfb, '')
+        + '</div>'
+        + '<div class="vs-hint" style="margin:6px 0">منبع داده: '+o.source+'</div>'
+        + '<h4>🛠️ پیشنهادهای بهبود (به ترتیب اولویت):</h4>'+sug
+        + '</div>';
+}
+$(document).on('click', '#vs-cwv-one', function(){
+    const url = $('#vs-cwv-url').val().trim();
+    if (!url) { toast('آدرس را وارد کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true);
+    $('#vs-cwv-one-box').html('<div class="vs-empty">در حال اندازه‌گیری سرعت (تا ۶۰ ثانیه)...</div>');
+    post('viraseo_cwv_check', {url:url, strategy:$('#vs-cwv-strategy').val()}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { $('#vs-cwv-one-box').html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        const o = r.data;
+        $('#vs-cwv-one-box').html('<div class="vs-cwv-result"><div class="vs-cwv-head"><span class="vs-cwv-score vs-cwv-score-'+o.verdict+'">'+o.perf+'</span><div><strong dir="ltr">'+o.url+'</strong><br>'+vsCwvVerdictBadge(o.verdict,o.verdict_fa)+'</div></div>'+vsCwvDetailHtml(o)+'</div>');
+    });
+});
+function vsCwvRow(o) {
+    const title = o.title ? '<a href="'+(o.edit||o.url)+'" target="_blank">'+o.title+'</a>' : '<span dir="ltr">'+o.url+'</span>';
+    const sc = '<span class="vs-cwv-score-sm vs-cwv-score-'+o.verdict+'">'+o.perf+'</span>';
+    const mc = v => v==='good'?'style="color:#10b981"':(v==='poor'?'style="color:#ef4444"':'style="color:#f59e0b"');
+    return '<tr class="vs-cwv-trow" data-text="'+escAttr((o.title||'')+' '+o.url)+'" data-verdict="'+o.verdict+'">'
+        + '<td>'+title+(o.checked?' <span class="vs-hint">('+o.checked+')</span>':'')+'</td>'
+        + '<td>'+sc+'</td>'
+        + '<td '+mc(o.v_lcp)+'>'+o.lcp+'</td>'
+        + '<td '+mc(o.v_inp)+'>'+o.inp+'</td>'
+        + '<td '+mc(o.v_cls)+'>'+o.cls+'</td>'
+        + '<td>'+o.ttfb+'</td>'
+        + '<td>'+vsCwvVerdictBadge(o.verdict,o.verdict_fa)+'</td>'
+        + '<td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-cwv-toggle">پیشنهادها</button></td></tr>'
+        + '<tr class="vs-cwv-detail" style="display:none"><td colspan="8">'+vsCwvDetailHtml(o)+'</td></tr>';
+}
+function vsCwvRender(rows) {
+    const $t = $('#vs-cwv-tbody').empty();
+    if (!rows.length) { $t.html('<tr class="vs-empty"><td colspan="8" class="vs-empty">موردی نیست.</td></tr>'); $('#vs-cwv-pager').empty(); return; }
+    rows.forEach(o => $t.append(vsCwvRow(o)));
+    vsCwvApplyFilter();
+}
+function vsCwvApplyFilter() {
+    const q = ($('#vs-cwv-filter').val()||'').toLowerCase();
+    const v = $('#vs-cwv-vfilter').val()||'';
+    $('#vs-cwv-tbody tr.vs-cwv-trow').each(function(){
+        const $row = $(this), $detail = $row.next('.vs-cwv-detail');
+        const okText = !q || ($row.data('text')||'').toString().toLowerCase().indexOf(q) > -1;
+        const okV = !v || $row.data('verdict') === v;
+        if (okText && okV) { $row.show(); } else { $row.hide(); $detail.hide(); }
+    });
+}
+$(document).on('input', '#vs-cwv-filter', vsCwvApplyFilter);
+$(document).on('change', '#vs-cwv-vfilter', vsCwvApplyFilter);
+$(document).on('click', '.vs-cwv-toggle', function(){
+    $(this).closest('tr').next('.vs-cwv-detail').toggle();
+});
+$(document).on('click', '#vs-cwv-batch', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-cwv-tbody').html('<tr class="vs-empty"><td colspan="8" class="vs-empty">در حال بررسی دسته‌ای (ممکن است چند دقیقه طول بکشد)...</td></tr>');
+    post('viraseo_cwv_batch', {limit:$('#vs-cwv-limit').val()||5, strategy:$('#vs-cwv-batch-strategy').val()}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { $('#vs-cwv-tbody').html('<tr class="vs-empty"><td colspan="8" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        $('#vs-cwv-summary').text('خوب: '+r.data.good+' · ضعیف: '+r.data.poor+' · مجموع: '+r.data.total+(r.data.errors?' · خطا: '+r.data.errors:''));
+        vsCwvRender(r.data.rows);
+    });
+});
+$(document).on('click', '#vs-cwv-load', function(){
+    $('#vs-cwv-tbody').html('<tr class="vs-empty"><td colspan="8" class="vs-empty">در حال بارگذاری...</td></tr>');
+    post('viraseo_cwv_list', {strategy:$('#vs-cwv-batch-strategy').val()}, r => {
+        if (!r.success) { $('#vs-cwv-tbody').html('<tr class="vs-empty"><td colspan="8" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        $('#vs-cwv-summary').text('نتایج ذخیره‌شده: '+r.data.rows.length);
+        vsCwvRender(r.data.rows);
+    });
+});
+
+// === CANNIBALIZATION (AI + auto-merge) ===
+function vsCanLoad() {
+    if (!$('#vs-can-list').length) return;
+    $('#vs-can-list').html('<div class="vs-empty">در حال بارگذاری...</div>');
+    post('viraseo_cannibal_list', {status:$('#vs-can-status').val()}, r => {
+        const $l = $('#vs-can-list').empty();
+        if (!r.success) { $l.html('<div class="vs-empty">'+(r.data||'خطا')+'</div>'); return; }
+        if (!r.data.rows.length) { $l.html('<div class="vs-empty">🎉 موردی در این وضعیت نیست.</div>'); return; }
+        r.data.rows.forEach(c => $l.append(vsCanCard(c)));
+        vsCanFilter();
+    });
+}
+function vsCanPageBox(p, isWinner, cid, sel) {
+    const crown = isWinner ? ' 👑' : '';
+    const t = p.pid ? '<a href="'+(p.url)+'" target="_blank">'+p.title+'</a>' : '<span dir="ltr">'+p.url+'</span>';
+    return '<label class="vs-can-page'+(isWinner?' vs-can-winner':'')+'">'
+        + '<input type="radio" name="vs-can-w-'+cid+'" value="'+sel+'"'+(isWinner?' checked':'')+'> '
+        + '<div><div class="vs-can-page-title">'+t+crown+'</div>'
+        + '<div class="vs-hint">جایگاه: '+p.pos+' · نمایش: '+p.imp+'</div></div></label>';
+}
+function vsCanCard(c) {
+    const sevCls = c.severity==='critical'?'vs-badge-red':(c.severity==='warning'?'vs-badge-orange':'vs-badge-blue');
+    const aiBtn = V.aiEnabled ? '<button class="vs-btn vs-btn-sm vs-btn-secondary vs-can-ai" data-id="'+c.id+'">🤖 تحلیل و توصیه‌ی AI</button>' : '';
+    return '<div class="vs-card vs-can-card" data-kw="'+escAttr(c.keyword)+'" style="margin-bottom:14px">'
+        + '<div class="vs-can-head"><h3 class="vs-card-title" style="margin:0">⚔️ «'+c.keyword+'»</h3>'
+        + '<span class="vs-badge '+sevCls+'">'+c.severity_fa+'</span>'
+        + '<span class="vs-hint">پیشنهاد: '+c.action_fa+' · '+c.detected+'</span></div>'
+        + '<div class="vs-can-pages">'
+        + vsCanPageBox(c.page_1, c.winner===1, c.id, 1)
+        + '<div class="vs-can-vs">VS</div>'
+        + vsCanPageBox(c.page_2, c.winner===2, c.id, 2)
+        + '</div>'
+        + '<div class="vs-can-actions">'
+        + '<span class="vs-hint">برنده را انتخاب و روش ادغام را بزنید:</span> '
+        + '<button class="vs-btn vs-btn-sm vs-btn-secondary vs-can-merge" data-id="'+c.id+'" data-mode="canonical">کانونیکال</button> '
+        + '<button class="vs-btn vs-btn-sm vs-btn-primary vs-can-merge" data-id="'+c.id+'" data-mode="redirect">ریدایرکت ۳۰۱</button> '
+        + '<button class="vs-btn vs-btn-sm vs-btn-danger vs-can-merge" data-id="'+c.id+'" data-mode="merge">ادغام کامل محتوا</button> '
+        + aiBtn
+        + ' <button class="vs-btn vs-btn-sm vs-btn-secondary vs-can-ignore" data-id="'+c.id+'">نادیده بگیر</button>'
+        + '</div>'
+        + '<div class="vs-can-ai-box" style="display:none"></div>'
+        + '</div>';
+}
+function vsCanFilter() {
+    const q = ($('#vs-can-filter').val()||'').toLowerCase();
+    $('.vs-can-card').each(function(){
+        $(this).toggle(!q || ($(this).data('kw')||'').toString().toLowerCase().indexOf(q) > -1);
+    });
+}
+$(document).on('input', '#vs-can-filter', vsCanFilter);
+$(document).on('change', '#vs-can-status', vsCanLoad);
+$(document).on('click', '#vs-can-detect', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-can-status-msg').text('در حال شناسایی...');
+    post('viraseo_cannibal_detect', {}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { $('#vs-can-status-msg').text(''); toast(r.data||'خطا','err'); return; }
+        $('#vs-can-status-msg').text('');
+        toast(r.data.detected+' تعارض جدید شناسایی شد.', 'success');
+        $('#vs-can-status').val('detected');
+        vsCanLoad();
+    });
+});
+$(document).on('click', '.vs-can-merge', function(){
+    const $card = $(this).closest('.vs-can-card');
+    const id = $(this).data('id'), mode = $(this).data('mode');
+    const winner = $card.find('input[name="vs-can-w-'+id+'"]:checked').val() || 1;
+    const labels = {canonical:'کانونیکال', redirect:'ریدایرکت ۳۰۱', merge:'ادغام کامل محتوا (صفحه‌ی بازنده پیش‌نویس می‌شود)'};
+    if (!confirm('آیا مطمئنید؟ روش: '+labels[mode]+'\nاین عمل صفحه‌ی بازنده را به صفحه‌ی برنده هدایت می‌کند.')) return;
+    const $b = $(this).prop('disabled', true);
+    post('viraseo_cannibal_merge', {id:id, mode:mode, winner:winner}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { toast(r.data||'خطا','err'); return; }
+        toast(r.data.message,'success');
+        $card.fadeOut(300, function(){ $(this).remove(); });
+    });
+});
+$(document).on('click', '.vs-can-ignore', function(){
+    const id = $(this).data('id'); const $card = $(this).closest('.vs-can-card');
+    post('viraseo_cannibal_resolve', {id:id, status:'ignored'}, r => {
+        if (r.success) $card.fadeOut(300, function(){ $(this).remove(); });
+    });
+});
+$(document).on('click', '.vs-can-ai', function(){
+    const $box = $(this).closest('.vs-can-card').find('.vs-can-ai-box').show().html('<div class="vs-empty">🤖 در حال تحلیل تعارض...</div>');
+    post('viraseo_cannibal_ai', {id:$(this).data('id')}, r => {
+        if (!r.success) { $box.html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+        $box.html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 توصیه‌ی هوش مصنوعی <span class="vs-hint">هزینه: $'+(r.data.cost||0)+'</span></div><div class="vs-ai-body">'+html+'</div></div>');
+    });
+});
+$(vsCanLoad);
+
+// === CRAWL & HOST HEALTH ===
+$(document).on('click', '#vs-crawl-run', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-crawl-list').html('<div class="vs-empty">در حال بررسی خزش و هاست (چند ثانیه)...</div>');
+    post('viraseo_crawl_check', {}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { $('#vs-crawl-list').html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        const sc = r.data.score, scColor = sc >= 75 ? '#10b981' : (sc >= 45 ? '#f59e0b' : '#ef4444');
+        $('#vs-crawl-score').html('<span class="vs-health-label">سلامت خزش</span><span class="vs-health-score" style="color:'+scColor+'">'+sc+'/۱۰۰</span>');
+        const icon = {ok:'✅', warn:'⚠️', bad:'⛔', info:'ℹ️'};
+        const cls = {ok:'vs-crawl-ok', warn:'vs-crawl-warn', bad:'vs-crawl-bad', info:'vs-crawl-info'};
+        const $l = $('#vs-crawl-list').empty();
+        // Sort: bad first, then warn, then info, then ok
+        const order = {bad:0, warn:1, info:2, ok:3};
+        const rows = r.data.checks.slice().sort((a,b)=>order[a.status]-order[b.status]);
+        rows.forEach(c => {
+            $l.append('<div class="vs-crawl-item '+(cls[c.status]||'')+'">'
+                + '<div class="vs-crawl-icon">'+(icon[c.status]||'')+'</div>'
+                + '<div class="vs-crawl-body"><div class="vs-crawl-title">'+c.title+'</div>'
+                + '<div class="vs-crawl-detail">'+c.detail+'</div>'
+                + (c.fix ? '<div class="vs-crawl-fix">🛠️ راهکار: '+c.fix+'</div>' : '')
+                + '</div></div>');
+        });
     });
 });
 

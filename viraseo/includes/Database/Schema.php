@@ -242,6 +242,27 @@ class Schema {
             KEY idx_kind (kind)
         ) {$c};");
 
+        dbDelta("CREATE TABLE {$p}cwv_monitor (
+            id bigint unsigned NOT NULL AUTO_INCREMENT,
+            post_id bigint unsigned DEFAULT NULL,
+            url varchar(2048) NOT NULL,
+            url_hash char(32) NOT NULL,
+            strategy enum('mobile','desktop') DEFAULT 'mobile',
+            data_source enum('field','lab') DEFAULT 'lab',
+            perf_score tinyint unsigned DEFAULT 0,
+            lcp int unsigned DEFAULT 0,
+            inp int unsigned DEFAULT 0,
+            cls decimal(6,3) DEFAULT 0,
+            fcp int unsigned DEFAULT 0,
+            ttfb int unsigned DEFAULT 0,
+            verdict enum('good','ni','poor','unknown') DEFAULT 'unknown',
+            suggestions longtext DEFAULT NULL,
+            checked_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_url_strat (url_hash,strategy),
+            KEY idx_verdict (verdict)
+        ) {$c};");
+
         dbDelta("CREATE TABLE {$p}activity_log (
             id bigint unsigned NOT NULL AUTO_INCREMENT,
             action varchar(100) NOT NULL,

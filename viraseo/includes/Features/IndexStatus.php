@@ -13,6 +13,18 @@ class IndexStatus {
     public function __construct() {
         add_action('wp_ajax_viraseo_index_inspect', [$this, 'ajax_inspect']);
         add_action('wp_ajax_viraseo_index_batch', [$this, 'ajax_batch']);
+        add_action('wp_ajax_viraseo_index_request', [$this, 'ajax_request']);
+    }
+
+    /** Ask Google to (re)crawl a URL via the Indexing API. */
+    public function ajax_request(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        $url = esc_url_raw($_POST['url'] ?? '');
+        if (!$url) wp_send_json_error('آدرس نامعتبر.');
+        $res = GoogleOAuth::request_indexing($url);
+        if (!empty($res['error'])) wp_send_json_error($res['message']);
+        wp_send_json_success(['message' => $res['message']]);
     }
 
     private function site(): string {

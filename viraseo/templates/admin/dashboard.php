@@ -20,9 +20,17 @@ $fa = fn($n) => \ViraSEO\Utils\PersianText::format_number($n);
   <div class="vs-card vs-card-glow" id="vs-action-plan" style="margin-bottom:20px;">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
       <h2 class="vs-card-title" style="margin:0;">🎯 برنامه‌ی اقدام سئو (قدم بعدی شما)</h2>
-      <div id="vs-health" class="vs-health"></div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div id="vs-health" class="vs-health"></div>
+        <button class="vs-btn vs-btn-sm vs-btn-secondary" id="vs-ap-gear" title="سفارشی‌سازی">⚙️ سفارشی‌سازی</button>
+      </div>
     </div>
     <p class="vs-subtitle">افزونه مهم‌ترین کارهایی که باید برای افزایش رتبه انجام دهید را بر اساس داده‌های واقعی سایت اولویت‌بندی کرده است.</p>
+    <div id="vs-ap-prefs" class="vs-ap-prefs" style="display:none;">
+      <div class="vs-hint" style="margin-bottom:8px;">انتخاب کنید کدام دسته‌ها در برنامه‌ی اقدام نمایش داده شوند:</div>
+      <div id="vs-ap-prefs-list" class="vs-ap-prefs-list"></div>
+      <button class="vs-btn vs-btn-sm vs-btn-success" id="vs-ap-save">💾 ذخیره</button>
+    </div>
     <div id="vs-action-list"><div class="vs-empty">در حال محاسبه‌ی برنامه...</div></div>
   </div>
   <div class="vs-stats">

@@ -18,11 +18,16 @@ $connected = (bool) get_option('viraseo_gsc_token');
     <p>از API بازرسی URL سرچ کنسول استفاده می‌کند تا بفهمید صفحات درست ایندکس شده‌اند یا مشکل ایندکس دارند. (هر بررسی یک درخواست به API است؛ به‌صورت دسته‌ای محدود انجام می‌شود.)</p>
   </div>
 
+  <div class="vs-alert vs-alert-warning"><span class="dashicons dashicons-megaphone"></span>
+    <p><strong>درخواست ایندکس مستقیم:</strong> با دکمه «📤 درخواست ایندکس» می‌توانید از گوگل بخواهید صفحه را دوباره بخزد (Indexing API). توجه: این قابلیت نیاز دارد که حساب گوگل شما <strong>مالک (Owner)</strong> پراپرتی در سرچ کنسول باشد و اسکوپ <code>indexing</code> در Worker فعال باشد. سهمیه‌ی روزانه ۲۰۰ آدرس است.</p>
+  </div>
+
   <div class="vs-card" style="margin-bottom:16px;">
     <h3 class="vs-card-title">بررسی یک آدرس</h3>
     <div class="vs-row">
       <div class="vs-field" style="flex:1"><input class="vs-input vs-input-ltr" id="vs-idx-url" placeholder="https://example.com/page/"></div>
       <button class="vs-btn vs-btn-primary" id="vs-idx-one" style="align-self:flex-end">بررسی آدرس</button>
+      <button class="vs-btn vs-btn-success" id="vs-idx-request-one" style="align-self:flex-end">📤 درخواست ایندکس</button>
     </div>
     <div id="vs-idx-one-box" style="margin-top:10px;"></div>
   </div>

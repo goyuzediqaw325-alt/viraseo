@@ -226,13 +226,27 @@ class InternalSilo {
     public function ajax_orphans(): void {
         check_ajax_referer('viraseo_nonce','nonce');
         global $wpdb;
-        $rows = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}viraseo_orphan_pages WHERE status IN ('orphan','low') ORDER BY inlinks LIMIT 50");
-        $data = array_map(fn($r)=>[
-            'id'=>$r->post_id,'title'=>$r->post_title?:get_the_title($r->post_id),
-            'type'=>$r->post_type,'inlinks'=>(int)$r->inlinks,'outlinks'=>(int)$r->outlinks,
-            'status'=>$r->status,'url'=>get_permalink($r->post_id),'edit'=>get_edit_post_link($r->post_id,'raw'),
-        ], $rows);
-        wp_send_json_success(['rows'=>$data]);
+        $ptype = sanitize_text_field($_POST['post_type'] ?? '');
+        $rows = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}viraseo_orphan_pages WHERE status IN ('orphan','low') ORDER BY inlinks LIMIT 1000");
+        $tlabel = function($slug){ $o = get_post_type_object($slug); return $o ? $o->labels->singular_name : $slug; };
+        $data = [];
+        foreach ($rows as $r) {
+            if ($ptype && $ptype !== 'all' && $r->post_type !== $ptype) continue;
+            $data[] = [
+                'id'=>$r->post_id,'title'=>$r->post_title?:get_the_title($r->post_id),
+                'type'=>$tlabel($r->post_type),'inlinks'=>(int)$r->inlinks,'outlinks'=>(int)$r->outlinks,
+                'status'=>$r->status,'url'=>get_permalink($r->post_id),'edit'=>get_edit_post_link($r->post_id,'raw'),
+            ];
+        }
+        // Type filter options (only types that actually have orphans)
+        $type_objs = []; $seen = [];
+        foreach ($rows as $r) {
+            if (isset($seen[$r->post_type])) continue;
+            $seen[$r->post_type] = true;
+            $o = get_post_type_object($r->post_type);
+            $type_objs[] = ['slug'=>$r->post_type, 'label'=>$o ? $o->labels->name : $r->post_type];
+        }
+        wp_send_json_success(['rows'=>$data, 'types'=>$type_objs, 'total'=>count($data)]);
     }
 
     public function ajax_suggestions(): void {
@@ -411,6 +425,18 @@ class InternalSilo {
             }
             foreach (array_keys(PersianText::extract_keywords(wp_strip_all_tags($p->post_content).' '.$p->post_title, 8)) as $t) {
                 if (mb_strlen($t) > 2) $set[$t] = true;
+            }
+            // Inject the post's assigned category/product-category term names as tokens.
+            // This guarantees a product shares tokens with its product_cat term node, so the
+            // category page becomes a reliable cluster pillar (silo head) for its products.
+            foreach (['product_cat', 'category'] as $tax) {
+                if (!taxonomy_exists($tax)) continue;
+                $terms = get_the_terms($p->ID, $tax);
+                if (is_array($terms)) {
+                    foreach ($terms as $term) {
+                        foreach (PersianText::tokenize($term->name) as $t) if (mb_strlen($t) > 2) $set[$t] = true;
+                    }
+                }
             }
             $pt = get_post_type_object($p->post_type);
             $meta[$key] = ['key'=>$key, 'ref'=>(int)$p->ID, 'is_term'=>false,

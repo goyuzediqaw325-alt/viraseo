@@ -22,8 +22,11 @@ class Dashboard {
         add_submenu_page($s,'مانیتورینگ کلمات 🟢','مانیتورینگ کلمات','manage_options',$s.'-rank',[$this,'page_rank']);
         add_submenu_page($s,'فرصت‌های سئو 🟢','فرصت‌های سئو','manage_options',$s.'-opps',[$this,'page_opps']);
         add_submenu_page($s,'سئوی ۲۰۲۶ ✨','سئوی ۲۰۲۶','manage_options',$s.'-modern',[$this,'page_modern']);
+        add_submenu_page($s,'سرعت و CWV ⚡','⚡ سرعت سایت','manage_options',$s.'-cwv',[$this,'page_cwv']);
+        add_submenu_page($s,'هم‌نوع‌خواری ⚔️','⚔️ کنیبال','manage_options',$s.'-cannibal',[$this,'page_cannibal']);
         add_submenu_page($s,'🤖 ابزارهای AI','🤖 ابزارهای AI','manage_options',$s.'-ai',[$this,'page_ai']);
         add_submenu_page($s,'وضعیت ایندکس 🟢','وضعیت ایندکس','manage_options',$s.'-index',[$this,'page_index']);
+        add_submenu_page($s,'سلامت خزش 🕷️','🕷️ سلامت خزش','manage_options',$s.'-crawl',[$this,'page_crawl']);
         add_submenu_page($s,'کلمات هدف 🟢','کلمات هدف','manage_options',$s.'-targets',[$this,'page_targets']);
         add_submenu_page($s,'استراتژی کلمات 🟢','استراتژی کلمات','manage_options',$s.'-strategy',[$this,'page_strategy']);
         add_submenu_page($s,'لینک‌سازی 🟢','لینک‌سازی','manage_options',$s.'-links',[$this,'page_links']);
@@ -54,6 +57,7 @@ class Dashboard {
             'rest' => rest_url('viraseo/v1/'),
             'restNonce' => wp_create_nonce('wp_rest'),
             'url' => VIRASEO_URL,
+            'aiEnabled' => \ViraSEO\Api\AiClient::is_enabled(),
         ]);
 
         // INLINE the CSS + JS to bypass servers that 403-block static plugin files.
@@ -83,6 +87,7 @@ class Dashboard {
             'n8n_url' => esc_url_raw(rtrim($i['n8n_url'] ?? '', '/')),
             'n8n_secret' => sanitize_text_field($i['n8n_secret'] ?? ''),
             'serper_api_key' => sanitize_text_field($i['serper_api_key'] ?? ''),
+            'psi_api_key' => sanitize_text_field($i['psi_api_key'] ?? ''),
             'ai_enabled' => !empty($i['ai_enabled']),
             'openrouter_key' => sanitize_text_field($i['openrouter_key'] ?? ''),
             'ai_proxy_url' => esc_url_raw(rtrim($i['ai_proxy_url'] ?? '', '/')),
@@ -106,6 +111,7 @@ class Dashboard {
         $s = wp_parse_args(get_option(self::OPT, []), [
             'n8n_url'=>'','n8n_secret'=>'','serper_api_key'=>'','ai_enabled'=>false,'openrouter_key'=>'','ai_proxy_url'=>'','ai_curl_proxy'=>'','ai_model'=>'openai/gpt-4o-mini','oauth_proxy_url'=>'',
             'gsc_client_id'=>'','gsc_client_secret'=>'',
+            'psi_api_key'=>'',
             'striking_min'=>11,'striking_max'=>20,'min_impressions'=>10,'rank_max_pages'=>3,'rank_auto_enabled'=>false,'rank_alert_email'=>false,'rank_alert_threshold'=>3,'remove_data'=>false,
         ]);
         return $key ? ($s[$key] ?? null) : $s;
@@ -134,8 +140,10 @@ class Dashboard {
     public function page_rank(): void { include VIRASEO_DIR.'templates/admin/rank-monitor.php'; }
     public function page_opps(): void { include VIRASEO_DIR.'templates/admin/opportunities.php'; }
     public function page_modern(): void { include VIRASEO_DIR.'templates/admin/modern.php'; }
-    public function page_ai(): void { include VIRASEO_DIR.'templates/admin/ai-tools.php'; }
+    public function page_cwv(): void { include VIRASEO_DIR.'templates/admin/cwv.php'; }
+    public function page_cannibal(): void { include VIRASEO_DIR.'templates/admin/cannibalization.php'; }    public function page_ai(): void { include VIRASEO_DIR.'templates/admin/ai-tools.php'; }
     public function page_index(): void { include VIRASEO_DIR.'templates/admin/index-status.php'; }
+    public function page_crawl(): void { include VIRASEO_DIR.'templates/admin/crawl.php'; }
     public function page_targets(): void { include VIRASEO_DIR.'templates/admin/targets.php'; }
     public function page_strategy(): void { include VIRASEO_DIR.'templates/admin/strategy.php'; }
     public function page_links(): void { include VIRASEO_DIR.'templates/admin/links.php'; }

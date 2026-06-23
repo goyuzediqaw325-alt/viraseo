@@ -17,10 +17,15 @@
   </div>
 
   <div class="vs-tab-panel active" data-panel="orphans">
+    <div class="vs-toolbar">
+      <select class="vs-input vs-type-filter" id="vs-orphan-type" style="max-width:220px;"><option value="all">همه نوع‌ها</option></select>
+      <span id="vs-orphan-count" class="vs-hint"></span>
+    </div>
     <table class="vs-table">
       <thead><tr><th>عنوان</th><th>نوع</th><th>لینک ورودی</th><th>لینک خروجی</th><th>عملیات</th></tr></thead>
       <tbody id="vs-orphans-tbody"></tbody>
     </table>
+    <div class="vs-cpager vs-pager" id="vs-orphans-pager"></div>
   </div>
 
   <div class="vs-tab-panel" data-panel="suggestions">

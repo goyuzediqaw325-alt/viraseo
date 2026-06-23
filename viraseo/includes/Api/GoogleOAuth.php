@@ -196,6 +196,38 @@ class GoogleOAuth {
         if ($code >= 400) return ['error' => true, 'message' => $data['error']['message'] ?? "HTTP {$code}"];
         return $data ?: [];
     }
+    /**
+     * Google Indexing API — ask Google to (re)crawl a URL.
+     * Endpoint: https://indexing.googleapis.com/v3/urlNotifications:publish
+     * Requires the OAuth token to include the `indexing` scope (the OAuth proxy must
+     * request it). We surface a clear Persian message if the scope/permission is missing.
+     */
+    public static function request_indexing(string $url, string $type = 'URL_UPDATED'): array {
+        $token = self::get_access_token();
+        if (!$token) return ['error' => true, 'message' => 'به سرچ کنسول متصل نیستید.'];
+        $type = in_array($type, ['URL_UPDATED', 'URL_DELETED'], true) ? $type : 'URL_UPDATED';
+        $resp = wp_remote_post('https://indexing.googleapis.com/v3/urlNotifications:publish', [
+            'timeout' => 25,
+            'headers' => ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
+            'body' => wp_json_encode(['url' => $url, 'type' => $type]),
+        ]);
+        if (is_wp_error($resp)) return ['error' => true, 'message' => $resp->get_error_message()];
+        $code = wp_remote_retrieve_response_code($resp);
+        $data = json_decode(wp_remote_retrieve_body($resp), true);
+        if ($code === 401) { delete_option(self::TOKEN_OPT); return ['error' => true, 'message' => 'توکن منقضی. مجدداً متصل شوید.']; }
+        if ($code === 403) {
+            return ['error' => true, 'message' => 'دسترسی Indexing API رد شد (۴۰۳). دلیل: یا دامنه‌ی Worker مجوز indexing را درخواست نکرده، یا حساب گوگل شما «مالک» این پراپرتی در سرچ کنسول نیست. برای استفاده از درخواست ایندکس مستقیم، باید اسکوپ indexing در OAuth Worker فعال و حساب شما Owner باشد.'];
+        }
+        if ($code === 429) return ['error' => true, 'message' => 'محدودیت روزانه‌ی Indexing API (۲۰۰ درخواست) پر شده. فردا دوباره تلاش کنید.'];
+        if ($code >= 400) return ['error' => true, 'message' => $data['error']['message'] ?? "خطای Indexing API (HTTP {$code})"];
+        $notify = $data['urlNotificationMetadata'] ?? [];
+        return [
+            'error' => false,
+            'message' => '✅ درخواست ایندکس برای این صفحه به گوگل ارسال شد.',
+            'latest' => $notify['latestUpdate']['notifyTime'] ?? '',
+        ];
+    }
+
     public function ajax_sites(): void {
         check_ajax_referer('viraseo_nonce', 'nonce');
         $r = self::api('/sites', [], 'GET');

@@ -16,6 +16,10 @@
     <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span><p>گوگل اسکرپ مستقیم را از سرور مسدود می‌کند. برای تحلیل رقبا از سرویس رایگان <a href="https://serper.dev" target="_blank">Serper.dev</a> استفاده می‌کنیم (۲۵۰۰ جستجوی رایگان). ثبت‌نام کنید، کلید API را کپی و اینجا وارد کنید. این کلید به‌صورت امن به n8n ارسال می‌شود.</p></div>
     <div class="vs-field"><label class="vs-label">کلید Serper API</label><input class="vs-input vs-input-ltr" name="viraseo_settings[serper_api_key]" value="<?php echo esc_attr($s['serper_api_key'] ?? ''); ?>" placeholder="مثلا: 0a1b2c3d4e5f..."><span class="vs-hint">از <a href="https://serper.dev/api-key" target="_blank">serper.dev/api-key</a> دریافت کنید</span></div>
 
+    <h3 class="vs-card-title">⚡ کلید PageSpeed Insights (Core Web Vitals)</h3>
+    <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span><p>بخش «سرعت سایت» بدون کلید هم کار می‌کند، اما گوگل نرخ درخواست بدون کلید را محدود می‌کند. برای بررسی دسته‌ای بدون خطا، یک کلید رایگان از <a href="https://developers.google.com/speed/docs/insights/v5/get-started" target="_blank">Google Cloud Console (PageSpeed Insights API)</a> بسازید و اینجا وارد کنید.</p></div>
+    <div class="vs-field"><label class="vs-label">کلید PageSpeed Insights API</label><input class="vs-input vs-input-ltr" name="viraseo_settings[psi_api_key]" value="<?php echo esc_attr($s['psi_api_key'] ?? ''); ?>" placeholder="AIza..."><span class="vs-hint">اختیاری — فقط برای رفع محدودیت نرخ در بررسی دسته‌ای</span></div>
+
     <h3 class="vs-card-title">🤖 هوش مصنوعی (OpenRouter)</h3>
     <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span><p>با فعال‌سازی هوش مصنوعی، افزونه تحلیل‌های فوق‌پیشرفته ارائه می‌دهد: استراتژی شکست رقبا، طرح نگارش، و کمک به ساخت/بازنویسی محتوا بر اساس Helpful Content گوگل. کلید را از <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a> بگیرید.</p></div>
     <div class="vs-field"><label class="vs-label"><input type="checkbox" name="viraseo_settings[ai_enabled]" value="1" <?php checked(!empty($s['ai_enabled'])); ?>> فعال‌سازی هوش مصنوعی</label></div>
