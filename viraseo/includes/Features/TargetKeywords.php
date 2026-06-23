@@ -89,6 +89,25 @@ class TargetKeywords {
         return array_values(array_unique(array_filter($all)));
     }
 
+    /** Grouped <optgroup> options of published pages — balanced per post type so
+     *  posts, pages, products and landing CPTs ALL appear (not just recent products). */
+    public static function page_options_html(): string {
+        $html = '<option value="">— انتخاب صفحه —</option>';
+        foreach (self::public_types() as $t) {
+            $o = get_post_type_object($t);
+            $label = $o ? $o->labels->name : $t;
+            $posts = get_posts(['post_type'=>$t, 'post_status'=>'publish', 'numberposts'=>150, 'orderby'=>'modified', 'order'=>'DESC']);
+            if (!$posts) continue;
+            $html .= '<optgroup label="' . esc_attr($label) . '">';
+            foreach ($posts as $pp) {
+                if (self::is_excluded((int)$pp->ID)) continue;
+                $html .= '<option value="' . (int)$pp->ID . '">' . esc_html($pp->post_title ?: ('#'.$pp->ID)) . '</option>';
+            }
+            $html .= '</optgroup>';
+        }
+        return $html;
+    }
+
     /** Map of post_id => total GSC impressions. */
     private function gsc_impr_map(): array {
         global $wpdb;

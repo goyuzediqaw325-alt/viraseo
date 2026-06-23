@@ -10,11 +10,22 @@ use ViraSEO\Admin\Dashboard;
  */
 class AiClient {
     const ENDPOINT = 'https://openrouter.ai/api/v1';
+    private static bool $proxy_active = false;
 
     /** Base URL — routes through a Cloudflare Worker proxy if configured (for Iran hosts). */
     private static function base(): string {
         $proxy = Dashboard::get('ai_proxy_url');
         return $proxy ? rtrim($proxy, '/') . '/v1' : self::ENDPOINT;
+    }
+
+    /** Hooked to http_api_curl — routes AI requests through a custom proxy (xray/SOCKS/HTTP)
+     *  when configured. Only applies while an AI request is in flight. */
+    public static function apply_curl_proxy($handle): void {
+        if (!self::$proxy_active) return;
+        $px = Dashboard::get('ai_curl_proxy');
+        if (!$px) return;
+        curl_setopt($handle, CURLOPT_PROXY, $px);
+        // socks5h:// / socks5:// / http:// are auto-detected from the scheme by cURL
     }
 
     public static function is_enabled(): bool {
@@ -32,10 +43,12 @@ class AiClient {
         $cache = get_transient('viraseo_or_models');
         if ($cache && !$force) return ['models' => $cache];
 
+        self::$proxy_active = true;
         $r = wp_remote_get(self::base() . '/models', [
             'timeout' => 25,
             'headers' => ['Authorization' => 'Bearer ' . $key, 'X-Site-Url' => home_url()],
         ]);
+        self::$proxy_active = false;
         if (is_wp_error($r)) return ['error' => 'خطا در اتصال به ' . self::base() . ' — ' . $r->get_error_message()];
         $body = json_decode(wp_remote_retrieve_body($r), true);
         if (empty($body['data'])) return ['error' => 'لیست مدل‌ها دریافت نشد. کلید را بررسی کنید.'];
@@ -67,10 +80,12 @@ class AiClient {
         $base = self::base();
         $proxy = Dashboard::get('ai_proxy_url') ? 'پروکسی Cloudflare' : 'اتصال مستقیم به OpenRouter';
         $t0 = microtime(true);
+        self::$proxy_active = true;
         $r = wp_remote_get($base . '/models', [
             'timeout' => 20,
             'headers' => ['Authorization' => 'Bearer ' . $key, 'X-Site-Url' => home_url()],
         ]);
+        self::$proxy_active = false;
         $ms = (int) round((microtime(true) - $t0) * 1000);
         if (is_wp_error($r)) {
             return ['ok'=>false, 'msg'=>'❌ اتصال ناموفق ('.$proxy.'): '.$r->get_error_message().' — '.$base, 'ms'=>$ms];
@@ -89,8 +104,9 @@ class AiClient {
         if (!$key) return ['error' => 'کلید OpenRouter وارد نشده.'];
         $model = self::model();
 
+        self::$proxy_active = true;
         $r = wp_remote_post(self::base() . '/chat/completions', [
-            'timeout' => 60,
+            'timeout' => 120,
             'headers' => [
                 'Authorization' => 'Bearer ' . $key,
                 'Content-Type'  => 'application/json',
@@ -105,8 +121,10 @@ class AiClient {
                     ['role' => 'user', 'content' => $user],
                 ],
                 'temperature' => $temperature,
+                'max_tokens' => 2000,
             ]),
         ]);
+        self::$proxy_active = false;
         if (is_wp_error($r)) return ['error' => 'خطا در اتصال به ' . self::base() . ' — ' . $r->get_error_message() . ' (اگر هاست ایران است، پروکسی Cloudflare را در تنظیمات تعریف کنید)'];
         $code = wp_remote_retrieve_response_code($r);
         $body = json_decode(wp_remote_retrieve_body($r), true);

@@ -215,6 +215,17 @@ class Schema {
             KEY idx_st (status)
         ) {$c};");
 
+        dbDelta("CREATE TABLE {$p}ai_outputs (
+            id bigint unsigned NOT NULL AUTO_INCREMENT,
+            kind varchar(50) DEFAULT 'general',
+            title varchar(255) DEFAULT NULL,
+            content longtext DEFAULT NULL,
+            post_id bigint unsigned DEFAULT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_kind (kind)
+        ) {$c};");
+
         dbDelta("CREATE TABLE {$p}activity_log (
             id bigint unsigned NOT NULL AUTO_INCREMENT,
             action varchar(100) NOT NULL,

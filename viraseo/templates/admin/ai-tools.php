@@ -1,11 +1,7 @@
 <?php
 defined('ABSPATH') || exit;
 $ai_on = \ViraSEO\Api\AiClient::is_enabled();
-$opts = '<option value="">— انتخاب صفحه —</option>';
-foreach (get_posts(['post_type'=>\ViraSEO\Features\TargetKeywords::public_types(),'post_status'=>'publish','numberposts'=>300,'orderby'=>'modified','order'=>'DESC']) as $pp) {
-    if (\ViraSEO\Features\TargetKeywords::is_excluded((int)$pp->ID)) continue;
-    $opts .= '<option value="'.$pp->ID.'">'.esc_html($pp->post_title ?: ('#'.$pp->ID)).'</option>';
-}
+$opts = \ViraSEO\Features\TargetKeywords::page_options_html();
 ?>
 <div class="vs-wrap" dir="rtl">
   <div class="vs-header">
@@ -23,6 +19,7 @@ foreach (get_posts(['post_type'=>\ViraSEO\Features\TargetKeywords::public_types(
     <button class="vs-tab active" data-tab="kw">🔑 تحقیق کلمات کلیدی</button>
     <button class="vs-tab" data-tab="review">🔍 بازبینی و تحلیل محتوا</button>
     <button class="vs-tab" data-tab="faq">❓ تولید FAQ Schema</button>
+    <button class="vs-tab" data-tab="saved">💾 ذخیره‌شده‌ها</button>
   </div>
 
   <div class="vs-tab-panel active" data-panel="kw">
@@ -52,5 +49,11 @@ foreach (get_posts(['post_type'=>\ViraSEO\Features\TargetKeywords::public_types(
       <button class="vs-btn vs-btn-primary" id="vs-aifaq-go" style="align-self:flex-end">تولید FAQ</button>
     </div>
     <div id="vs-aifaq-box" style="margin-top:14px;"></div>
+  </div>
+
+  <div class="vs-tab-panel" data-panel="saved">
+    <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span><p>همه‌ی تحلیل‌ها و خروجی‌هایی که با دکمه «💾 ذخیره» نگه داشته‌اید اینجا هستند.</p></div>
+    <button class="vs-btn vs-btn-secondary vs-btn-sm" id="vs-saved-reload"><span class="dashicons dashicons-update"></span> بارگذاری</button>
+    <div id="vs-saved-list" style="margin-top:14px;"></div>
   </div>
 </div>

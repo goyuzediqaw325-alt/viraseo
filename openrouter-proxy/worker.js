@@ -55,10 +55,10 @@ export default {
 
     try {
       const resp = await fetch(target, init);
-      const body = await resp.text();
-      return new Response(body, {
+      // Stream the body straight through (lower latency, no buffering limits)
+      return new Response(resp.body, {
         status: resp.status,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+        headers: { 'Content-Type': resp.headers.get('Content-Type') || 'application/json', ...corsHeaders() },
       });
     } catch (e) {
       return new Response(

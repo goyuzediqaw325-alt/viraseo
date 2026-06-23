@@ -12,6 +12,7 @@ use ViraSEO\Utils\PersianText;
  */
 class AiAssistant {
     public function __construct() {
+        add_action('http_api_curl', ['\ViraSEO\Api\AiClient', 'apply_curl_proxy'], 10, 1);
         add_action('wp_ajax_viraseo_ai_models', [$this, 'ajax_models']);
         add_action('wp_ajax_viraseo_ai_serp_strategy', [$this, 'ajax_serp_strategy']);
         add_action('wp_ajax_viraseo_ai_content', [$this, 'ajax_content']);
@@ -19,6 +20,49 @@ class AiAssistant {
         add_action('wp_ajax_viraseo_ai_faq', [$this, 'ajax_faq']);
         add_action('wp_ajax_viraseo_ai_keywords', [$this, 'ajax_keywords']);
         add_action('wp_ajax_viraseo_ai_review', [$this, 'ajax_review']);
+        add_action('wp_ajax_viraseo_ai_save', [$this, 'ajax_save']);
+        add_action('wp_ajax_viraseo_ai_saved', [$this, 'ajax_saved']);
+        add_action('wp_ajax_viraseo_ai_saved_delete', [$this, 'ajax_saved_delete']);
+    }
+
+    /** Save an AI output for later reference. */
+    public function ajax_save(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+        $content = wp_kses_post(wp_unslash($_POST['content'] ?? ''));
+        if (trim($content) === '') wp_send_json_error('محتوای خالی.');
+        $title = sanitize_text_field($_POST['title'] ?? '') ?: mb_substr(wp_strip_all_tags($content), 0, 60);
+        $wpdb->insert($wpdb->prefix.'viraseo_ai_outputs', [
+            'kind'=>sanitize_text_field($_POST['kind'] ?? 'general'),
+            'title'=>$title,
+            'content'=>$content,
+            'post_id'=>absint($_POST['post_id'] ?? 0) ?: null,
+        ]);
+        wp_send_json_success(['message'=>'✅ ذخیره شد.', 'id'=>$wpdb->insert_id]);
+    }
+
+    public function ajax_saved(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+        $kinds = ['general'=>'عمومی','serp'=>'استراتژی SERP','keywords'=>'تحقیق کلمات','review'=>'بازبینی محتوا','faq'=>'FAQ','content'=>'طرح محتوا','cluster'=>'خوشه','cannibal'=>'کنیبالایزیشن'];
+        $rows = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}viraseo_ai_outputs ORDER BY id DESC LIMIT 100");
+        $data = array_map(fn($r)=>[
+            'id'=>(int)$r->id, 'title'=>$r->title, 'content'=>$r->content,
+            'kind'=>$kinds[$r->kind] ?? $r->kind,
+            'date'=>\ViraSEO\Utils\JalaliDate::format($r->created_at, 'datetime'),
+        ], $rows ?: []);
+        wp_send_json_success(['rows'=>$data]);
+    }
+
+    public function ajax_saved_delete(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+        $id = absint($_POST['id'] ?? 0);
+        if ($id) $wpdb->delete($wpdb->prefix.'viraseo_ai_outputs', ['id'=>$id]);
+        wp_send_json_success();
     }
 
     /** Shared guard + run helper. */
