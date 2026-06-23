@@ -824,6 +824,8 @@ $(function(){
     if ($('#vs-tg-tbody').length) loadTargets();
     // WooCommerce SEO page
     if ($('#vs-woo-tbody').length) loadWooCats();
+    // Modern SEO: show llms.txt URL
+    if ($('#vs-llms-url').length) $('#vs-llms-url').text(window.location.origin + '/llms.txt');
     // SERP auto-start when arriving from Target Keywords (?keyword=..&autostart=1)
     if ($('#vs-serp-kw').length) {
         loadSerpHistory();
@@ -989,6 +991,61 @@ $(document).on('click', '.vs-woo-autolink', function(){
         toast(r.success?r.data.message:r.data, r.success?'success':'err');
     });
 });
+
+// === MODERN SEO 2026 ===
+$(document).on('click', '#vs-ai-load', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-ai-tbody').html('<tr><td colspan="4" class="vs-empty">در حال تحلیل...</td></tr>');
+    post('viraseo_ai_readiness', {}, r => {
+        $b.prop('disabled', false);
+        const $t = $('#vs-ai-tbody').empty();
+        if (!r.success) { $t.html('<tr><td colspan="4" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="4" class="vs-empty">🎉 همه صفحات از نظر آمادگی AI خوب هستند.</td></tr>'); return; }
+        r.data.rows.forEach(o => {
+            const tips = o.tips.map(t=>'<li>'+t+'</li>').join('');
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td>'+linkScoreBar(o.score)+'</td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+tips+'</ul></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بهبود</a></td></tr>');
+        });
+    });
+});
+$(document).on('click', '#vs-fresh-load', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-fresh-tbody').html('<tr><td colspan="6" class="vs-empty">در حال بررسی...</td></tr>');
+    post('viraseo_freshness', {months: $('#vs-fresh-months').val()}, r => {
+        $b.prop('disabled', false);
+        const $t = $('#vs-fresh-tbody').empty();
+        if (!r.success) { $t.html('<tr><td colspan="6" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">محتوای کهنه‌ای یافت نشد.</td></tr>'); return; }
+        r.data.rows.forEach(o => {
+            const pc = o.priority==='بالا'?'red':(o.priority==='متوسط'?'orange':'blue');
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td>'+o.modified+'</td><td>'+o.age+'</td><td>'+o.impressions+'</td><td><span class="vs-badge vs-badge-'+pc+'">'+o.priority+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">به‌روزرسانی</a></td></tr>');
+        });
+    });
+});
+$(document).on('click', '#vs-fa-load', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-fa-tbody').html('<tr><td colspan="3" class="vs-empty">در حال بررسی...</td></tr>');
+    post('viraseo_persian_quality', {}, r => {
+        $b.prop('disabled', false);
+        const $t = $('#vs-fa-tbody').empty();
+        if (!r.success) { $t.html('<tr><td colspan="3" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="3" class="vs-empty">🎉 مشکل نگارشی مهمی یافت نشد.</td></tr>'); return; }
+        r.data.rows.forEach(o => {
+            const issues = o.issues.map(i=>'<li>'+i+'</li>').join('');
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+issues+'</ul></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
+        });
+    });
+});
+$(document).on('click', '#vs-llms-gen', function(){
+    const $b = $(this).prop('disabled', true);
+    post('viraseo_llms_txt', {}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { toast(r.data||'خطا','err'); return; }
+        $('#vs-llms-content').val(r.data.content);
+        $('#vs-llms-url').text(r.data.url);
+        toast('llms.txt تولید شد','success');
+    });
+});
+$(document).on('click', '#vs-llms-copy', function(){ copyText($('#vs-llms-content').val()); toast('کپی شد','success'); });
 
 // === DIAGNOSTICS PAGE ===
 $(document).on('click', '#vs-run-diag', function(){
