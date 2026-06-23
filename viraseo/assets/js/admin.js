@@ -947,6 +947,27 @@ $(document).on('click', '#vs-load-linkopp', function(){
         });
     });
 });
+// === ON-PAGE SEO CHECKLIST ===
+$(document).on('click', '#vs-load-onpage', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-onpage-tbody').html('<tr><td colspan="6" class="vs-empty">در حال بررسی...</td></tr>');
+    post('viraseo_onpage', {post_type: $('#vs-onpage-type').val()||'all'}, r => {
+        $b.prop('disabled', false);
+        const $t = $('#vs-onpage-tbody').empty();
+        if (!r.success) { $t.html('<tr><td colspan="6" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        vsFillTypes('#vs-onpage-type', r.data.types);
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">🎉 صفحه‌ای با مشکل On-Page یافت نشد (یا کلمه هدف ندارند).</td></tr>'); return; }
+        r.data.rows.forEach((o, i) => {
+            $t.append('<tr class="vs-onpage-row" data-i="'+i+'"><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+o.keyword+'</td><td>'+o.impressions+'</td><td>'+linkScoreBar(o.score)+'</td><td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-onpage-toggle" data-i="'+i+'">جزئیات ▾</button></td></tr>');
+            let checks = o.checks.map(c => '<li class="'+(c.ok?'vs-chk-ok':'vs-chk-no')+'">'+(c.ok?'✓':'✗')+' '+c.l+(c.note?' <small>('+c.note+')</small>':'')+'</li>').join('');
+            $t.append('<tr class="vs-onpage-detail vs-onpage-detail-'+i+'" style="display:none"><td colspan="6"><ul class="vs-onpage-checks">'+checks+'</ul> <a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-primary">ویرایش صفحه</a></td></tr>');
+        });
+    });
+});
+$(document).on('click', '.vs-onpage-toggle', function(){
+    $('.vs-onpage-detail-'+$(this).data('i')).toggle();
+});
+
 $(document).on('click', '#vs-load-thin', function(){
     const $b = $(this).prop('disabled', true);
     $('#vs-thin-tbody').html('<tr><td colspan="6" class="vs-empty">در حال بررسی...</td></tr>');

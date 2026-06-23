@@ -743,3 +743,11 @@
 
 /* === Post type tag === */
 .vs-type-tag { font-size: 10px; padding: 1px 6px; border-radius: 6px; background: rgba(14,165,233,.15); color: #7dd3fc; }
+
+
+/* === On-page checklist === */
+.vs-onpage-detail > td { background: rgba(15,23,42,.5); }
+.vs-onpage-checks { list-style: none; padding: 12px; margin: 0; display: grid; grid-template-columns: repeat(auto-fill,minmax(280px,1fr)); gap: 6px; }
+.vs-onpage-checks li { font-size: 12px; padding: 6px 10px; border-radius: 6px; }
+.vs-chk-ok { background: rgba(16,185,129,.1); color: #6ee7b7; }
+.vs-chk-no { background: rgba(239,68,68,.1); color: #fca5a5; }

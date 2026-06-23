@@ -13,6 +13,94 @@ class Opportunities {
     public function __construct() {
         add_action('wp_ajax_viraseo_link_opportunities', [$this, 'ajax_link_opportunities']);
         add_action('wp_ajax_viraseo_thin_content', [$this, 'ajax_thin_content']);
+        add_action('wp_ajax_viraseo_onpage', [$this, 'ajax_onpage']);
+    }
+
+    /** Persian-aware "contains" check (normalized). */
+    private function has(string $haystack, string $needle): bool {
+        if ($needle === '') return false;
+        return mb_stripos(PersianText::normalize($haystack), PersianText::normalize($needle)) !== false;
+    }
+
+    /**
+     * On-Page SEO checklist for each page vs its target keyword (Persian-aware).
+     * Checks title, H1, intro, URL, meta, density, subheadings, image alt, internal links.
+     */
+    public function ajax_onpage(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+        $types = $this->req_types();
+        $in = "'" . implode("','", array_map('esc_sql', $types)) . "'";
+        $posts = $wpdb->get_results("SELECT ID, post_title, post_content, post_name, post_type FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ({$in}) LIMIT 1500");
+        $impr = $this->gsc_by_post();
+
+        $rows = [];
+        foreach ($posts as $p) {
+            if (\ViraSEO\Features\TargetKeywords::is_excluded((int)$p->ID)) continue;
+            $kw = \ViraSEO\Features\TargetKeywords::get((int)$p->ID);
+            if ($kw === '') continue; // need a target keyword to audit
+
+            $html = $p->post_content;
+            $textRaw = wp_strip_all_tags($html);
+            $text = PersianText::normalize(mb_strtolower($textRaw));
+            $nkw = PersianText::normalize(mb_strtolower($kw));
+            $words = max(1, PersianText::word_count($textRaw));
+
+            $seoTitle = (string) get_post_meta($p->ID, 'rank_math_title', true);
+            if ($seoTitle === '') $seoTitle = $p->post_title;
+            $h1 = '';
+            if (preg_match('/<h1[^>]*>(.*?)<\/h1>/si', $html, $m)) $h1 = wp_strip_all_tags($m[1]); else $h1 = $p->post_title;
+            $intro = mb_substr($textRaw, 0, 400);
+            $meta = (string) get_post_meta($p->ID, 'rank_math_description', true);
+            $slug = urldecode($p->post_name);
+            $occ = substr_count($text, $nkw);
+            $density = round($occ / $words * 100, 2);
+
+            $subhead = false;
+            if (preg_match_all('/<h[2-3][^>]*>(.*?)<\/h[2-3]>/si', $html, $hm)) {
+                foreach ($hm[1] as $h) if ($this->has($h, $kw)) { $subhead = true; break; }
+            }
+            $alt = false;
+            if (preg_match_all('/<img[^>]*alt=["\']([^"\']*)["\'][^>]*>/i', $html, $im)) {
+                foreach ($im[1] as $a) if ($this->has($a, $kw)) { $alt = true; break; }
+            }
+            $host = wp_parse_url(get_site_url(), PHP_URL_HOST);
+            $intLinks = 0;
+            if (preg_match_all('/<a[^>]+href=["\']([^"\']+)["\']/i', $html, $am)) {
+                foreach ($am[1] as $href) {
+                    if (strpos($href, '/') === 0) { $intLinks++; continue; }
+                    $h = wp_parse_url($href, PHP_URL_HOST);
+                    if ($h && $h === $host) $intLinks++;
+                }
+            }
+
+            $checks = [
+                ['l'=>'کلمه هدف در عنوان سئو', 'ok'=>$this->has($seoTitle, $kw)],
+                ['l'=>'کلمه هدف در H1', 'ok'=>$this->has($h1, $kw)],
+                ['l'=>'کلمه هدف در پاراگراف ابتدایی', 'ok'=>$this->has($intro, $kw)],
+                ['l'=>'کلمه هدف در URL (اسلاگ)', 'ok'=>$this->has($slug, $kw) || $this->has(str_replace('-', ' ', $slug), $kw)],
+                ['l'=>'کلمه هدف در توضیحات متا', 'ok'=>$this->has($meta, $kw)],
+                ['l'=>'کلمه هدف در یک زیرعنوان (H2/H3)', 'ok'=>$subhead],
+                ['l'=>'چگالی کلمه مناسب (۰.۵٪ تا ۳٪)', 'ok'=>($density >= 0.5 && $density <= 3), 'note'=>'چگالی: '.JalaliDate::to_fa((string)$density).'٪'],
+                ['l'=>'کلمه هدف در alt یک تصویر', 'ok'=>$alt],
+                ['l'=>'حداقل ۳ لینک داخلی خروجی', 'ok'=>($intLinks >= 3), 'note'=>JalaliDate::to_fa((string)$intLinks).' لینک'],
+                ['l'=>'طول محتوای کافی (۳۰۰+ کلمه)', 'ok'=>($words >= 300), 'note'=>PersianText::format_number($words).' کلمه'],
+            ];
+            $passed = count(array_filter($checks, fn($c)=>$c['ok']));
+            $score = (int) round($passed / count($checks) * 100);
+            if ($score >= 90) continue;
+
+            $rows[] = [
+                'id'=>$p->ID, 'title'=>$p->post_title ?: '(بدون عنوان)', 'type'=>$this->type_label((int)$p->ID),
+                'keyword'=>$kw, 'url'=>get_permalink($p->ID), 'edit'=>get_edit_post_link($p->ID,'raw'),
+                'score'=>$score, 'impr_raw'=>$impr[$p->ID]['impr'] ?? 0,
+                'impressions'=>PersianText::format_number($impr[$p->ID]['impr'] ?? 0),
+                'checks'=>$checks,
+            ];
+        }
+        usort($rows, fn($a, $b) => ($b['impr_raw'] <=> $a['impr_raw']) ?: ($a['score'] <=> $b['score']));
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'types'=>self::type_options()]);
     }
 
     /** Aggregate GSC impressions/clicks per page URL → keyed by post ID. */

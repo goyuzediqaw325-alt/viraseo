@@ -8,6 +8,7 @@
   <div class="vs-tabs">
     <button class="vs-tab active" data-tab="linkopp">🔗 فرصت‌های لینک داخلی (GSC)</button>
     <button class="vs-tab" data-tab="thin">📉 محتوای ضعیف</button>
+    <button class="vs-tab" data-tab="onpage">✅ بهینه‌سازی On-Page</button>
   </div>
 
   <div class="vs-tab-panel active" data-panel="linkopp">
@@ -40,6 +41,21 @@
     <table class="vs-table">
       <thead><tr><th>صفحه</th><th>نوع</th><th>تعداد کلمات</th><th>نمایش (GSC)</th><th>اولویت بازنویسی</th><th>عملیات</th></tr></thead>
       <tbody id="vs-thin-tbody"><tr><td colspan="6" class="vs-empty">دکمه «بررسی محتوای ضعیف» را بزنید.</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="vs-tab-panel" data-panel="onpage">
+    <div class="vs-alert vs-alert-info">
+      <span class="dashicons dashicons-yes-alt"></span>
+      <p>چک‌لیست سئوی <strong>روی صفحه (On-Page)</strong> برای هر صفحه نسبت به کلمه‌ی هدفش: حضور کلمه در عنوان، H1، پاراگراف اول، URL، متا، زیرعنوان‌ها، alt تصاویر، چگالی و لینک داخلی. صفحاتِ پرنمایش با امتیاز پایین در اولویت‌اند. (فقط صفحاتی که کلمه هدف دارند بررسی می‌شوند.)</p>
+    </div>
+    <div class="vs-toolbar">
+      <select class="vs-input vs-type-filter" id="vs-onpage-type" style="max-width:180px;"><option value="all">همه نوع‌ها</option></select>
+      <button class="vs-btn vs-btn-primary" id="vs-load-onpage"><span class="dashicons dashicons-update"></span> بررسی On-Page</button>
+    </div>
+    <table class="vs-table">
+      <thead><tr><th>صفحه</th><th>نوع</th><th>کلمه هدف</th><th>نمایش GSC</th><th>امتیاز On-Page</th><th>جزئیات</th></tr></thead>
+      <tbody id="vs-onpage-tbody"><tr><td colspan="6" class="vs-empty">دکمه «بررسی On-Page» را بزنید.</td></tr></tbody>
     </table>
   </div>
 </div>
