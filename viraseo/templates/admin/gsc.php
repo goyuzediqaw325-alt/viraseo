@@ -123,6 +123,7 @@ $gsc_connected = !empty($_GET['gsc_connected']);
         <tr><td colspan="6" class="vs-empty">دکمه «دریافت داده‌ها» را بزنید.</td></tr>
       </tbody>
     </table>
+    <div id="vs-kw-pager" class="vs-pager"></div>
   </div>
 
   <div class="vs-tab-panel" id="panel-timeline">

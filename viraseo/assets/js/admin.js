@@ -283,8 +283,10 @@ if ($('#vs-gsc-site').length) {
 
 // === KEYWORDS ===
 var vsKwSort = {orderby: 'impressions', order: 'desc'};
+var vsKwPage = 1;
 function loadKeywords(search, page) {
-    post('viraseo_get_keywords', {search: search||$('#vs-kw-search').val()||'', page: page||1, orderby: vsKwSort.orderby, order: vsKwSort.order}, r => {
+    if (typeof page === 'number') vsKwPage = page;
+    post('viraseo_get_keywords', {search: (typeof search==='string'?search:$('#vs-kw-search').val())||'', page: vsKwPage, orderby: vsKwSort.orderby, order: vsKwSort.order}, r => {
         if (!r.success) return;
         // Overview totals
         if (r.data.totals) {
@@ -298,7 +300,7 @@ function loadKeywords(search, page) {
         $('.vs-sort .vs-sort-ar').text('');
         $('.vs-sort[data-sort="'+vsKwSort.orderby+'"] .vs-sort-ar').text(vsKwSort.order === 'asc' ? '▲' : '▼');
         const $t = $('#vs-kw-tbody').empty();
-        if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">داده‌ای یافت نشد.</td></tr>'); return; }
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">داده‌ای یافت نشد.</td></tr>'); $('#vs-kw-pager').empty(); return; }
         r.data.rows.forEach(k => {
             $t.append(`<tr>
                 <td>${k.keyword}${k.is_striking?' <span class="vs-badge vs-badge-orange">⭐</span>':''}</td>
@@ -306,12 +308,22 @@ function loadKeywords(search, page) {
                 <td><a href="${k.page_url}" target="_blank" class="vs-btn vs-btn-sm vs-btn-secondary">↗</a></td>
             </tr>`);
         });
+        // Pager
+        const pages = r.data.pages || 1, cur = r.data.page || vsKwPage;
+        const $p = $('#vs-kw-pager').empty();
+        if (pages > 1) {
+            if (cur > 1) $p.append('<button class="vs-btn vs-btn-sm vs-btn-secondary vs-kw-page" data-p="'+(cur-1)+'">‹ قبلی</button>');
+            $p.append('<span class="vs-pager-info">صفحه '+cur+' از '+pages+' (مجموع '+(r.data.total||0)+' کلمه)</span>');
+            if (cur < pages) $p.append('<button class="vs-btn vs-btn-sm vs-btn-secondary vs-kw-page" data-p="'+(cur+1)+'">بعدی ›</button>');
+        }
     });
 }
+$(document).on('click', '.vs-kw-page', function(){ loadKeywords(undefined, parseInt($(this).data('p'),10)||1); $('html,body').animate({scrollTop:0},200); });
 $(document).on('click', '.vs-sort', function(){
     const col = $(this).data('sort');
     if (vsKwSort.orderby === col) vsKwSort.order = (vsKwSort.order === 'asc' ? 'desc' : 'asc');
     else { vsKwSort.orderby = col; vsKwSort.order = 'desc'; }
+    vsKwPage = 1;
     loadKeywords();
 });
 // Auto-assign target keywords to pages from GSC top queries
@@ -337,7 +349,7 @@ function loadDaily() {
         });
     });
 }
-$(document).on('keyup', '#vs-kw-search', function(){ loadKeywords(); });
+$(document).on('keyup', '#vs-kw-search', function(){ vsKwPage = 1; loadKeywords(); });
 $(document).on('click', '#vs-detect-cannibal', function(){
     post('viraseo_detect_cannibal', {}, r => {
         if (r.success) { toast(`${r.data.detected} تعارض شناسایی شد.`,'success'); loadCannibal(); }
