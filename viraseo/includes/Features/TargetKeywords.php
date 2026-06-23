@@ -33,6 +33,8 @@ class TargetKeywords {
         $args = ['post_type'=>self::TYPES, 'post_status'=>'publish', 'numberposts'=>200, 'orderby'=>'modified', 'order'=>'DESC'];
         if ($search) $args['s'] = $search;
         $posts = get_posts($args);
+        $link_scores = get_option('viraseo_link_scores', []);
+        if (!is_array($link_scores)) $link_scores = [];
 
         $rows = [];
         foreach ($posts as $p) {
@@ -68,6 +70,7 @@ class TargetKeywords {
                 'source'=>$source,
                 'suggest'=>$suggest,
                 'stats'=>$stats,
+                'link_score'=>(int)($link_scores[$p->ID] ?? 0),
                 'serp_intent'=>(function($pid){
                     $si = get_post_meta($pid, '_viraseo_serp_intent', true);
                     if (!is_array($si) || empty($si['label'])) return null;

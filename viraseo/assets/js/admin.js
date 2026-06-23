@@ -414,7 +414,7 @@ $(document).on('click', '#vs-scan-links', function(){
     const $s = $('#vs-scan-status').text('اسکن...');
     post('viraseo_trigger_scan', {}, r => {
         $s.text(r.success? r.data.message : 'خطا');
-        if (r.success) { loadOrphans(); loadSuggestions(); }
+        if (r.success) { loadOrphans(); loadSuggestions(); loadLinkPower(); }
     });
 });
 function loadOrphans() {
@@ -487,6 +487,49 @@ $(document).on('click', '#vs-apply-all-links', function(){
         else toast(r.data,'err');
     });
 });
+// === LINK POWER (internal PageRank) + GRAPH ===
+function loadLinkPower() {
+    if (!$('#vs-power-tbody').length) return;
+    post('viraseo_link_scores', {}, r => {
+        const $t = $('#vs-power-tbody').empty();
+        if (!r.success || !r.data.rows.length) { $t.html('<tr><td colspan="3" class="vs-empty">داده‌ای نیست. «اسکن لینک‌ها» را بزنید.</td></tr>'); return; }
+        r.data.rows.forEach(p => {
+            $t.append('<tr><td><a href="'+p.url+'" target="_blank">'+p.title+'</a></td><td>'+(p.inlinks||0)+'</td><td>'+linkScoreBar(p.score)+'</td></tr>');
+        });
+    });
+    drawLinkGraph();
+}
+function drawLinkGraph() {
+    post('viraseo_link_graph', {}, r => {
+        const $g = $('#vs-link-graph');
+        if (!r.success || !r.data.nodes.length) { $g.html('<span class="vs-empty">گرافی نیست. «اسکن لینک‌ها» را بزنید.</span>'); return; }
+        const W = $g.width() || 800, H = 460, cx = W/2, cy = H/2, R = Math.min(W,H)/2 - 60;
+        const nodes = r.data.nodes, n = nodes.length;
+        const pos = {};
+        nodes.forEach((nd, i) => {
+            const ang = (i / n) * Math.PI * 2 - Math.PI/2;
+            pos[nd.id] = {x: cx + R*Math.cos(ang), y: cy + R*Math.sin(ang)};
+        });
+        let svg = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" style="direction:ltr">';
+        // edges
+        r.data.edges.forEach(e => {
+            const a = pos[e.from], b = pos[e.to];
+            if (!a || !b) return;
+            svg += '<line x1="'+a.x.toFixed(1)+'" y1="'+a.y.toFixed(1)+'" x2="'+b.x.toFixed(1)+'" y2="'+b.y.toFixed(1)+'" stroke="rgba(129,140,248,.25)" stroke-width="1"/>';
+        });
+        // nodes
+        nodes.forEach(nd => {
+            const p = pos[nd.id];
+            const rad = 6 + (nd.score/100)*18;
+            const color = nd.score >= 66 ? '#10b981' : (nd.score >= 33 ? '#f59e0b' : '#6366f1');
+            svg += '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+rad.toFixed(1)+'" fill="'+color+'" fill-opacity="0.85"><title>'+nd.title+' — قدرت: '+nd.score+'</title></circle>';
+            svg += '<text x="'+p.x.toFixed(1)+'" y="'+(p.y - rad - 4).toFixed(1)+'" font-size="10" fill="#cbd5e1" text-anchor="middle">'+nd.title.substring(0,18)+'</text>';
+        });
+        svg += '</svg>';
+        $g.html(svg);
+    });
+}
+
 // Topical clusters
 $(document).on('click', '#vs-load-clusters', function(){
     const $b = $(this).prop('disabled', true);
@@ -770,7 +813,7 @@ $(function(){
     // GSC page
     if ($('#vs-kw-tbody').length) { loadKeywords(); loadStriking(); loadCannibal(); loadDaily(); }
     // Links page
-    if ($('#vs-orphans-tbody').length) { loadOrphans(); loadSuggestions(); }
+    if ($('#vs-orphans-tbody').length) { loadOrphans(); loadSuggestions(); loadLinkPower(); }
     // Backlinks page
     if ($('#vs-bl-tbody').length) { loadBacklinks(); loadDisavow(); }
     // Workflows page
@@ -865,11 +908,11 @@ $(document).on('click', '#vs-load-thin', function(){
 // === TARGET KEYWORDS MANAGEMENT ===
 function loadTargets() {
     if (!$('#vs-tg-tbody').length) return;
-    $('#vs-tg-tbody').html('<tr><td colspan="6" class="vs-empty">در حال بارگذاری...</td></tr>');
+    $('#vs-tg-tbody').html('<tr><td colspan="8" class="vs-empty">در حال بارگذاری...</td></tr>');
     post('viraseo_targets_list', {search: $('#vs-tg-search').val()||''}, r => {
         const $t = $('#vs-tg-tbody').empty();
-        if (!r.success) { $t.html('<tr><td colspan="6" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
-        if (!r.data.rows.length) { $t.html('<tr><td colspan="6" class="vs-empty">صفحه‌ای یافت نشد.</td></tr>'); return; }
+        if (!r.success) { $t.html('<tr><td colspan="8" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="8" class="vs-empty">صفحه‌ای یافت نشد.</td></tr>'); return; }
         r.data.rows.forEach(o => {
             let stats = o.stats ? ('کلیک '+o.stats.clicks+' · نمایش '+o.stats.impressions+' · جایگاه '+o.stats.position) : '<span class="vs-empty">—</span>';
             let suggest = o.suggest ? ('<span class="vs-tag">'+o.suggest+'</span> <button class="vs-btn vs-btn-sm vs-btn-secondary vs-tg-use" data-id="'+o.id+'" data-kw="'+escAttr(o.suggest)+'">استفاده</button>') : '<span class="vs-empty">—</span>';
@@ -879,6 +922,7 @@ function loadTargets() {
                 + '<td><a href="'+o.edit+'">'+o.title+'</a><br><small style="color:var(--vs-text-muted)">'+o.type+'</small></td>'
                 + '<td><input type="text" class="vs-input vs-tg-kw" data-id="'+o.id+'" value="'+escAttr(o.current)+'" style="min-width:160px" placeholder="کلمه هدف..."></td>'
                 + '<td><span class="vs-badge vs-badge-blue">'+o.source+'</span></td>'
+                + '<td>'+linkScoreBar(o.link_score)+'</td>'
                 + '<td style="font-size:11px">'+stats+'</td>'
                 + '<td style="font-size:11px;max-width:240px">'+intentCell+'</td>'
                 + '<td>'+suggest+'</td>'
@@ -888,6 +932,11 @@ function loadTargets() {
     });
 }
 function escAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
+function linkScoreBar(score){
+    score = parseInt(score,10)||0;
+    var color = score >= 66 ? '#10b981' : (score >= 33 ? '#f59e0b' : '#ef4444');
+    return '<div class="vs-score-bar" title="قدرت لینک داخلی: '+score+'/۱۰۰"><div class="vs-score-fill" style="width:'+score+'%;background:'+color+'"></div><span>'+score+'</span></div>';
+}
 $(document).on('click', '#vs-tg-reload', loadTargets);
 $(document).on('keyup', '#vs-tg-search', function(e){ if (e.key === 'Enter') loadTargets(); });
 $(document).on('click', '.vs-tg-use', function(){

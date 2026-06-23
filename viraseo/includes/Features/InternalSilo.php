@@ -17,6 +17,88 @@ class InternalSilo {
         add_action('wp_ajax_viraseo_apply_link', [$this, 'ajax_apply']);
         add_action('wp_ajax_viraseo_link_clusters', [$this, 'ajax_clusters']);
         add_action('wp_ajax_viraseo_apply_all_links', [$this, 'ajax_apply_all']);
+        add_action('wp_ajax_viraseo_link_graph', [$this, 'ajax_link_graph']);
+        add_action('wp_ajax_viraseo_link_scores', [$this, 'ajax_link_scores']);
+    }
+
+    /**
+     * Internal PageRank — distributes link equity across pages via the internal link graph.
+     * Returns post_id => score (0-100, relative to the strongest page).
+     */
+    public function compute_link_scores(): array {
+        global $wpdb;
+        $edges = $wpdb->get_results("SELECT source_id, target_id FROM {$wpdb->prefix}viraseo_internal_links");
+        $out = []; $nodes = [];
+        foreach ($edges as $e) {
+            $s = (int)$e->source_id; $t = (int)$e->target_id;
+            if ($s < 1 || $t < 1) continue;
+            $out[$s][] = $t; $nodes[$s] = true; $nodes[$t] = true;
+        }
+        $keys = array_keys($nodes);
+        $N = count($keys);
+        if ($N === 0) return [];
+        $d = 0.85;
+        $pr = array_fill_keys($keys, 1.0 / $N);
+        for ($iter = 0; $iter < 25; $iter++) {
+            $dangling = 0.0;
+            foreach ($keys as $n) if (empty($out[$n])) $dangling += $pr[$n];
+            $new = array_fill_keys($keys, (1 - $d) / $N + $d * ($dangling / $N));
+            foreach ($out as $s => $targets) {
+                $share = $pr[$s] / count($targets);
+                foreach ($targets as $t) $new[$t] += $d * $share;
+            }
+            $pr = $new;
+        }
+        $max = max($pr) ?: 1;
+        $scores = [];
+        foreach ($pr as $n => $v) $scores[$n] = (int) round($v / $max * 100);
+        return $scores;
+    }
+
+    /** Per-page internal link scores table (page, inlinks, score). */
+    public function ajax_link_scores(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        global $wpdb;
+        $scores = get_option('viraseo_link_scores', []);
+        if (!is_array($scores) || !$scores) { wp_send_json_success(['rows'=>[]]); return; }
+        $inlinks = [];
+        foreach ($wpdb->get_results("SELECT target_id, COUNT(*) c FROM {$wpdb->prefix}viraseo_internal_links GROUP BY target_id") as $r) {
+            $inlinks[(int)$r->target_id] = (int)$r->c;
+        }
+        arsort($scores);
+        $rows = [];
+        foreach (array_slice($scores, 0, 100, true) as $id => $sc) {
+            $rows[] = [
+                'id'=>$id,
+                'title'=>get_the_title($id) ?: '(بدون عنوان)',
+                'url'=>get_permalink($id),
+                'score'=>$sc,
+                'inlinks'=>$inlinks[$id] ?? 0,
+            ];
+        }
+        wp_send_json_success(['rows'=>$rows]);
+    }
+
+    /** Graph nodes + edges (top pages by link score) for visualization. */
+    public function ajax_link_graph(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        global $wpdb;
+        $scores = get_option('viraseo_link_scores', []);
+        if (!is_array($scores) || !$scores) { wp_send_json_success(['nodes'=>[], 'edges'=>[]]); return; }
+        arsort($scores);
+        $top = array_slice($scores, 0, 35, true);
+        $ids = array_keys($top);
+        $nodes = [];
+        foreach ($top as $id => $sc) {
+            $nodes[] = ['id'=>(int)$id, 'title'=>mb_substr(get_the_title($id) ?: ('#'.$id), 0, 28), 'score'=>$sc];
+        }
+        $edges = [];
+        $idList = implode(',', array_map('intval', $ids));
+        if ($idList) {
+            $rows = $wpdb->get_results("SELECT DISTINCT source_id, target_id FROM {$wpdb->prefix}viraseo_internal_links WHERE source_id IN ({$idList}) AND target_id IN ({$idList})");
+            foreach ($rows as $r) $edges[] = ['from'=>(int)$r->source_id, 'to'=>(int)$r->target_id];
+        }
+        wp_send_json_success(['nodes'=>$nodes, 'edges'=>$edges]);
     }
 
     public function ajax_scan(): void {
@@ -281,6 +363,7 @@ class InternalSilo {
         ");
 
         $orphan_count = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$ot} WHERE status='orphan'");
+        update_option('viraseo_link_scores', $this->compute_link_scores());
         update_option('viraseo_last_scan', current_time('mysql'));
 
         return ['links'=>$link_count, 'orphans'=>$orphan_count];

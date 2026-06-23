@@ -706,3 +706,10 @@
 .vs-fc-detail-box h4 { margin: 0 0 8px; font-size: 13px; color: #fff; }
 .vs-checklist { list-style: none; padding: 0; margin: 0; }
 .vs-checklist li { font-size: 12px; padding: 8px 12px; margin-bottom: 6px; background: rgba(16,185,129,.08); border-right: 3px solid #10b981; border-radius: 0 8px 8px 0; }
+
+
+/* === Internal link score + graph === */
+.vs-score-bar { position: relative; height: 18px; background: rgba(148,163,184,.15); border-radius: 9px; min-width: 90px; overflow: hidden; }
+.vs-score-fill { height: 100%; border-radius: 9px; transition: width .4s; }
+.vs-score-bar span { position: absolute; inset: 0; text-align: center; font-size: 11px; font-weight: 700; line-height: 18px; color: #fff; }
+.vs-link-graph { width: 100%; min-height: 460px; background: radial-gradient(circle at 50% 50%, rgba(99,102,241,.06), transparent 70%); border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; }

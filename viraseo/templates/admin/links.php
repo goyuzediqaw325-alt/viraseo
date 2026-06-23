@@ -12,6 +12,7 @@
     <button class="vs-tab active" data-tab="orphans">صفحات یتیم</button>
     <button class="vs-tab" data-tab="suggestions">پیشنهادات لینک</button>
     <button class="vs-tab" data-tab="clusters">🧩 خوشه‌های موضوعی</button>
+    <button class="vs-tab" data-tab="power">💪 قدرت و گراف لینک‌ها</button>
   </div>
 
   <div class="vs-tab-panel active" data-panel="orphans">
@@ -46,5 +47,23 @@
     </div>
     <button class="vs-btn vs-btn-secondary vs-btn-sm" id="vs-load-clusters"><span class="dashicons dashicons-update"></span> محاسبه خوشه‌ها</button>
     <div id="vs-clusters-list" style="margin-top:16px;"></div>
+  </div>
+
+  <div class="vs-tab-panel" data-panel="power">
+    <div class="vs-alert vs-alert-info">
+      <span class="dashicons dashicons-chart-area"></span>
+      <p><strong>قدرت لینک داخلی</strong> (الگوریتم PageRank داخلی) نشان می‌دهد هر صفحه چقدر از طریق لینک‌های داخلی «قدرت» دریافت می‌کند. صفحات هدف مهم باید قدرت بالایی داشته باشند. برای به‌روزرسانی، «اسکن لینک‌ها» را بزنید.</p>
+    </div>
+    <div class="vs-card">
+      <h3 class="vs-card-title">🕸️ گراف لینک‌های داخلی (۳۵ صفحه برتر)</h3>
+      <div id="vs-link-graph" class="vs-link-graph"><span class="vs-empty">در حال رسم گراف...</span></div>
+    </div>
+    <div class="vs-card" style="margin-top:16px;">
+      <h3 class="vs-card-title">💪 امتیاز قدرت لینک صفحات</h3>
+      <table class="vs-table">
+        <thead><tr><th>صفحه</th><th>لینک ورودی</th><th>قدرت لینک</th></tr></thead>
+        <tbody id="vs-power-tbody"><tr><td colspan="3" class="vs-empty">ابتدا «اسکن لینک‌ها» را اجرا کنید.</td></tr></tbody>
+      </table>
+    </div>
   </div>
 </div>
