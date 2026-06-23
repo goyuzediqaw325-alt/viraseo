@@ -539,10 +539,40 @@ $(document).on('click', '#vs-load-clusters', function(){
         if (!r.success) { $('#vs-clusters-list').html('<div class="vs-empty">خطا</div>'); return; }
         const $l = $('#vs-clusters-list').empty();
         if (!r.data.clusters.length) { $l.html('<div class="vs-empty">خوشه‌ای یافت نشد (حداقل ۲ صفحه با موضوع مشترک لازم است).</div>'); return; }
-        r.data.clusters.forEach(c => {
-            let members = c.members.map(m => '<li><a href="'+m.url+'" target="_blank">'+m.title+'</a></li>').join('');
-            $l.append('<div class="vs-cluster"><div class="vs-cluster-head"><span class="vs-badge vs-badge-blue">'+c.keyword+'</span> <span class="vs-cluster-count">'+c.count+' صفحه</span></div><div class="vs-cluster-pillar">🏛️ ستون پیشنهادی: <a href="'+c.pillar.url+'" target="_blank"><strong>'+c.pillar.title+'</strong></a></div><ul class="vs-cluster-members">'+members+'</ul></div>');
+        r.data.clusters.forEach((c, ci) => {
+            let memberOpts = c.members.map(m => '<option value="'+m.id+'">'+m.title+'</option>').join('');
+            let members = c.members.map(m => '<li><label><input type="checkbox" class="vs-cl-mem" data-cl="'+ci+'" value="'+m.id+'" '+(m.linked?'disabled checked':'')+'> <a href="'+m.url+'" target="_blank">'+m.title+'</a> '+(m.linked?'<span class="vs-badge vs-badge-green">لینک‌شده</span>':'')+'</label></li>').join('');
+            const covColor = c.coverage >= 66 ? 'green' : (c.coverage >= 33 ? 'orange' : 'red');
+            $l.append('<div class="vs-cluster" data-cl="'+ci+'" data-pillar="'+c.pillar_id+'">'
+                + '<div class="vs-cluster-head"><span class="vs-badge vs-badge-blue">'+c.keyword+'</span> <span class="vs-cluster-count">'+c.count+' صفحه</span> <span class="vs-badge vs-badge-'+covColor+'">پوشش سیلو: '+c.coverage+'%</span> <span class="vs-cluster-count">👁️ '+c.impressions+' نمایش</span></div>'
+                + '<div class="vs-cluster-pillar">🏛️ ستون (Pillar): <select class="vs-input vs-cl-pillar" data-cl="'+ci+'" style="max-width:280px;display:inline-block"><option value="'+c.pillar.id+'">'+c.pillar.title+' (پیشنهادی)</option>'+memberOpts+'</select> <a href="'+c.pillar.url+'" target="_blank">↗</a></div>'
+                + '<ul class="vs-cluster-members vs-cluster-members-list">'+members+'</ul>'
+                + '<div class="vs-row"><button class="vs-btn vs-btn-sm vs-btn-primary vs-cl-link" data-cl="'+ci+'">🔗 لینک اعضای انتخابی به ستون</button><label class="vs-hint"><input type="checkbox" class="vs-cl-all" data-cl="'+ci+'"> انتخاب همه</label></div>'
+                + '</div>');
         });
+    });
+});
+$(document).on('change', '.vs-cl-all', function(){
+    const ci = $(this).data('cl');
+    $('.vs-cl-mem[data-cl="'+ci+'"]:not(:disabled)').prop('checked', $(this).is(':checked'));
+});
+$(document).on('change', '.vs-cl-pillar', function(){
+    const ci = $(this).data('cl');
+    $('.vs-cluster[data-cl="'+ci+'"]').attr('data-pillar', $(this).val());
+});
+$(document).on('click', '.vs-cl-link', function(){
+    const ci = $(this).data('cl');
+    const $cl = $('.vs-cluster[data-cl="'+ci+'"]');
+    const pillar = $cl.attr('data-pillar');
+    const members = [];
+    $('.vs-cl-mem[data-cl="'+ci+'"]:checked:not(:disabled)').each(function(){ if ($(this).val() !== pillar) members.push($(this).val()); });
+    if (!members.length) { toast('حداقل یک عضو را انتخاب کنید.','err'); return; }
+    if (!confirm('یک لینک از '+members.length+' صفحه به صفحه‌ی ستون درج می‌شود. ادامه؟')) return;
+    const $b = $(this).prop('disabled', true).text('در حال لینک...');
+    post('viraseo_cluster_link', {pillar_id: pillar, members: members}, r => {
+        $b.prop('disabled', false).text('🔗 لینک اعضای انتخابی به ستون');
+        toast(r.success?r.data.message:r.data, r.success?'success':'err');
+        if (r.success) $('#vs-load-clusters').trigger('click');
     });
 });
 

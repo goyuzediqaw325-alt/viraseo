@@ -718,3 +718,9 @@
 /* === Pager === */
 .vs-pager { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 16px; }
 .vs-pager-info { font-size: 12px; color: var(--vs-text-muted); }
+
+
+/* === Cluster member checklist === */
+.vs-cluster-members-list { grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); }
+.vs-cluster-members-list li label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.vs-cl-pillar { margin: 0 6px; }

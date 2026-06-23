@@ -74,7 +74,7 @@ class ModernSeo {
             ];
         }
         usort($rows, fn($a,$b)=>$a['score']<=>$b['score']);
-        wp_send_json_success(['rows'=>array_slice($rows, 0, 60)]);
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300)]);
     }
 
     /** Content freshness — stale pages that still rank (have impressions) → refresh ROI. */
@@ -100,7 +100,7 @@ class ModernSeo {
             ];
         }
         usort($rows, fn($a,$b)=>$b['impr_raw']<=>$a['impr_raw']);
-        wp_send_json_success(['rows'=>array_slice($rows, 0, 60), 'months'=>$months]);
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'months'=>$months]);
     }
 
     /** Persian text quality — ZWNJ (نیم‌فاصله), Arabic characters, readability. */
@@ -140,7 +140,7 @@ class ModernSeo {
             ];
         }
         usort($rows, fn($a,$b)=>$b['count']<=>$a['count']);
-        wp_send_json_success(['rows'=>array_slice($rows, 0, 60)]);
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300)]);
     }
 
     /** Build llms.txt content (markdown) listing key pages to guide AI crawlers. */

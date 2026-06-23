@@ -72,7 +72,7 @@ class Opportunities {
         }
         // Highest impressions + fewest links first (biggest opportunity)
         usort($rows, fn($a, $b) => ($b['impr_raw'] <=> $a['impr_raw']));
-        wp_send_json_success(['rows'=>array_slice($rows, 0, 60)]);
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300)]);
     }
 
     public function ajax_thin_content(): void {
@@ -104,6 +104,6 @@ class Opportunities {
         }
         // Pages that already get impressions but are thin = highest rewrite ROI
         usort($rows, fn($a, $b) => ($b['impr_raw'] <=> $a['impr_raw']) ?: ($a['words'] <=> $b['words']));
-        wp_send_json_success(['rows'=>array_slice($rows, 0, 80), 'threshold'=>$threshold]);
+        wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'threshold'=>$threshold]);
     }
 }

@@ -75,7 +75,7 @@ class TrafficForecaster {
 
         // Sort by priority (best opportunities first)
         usort($data, fn($a,$b)=>$b['priority']<=>$a['priority']);
-        $data = array_slice($data, 0, 80);
+        $data = array_slice($data, 0, 300);
 
         wp_send_json_success([
             'rows'=>$data,
