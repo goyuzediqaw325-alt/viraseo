@@ -3,6 +3,7 @@ namespace ViraSEO\Features;
 defined('ABSPATH') || exit;
 
 use ViraSEO\Admin\Dashboard;
+use ViraSEO\Api\AiClient;
 use ViraSEO\Utils\{JalaliDate, PersianText};
 
 /** Feature 8: Traffic ROI Forecaster [🟢 مستقل] */
@@ -12,6 +13,7 @@ class TrafficForecaster {
     public function __construct() {
         add_action('wp_ajax_viraseo_forecast', [$this, 'ajax']);
         add_action('wp_ajax_viraseo_forecast_page', [$this, 'ajax_page']);
+        add_action('wp_ajax_viraseo_forecast_ai', [$this, 'ajax_ai_strategy']);
     }
 
     /** Action recommendation based on current position. */
@@ -99,31 +101,135 @@ class TrafficForecaster {
 
         $rows = $wpdb->get_results($wpdb->prepare(
             "SELECT keyword, SUM(clicks) c, SUM(impressions) i, AVG(position) p
-             FROM {$t} WHERE page_url=%s GROUP BY keyword_hash ORDER BY i DESC LIMIT 60", $url
+             FROM {$t} WHERE page_url=%s GROUP BY keyword_hash ORDER BY i DESC LIMIT 100", $url
         ));
         if (!$rows) wp_send_json_error('برای این صفحه داده‌ای در سرچ کنسول نیست.');
 
         $kws = [];
+        // Categorized opportunity buckets (advanced, data-driven strategy)
+        $striking = [];   // pos 11-20: closest to page-1 breakthrough
+        $quickWin = [];    // pos 4-10: page-1 bottom, easiest clicks
+        $ctrGap = [];      // page-1 but CTR far below expected = title/meta problem
+        $totalImpr = 0; $totalClicks = 0;
         foreach ($rows as $r) {
             $pos = round((float)$r->p, 1);
+            $impr = (int)$r->i; $clk = (int)$r->c;
+            $totalImpr += $impr; $totalClicks += $clk;
             $kws[] = [
                 'keyword'=>$r->keyword,
                 'position'=>JalaliDate::to_fa(number_format($pos,1)),
-                'impressions'=>PersianText::format_number((int)$r->i),
-                'clicks'=>PersianText::format_number((int)$r->c),
+                'impressions'=>PersianText::format_number($impr),
+                'clicks'=>PersianText::format_number($clk),
                 'pos_raw'=>$pos,
-                'is_opportunity'=> ($pos > 3 && (int)$r->i >= 10),
+                'is_opportunity'=> ($pos > 3 && $impr >= 10),
             ];
+            if ($impr < 10) continue;
+            if ($pos >= 11 && $pos <= 20) $striking[] = $r;
+            elseif ($pos >= 4 && $pos <= 10) $quickWin[] = $r;
+            if ($pos <= 10 && $impr >= 50) {
+                $expCtr = (self::CTR[(int)round($pos)] ?? 2.5) / 100;
+                $actualCtr = $impr > 0 ? $clk / $impr : 0;
+                if ($actualCtr < $expCtr * 0.5) $ctrGap[] = $r; // getting <50% of expected clicks
+            }
         }
-        // Pick the best-ranking query as the page's main intent + give a checklist
+        usort($striking, fn($a,$b)=>(int)$b->i <=> (int)$a->i);
+        usort($quickWin, fn($a,$b)=>(int)$b->i <=> (int)$a->i);
+        usort($ctrGap, fn($a,$b)=>(int)$b->i <=> (int)$a->i);
+
         $best = $rows[0];
         [$rec] = $this->action_for(round((float)$best->p, 1));
-        $checklist = [
-            'این کلمات مرتبط را به‌صورت طبیعی در محتوا و زیرعنوان‌ها (H2/H3) بگنجانید.',
-            $rec,
-            'یک بخش «سوالات متداول» با کلماتی که جایگاه ۸ تا ۲۰ دارند اضافه کنید.',
-            'از صفحات مرتبط دیگر با انکر همین کلمات به این صفحه لینک داخلی بدهید.',
-        ];
-        wp_send_json_success(['keywords'=>$kws, 'checklist'=>$checklist, 'count'=>count($kws)]);
+
+        // Build a prioritized, data-driven strategy (not generic advice)
+        $strategy = [];
+        if ($quickWin) {
+            $names = implode('، ', array_slice(array_map(fn($r)=>'«'.$r->keyword.'»', $quickWin), 0, 4));
+            $strategy[] = ['icon'=>'🎯','label'=>'بُردِ سریع (جایگاه ۴ تا ۱۰)',
+                'text'=>'این کلمات همین حالا در صفحه اول هستند: '.$names.'. با تقویت عنوان و افزودن یک پاراگراف پاسخ مستقیم، سریع‌ترین رشد کلیک را می‌گیرید.'];
+        }
+        if ($striking) {
+            $names = implode('، ', array_slice(array_map(fn($r)=>'«'.$r->keyword.'»', $striking), 0, 4));
+            $strategy[] = ['icon'=>'🚀','label'=>'فاصله‌ی ضربه (جایگاه ۱۱ تا ۲۰)',
+                'text'=>'این کلمات یک قدم تا صفحه اول فاصله دارند: '.$names.'. یک زیربخش H2 اختصاصی برای هرکدام بنویسید و ۲ تا ۳ لینک داخلی با همین انکرها به این صفحه بدهید.'];
+        }
+        if ($ctrGap) {
+            $names = implode('، ', array_slice(array_map(fn($r)=>'«'.$r->keyword.'»', $ctrGap), 0, 4));
+            $strategy[] = ['icon'=>'🖱️','label'=>'نشتی نرخ کلیک (CTR پایین)',
+                'text'=>'برای این کلمات جایگاه خوب دارید اما کلیک کم می‌گیرید: '.$names.'. عنوان و متادیسکریپشن را جذاب‌تر و با عدد/سال بنویسید تا کلیک‌ها چند برابر شود.'];
+        }
+        $strategy[] = ['icon'=>'❓','label'=>'هدف‌گیری اسنیپت و FAQ',
+            'text'=>'یک بخش «سوالات متداول» با کلماتی که جایگاه ۸ تا ۲۰ دارند اضافه کنید و به هر سوال پاسخ کوتاه ۴۰ تا ۶۰ کلمه‌ای بدهید تا شانس Featured Snippet بالا برود.'];
+        $strategy[] = ['icon'=>'🔗','label'=>'تقویت لینک داخلی',
+            'text'=>'از صفحات مرتبط دیگر با انکرتکست همین کلمات به این صفحه لینک داخلی بدهید تا قدرت لینک و رتبه افزایش یابد.'];
+
+        // Legacy flat checklist (kept for backward compatibility with older UI)
+        $checklist = array_map(fn($s)=>$s['text'], $strategy);
+        array_unshift($checklist, $rec);
+
+        wp_send_json_success([
+            'keywords'=>$kws,
+            'checklist'=>$checklist,
+            'strategy'=>$strategy,
+            'count'=>count($kws),
+            'summary'=>[
+                'impressions'=>PersianText::format_number($totalImpr),
+                'clicks'=>PersianText::format_number($totalClicks),
+                'ctr'=>$totalImpr>0 ? JalaliDate::to_fa(number_format($totalClicks/$totalImpr*100,1)).'٪' : '۰٪',
+                'striking'=>PersianText::format_number(count($striking)),
+                'quickwin'=>PersianText::format_number(count($quickWin)),
+                'ctrgap'=>PersianText::format_number(count($ctrGap)),
+            ],
+            'ai_enabled'=>AiClient::is_enabled(),
+            'url'=>$url,
+        ]);
+    }
+
+    /**
+     * AI-powered complete traffic-increase strategy for a single page, grounded in its real GSC data.
+     * Builds a rich prompt from the page's actual keywords/positions/impressions/CTR.
+     */
+    public function ajax_ai_strategy(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        if (!AiClient::is_enabled()) wp_send_json_error('هوش مصنوعی فعال نیست. در تنظیمات فعال کنید.');
+        global $wpdb;
+        $t = $wpdb->prefix.'viraseo_gsc_keywords';
+        $url = esc_url_raw($_POST['url'] ?? '');
+        if (!$url) wp_send_json_error('آدرس صفحه نامعتبر است.');
+
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT keyword, SUM(clicks) c, SUM(impressions) i, AVG(position) p
+             FROM {$t} WHERE page_url=%s GROUP BY keyword_hash ORDER BY i DESC LIMIT 40", $url
+        ));
+        if (!$rows) wp_send_json_error('برای این صفحه داده‌ای در سرچ کنسول نیست.');
+
+        // Resolve the post for title + target keyword context
+        $pid = url_to_postid($url);
+        $title = $pid ? get_the_title($pid) : $url;
+        $target = $pid ? TargetKeywords::get($pid) : '';
+
+        $lines = '';
+        foreach ($rows as $r) {
+            $pos = round((float)$r->p, 1);
+            $impr = (int)$r->i; $clk = (int)$r->c;
+            $ctr = $impr > 0 ? round($clk/$impr*100, 1) : 0;
+            $lines .= "- «{$r->keyword}» | جایگاه {$pos} | نمایش {$impr} | کلیک {$clk} | CTR {$ctr}٪\n";
+        }
+
+        $system = 'شما استراتژیست ارشد سئوی فارسی هستید و اصول Helpful Content و E-E-A-T گوگل را کامل می‌شناسید. '
+                . 'بر اساس داده‌های واقعی سرچ کنسول، یک نقشه‌ی راه عملی و دقیق فقط به فارسی و کاملاً ساختارمند با تیتر بده.';
+        $user = "صفحه: {$title}\nآدرس: {$url}\n" . ($target ? "کلمه هدف فعلی: «{$target}»\n" : '')
+              . "\nداده‌های واقعی این صفحه در سرچ کنسول گوگل:\n{$lines}\n"
+              . "یک استراتژی کامل افزایش ترافیک برای همین صفحه بده شامل:\n"
+              . "۱) کلماتی که با کمترین تلاش بیشترین کلیک را می‌آورند (بُرد سریع) و دقیقاً چه کنم\n"
+              . "۲) کلمات «فاصله‌ی ضربه» (جایگاه ۱۱ تا ۲۰) و نقشه‌ی رساندن آن‌ها به صفحه اول\n"
+              . "۳) کلماتی که جایگاه خوب اما CTR پایین دارند: پیشنهاد عنوان و متادیسکریپشن جدید و جذاب\n"
+              . "۴) ساختار هدینگ پیشنهادی (H2/H3) و بخش‌هایی که باید به محتوا اضافه شوند\n"
+              . "۵) ۵ تا ۸ سوال متداول برای هدف‌گیری اسنیپت\n"
+              . "۶) پیشنهاد لینک داخلی (انکرتکست و صفحات مبدأ)\n"
+              . "۷) اولویت‌بندی اقدامات از نظر «بیشترین اثر با کمترین تلاش».";
+
+        $res = AiClient::chat($system, $user, 0.5);
+        if (isset($res['error'])) wp_send_json_error($res['error']);
+        wp_send_json_success(['text'=>$res['text'], 'cost'=>$res['cost'], 'tokens'=>$res['tokens']]);
     }
 }

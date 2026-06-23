@@ -25,6 +25,7 @@
       <thead><tr><th>صفحه</th><th>نوع</th><th>نمایش</th><th>کلیک</th><th>میانگین جایگاه</th><th>لینک ورودی</th><th>عملیات</th></tr></thead>
       <tbody id="vs-linkopp-tbody"><tr><td colspan="7" class="vs-empty">دکمه «محاسبه فرصت‌ها» را بزنید.</td></tr></tbody>
     </table>
+    <div id="vs-linkopp-pager" class="vs-cpager vs-pager"></div>
   </div>
 
   <div class="vs-tab-panel" data-panel="thin">
@@ -42,6 +43,7 @@
       <thead><tr><th>صفحه</th><th>نوع</th><th>تعداد کلمات</th><th>نمایش (GSC)</th><th>اولویت بازنویسی</th><th>عملیات</th></tr></thead>
       <tbody id="vs-thin-tbody"><tr><td colspan="6" class="vs-empty">دکمه «بررسی محتوای ضعیف» را بزنید.</td></tr></tbody>
     </table>
+    <div id="vs-thin-pager" class="vs-cpager vs-pager"></div>
   </div>
 
   <div class="vs-tab-panel" data-panel="onpage">
@@ -57,5 +59,6 @@
       <thead><tr><th>صفحه</th><th>نوع</th><th>کلمه هدف</th><th>نمایش GSC</th><th>امتیاز On-Page</th><th>جزئیات</th></tr></thead>
       <tbody id="vs-onpage-tbody"><tr><td colspan="6" class="vs-empty">دکمه «بررسی On-Page» را بزنید.</td></tr></tbody>
     </table>
+    <div id="vs-onpage-pager" class="vs-cpager vs-pager"></div>
   </div>
 </div>

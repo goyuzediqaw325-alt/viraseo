@@ -21,6 +21,7 @@
       <button class="vs-btn vs-btn-primary" id="vs-ai-load"><span class="dashicons dashicons-update"></span> تحلیل آمادگی AI</button>
     </div>
     <table class="vs-table" style="margin-top:12px;"><thead><tr><th>صفحه</th><th>نوع</th><th>امتیاز AI</th><th>پیشنهادها</th><th>عملیات</th></tr></thead><tbody id="vs-ai-tbody"><tr><td colspan="5" class="vs-empty">دکمه تحلیل را بزنید.</td></tr></tbody></table>
+    <div id="vs-ai-pager" class="vs-cpager vs-pager"></div>
   </div>
 
   <div class="vs-tab-panel" data-panel="fresh">
@@ -29,6 +30,7 @@
     </div>
     <div class="vs-toolbar"><label class="vs-hint">قدیمی‌تر از (ماه):</label><input type="number" class="vs-input" id="vs-fresh-months" value="6" min="1" max="48" style="max-width:90px;"><select class="vs-input vs-type-filter" id="vs-fresh-type" style="max-width:180px;"><option value="all">همه نوع‌ها</option></select><button class="vs-btn vs-btn-primary" id="vs-fresh-load">بررسی محتوای کهنه</button></div>
     <table class="vs-table"><thead><tr><th>صفحه</th><th>نوع</th><th>آخرین به‌روزرسانی</th><th>قدمت (ماه)</th><th>نمایش GSC</th><th>اولویت</th><th>عملیات</th></tr></thead><tbody id="vs-fresh-tbody"><tr><td colspan="7" class="vs-empty">دکمه بررسی را بزنید.</td></tr></tbody></table>
+    <div id="vs-fresh-pager" class="vs-cpager vs-pager"></div>
   </div>
 
   <div class="vs-tab-panel" data-panel="fa">
@@ -40,6 +42,7 @@
       <button class="vs-btn vs-btn-primary" id="vs-fa-load"><span class="dashicons dashicons-update"></span> بررسی کیفیت متن فارسی</button>
     </div>
     <table class="vs-table" style="margin-top:12px;"><thead><tr><th>صفحه</th><th>نوع</th><th>مشکلات نگارشی</th><th>عملیات</th></tr></thead><tbody id="vs-fa-tbody"><tr><td colspan="4" class="vs-empty">دکمه بررسی را بزنید.</td></tr></tbody></table>
+    <div id="vs-fa-pager" class="vs-cpager vs-pager"></div>
   </div>
 
   <div class="vs-tab-panel" data-panel="llms">

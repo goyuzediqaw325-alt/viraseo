@@ -66,26 +66,43 @@ class Opportunities {
                 foreach ($im[1] as $a) if ($this->has($a, $kw)) { $alt = true; break; }
             }
             $host = wp_parse_url(get_site_url(), PHP_URL_HOST);
-            $intLinks = 0;
+            $intLinks = 0; $extLinks = 0;
             if (preg_match_all('/<a[^>]+href=["\']([^"\']+)["\']/i', $html, $am)) {
                 foreach ($am[1] as $href) {
+                    if (strpos($href, '#') === 0 || stripos($href, 'mailto:') === 0) continue;
                     if (strpos($href, '/') === 0) { $intLinks++; continue; }
                     $h = wp_parse_url($href, PHP_URL_HOST);
                     if ($h && $h === $host) $intLinks++;
+                    elseif (preg_match('#^https?://#i', $href)) $extLinks++;
                 }
             }
+            $h2count = preg_match_all('/<h2\b/i', $html) ?: 0;
+            $imgCount = preg_match_all('/<img\b/i', $html) ?: 0;
+            $hasSchema = (bool) preg_match('/application\/ld\+json/i', $html) || (bool) preg_match('/itemtype=/i', $html);
+            $titleLen = mb_strlen($seoTitle);
+            $metaLen = mb_strlen($meta);
+            // Readability: average words per sentence
+            $sentences = preg_split('/[.؟!\n]+/u', $textRaw, -1, PREG_SPLIT_NO_EMPTY);
+            $avgSentence = $sentences ? $words / max(1, count($sentences)) : 0;
 
             $checks = [
                 ['l'=>'کلمه هدف در عنوان سئو', 'ok'=>$this->has($seoTitle, $kw)],
                 ['l'=>'کلمه هدف در H1', 'ok'=>$this->has($h1, $kw)],
-                ['l'=>'کلمه هدف در پاراگراف ابتدایی', 'ok'=>$this->has($intro, $kw)],
+                ['l'=>'کلمه هدف در ۱۰۰ کلمه‌ی ابتدایی', 'ok'=>$this->has($intro, $kw)],
                 ['l'=>'کلمه هدف در URL (اسلاگ)', 'ok'=>$this->has($slug, $kw) || $this->has(str_replace('-', ' ', $slug), $kw)],
                 ['l'=>'کلمه هدف در توضیحات متا', 'ok'=>$this->has($meta, $kw)],
                 ['l'=>'کلمه هدف در یک زیرعنوان (H2/H3)', 'ok'=>$subhead],
                 ['l'=>'چگالی کلمه مناسب (۰.۵٪ تا ۳٪)', 'ok'=>($density >= 0.5 && $density <= 3), 'note'=>'چگالی: '.JalaliDate::to_fa((string)$density).'٪'],
                 ['l'=>'کلمه هدف در alt یک تصویر', 'ok'=>$alt],
                 ['l'=>'حداقل ۳ لینک داخلی خروجی', 'ok'=>($intLinks >= 3), 'note'=>JalaliDate::to_fa((string)$intLinks).' لینک'],
+                ['l'=>'حداقل ۱ لینک خارجی معتبر (Citation)', 'ok'=>($extLinks >= 1), 'note'=>JalaliDate::to_fa((string)$extLinks).' لینک'],
                 ['l'=>'طول محتوای کافی (۳۰۰+ کلمه)', 'ok'=>($words >= 300), 'note'=>PersianText::format_number($words).' کلمه'],
+                ['l'=>'ساختار با حداقل ۲ زیرعنوان H2', 'ok'=>($h2count >= 2), 'note'=>JalaliDate::to_fa((string)$h2count).' H2'],
+                ['l'=>'حداقل ۱ تصویر در محتوا', 'ok'=>($imgCount >= 1)],
+                ['l'=>'وجود داده ساختاریافته (Schema)', 'ok'=>$hasSchema],
+                ['l'=>'طول عنوان سئو مناسب (۳۰ تا ۶۵ نویسه)', 'ok'=>($titleLen >= 30 && $titleLen <= 65), 'note'=>JalaliDate::to_fa((string)$titleLen)],
+                ['l'=>'طول توضیحات متا مناسب (۱۲۰ تا ۱۶۰)', 'ok'=>($metaLen >= 120 && $metaLen <= 160), 'note'=>JalaliDate::to_fa((string)$metaLen)],
+                ['l'=>'خوانایی خوب (میانگین جمله < ۳۰ کلمه)', 'ok'=>($avgSentence > 0 && $avgSentence < 30), 'note'=>'میانگین: '.JalaliDate::to_fa((string)round($avgSentence))],
             ];
             $passed = count(array_filter($checks, fn($c)=>$c['ok']));
             $score = (int) round($passed / count($checks) * 100);

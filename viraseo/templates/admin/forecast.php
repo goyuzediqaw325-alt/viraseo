@@ -30,4 +30,5 @@
     <thead><tr><th>کلمه کلیدی</th><th>جایگاه فعلی</th><th>نمایش/ماه</th><th>کلیک فعلی</th><th>کلیک پتانسیل</th><th>رشد</th><th>سختی</th><th>پیشنهاد</th></tr></thead>
     <tbody id="vs-fc-tbody"><tr><td colspan="8" class="vs-empty">دکمه «محاسبه» را بزنید. (ابتدا داده‌های سرچ کنسول را همگام‌سازی کنید)</td></tr></tbody>
   </table>
+  <div id="vs-fc-pager" class="vs-cpager vs-pager"></div>
 </div>

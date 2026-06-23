@@ -18,9 +18,17 @@ class ModernSeo {
         add_action('wp_ajax_viraseo_ai_readiness', [$this, 'ajax_ai_readiness']);
         add_action('wp_ajax_viraseo_freshness', [$this, 'ajax_freshness']);
         add_action('wp_ajax_viraseo_persian_quality', [$this, 'ajax_persian_quality']);
+        add_action('wp_ajax_viraseo_persian_fix', [$this, 'ajax_persian_fix']);
         add_action('wp_ajax_viraseo_llms_txt', [$this, 'ajax_llms_txt']);
-        // Serve a live llms.txt at the site root
+        // Serve a live llms.txt at the site root (rewrite rule + early + template_redirect fallbacks)
+        add_action('init', [$this, 'add_rewrite']);
+        add_filter('query_vars', function($v){ $v[] = 'viraseo_llms'; return $v; });
         add_action('template_redirect', [$this, 'serve_llms_txt']);
+        add_action('init', [$this, 'serve_llms_txt'], 99);
+    }
+
+    public function add_rewrite(): void {
+        add_rewrite_rule('^llms\.txt$', 'index.php?viraseo_llms=1', 'top');
     }
 
     private function posts(int $limit = 400): array {
@@ -168,6 +176,35 @@ class ModernSeo {
         wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'types'=>self::type_options()]);
     }
 
+    /** Auto-fix Persian writing issues (Arabic chars + ZWNJ for می/نمی/ها) in a post's content. */
+    public function ajax_persian_fix(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('edit_posts')) wp_send_json_error('دسترسی غیرمجاز.');
+        $pid = absint($_POST['post_id'] ?? 0);
+        $post = $pid ? get_post($pid) : null;
+        if (!$post) wp_send_json_error('صفحه یافت نشد.');
+
+        $z = "\xE2\x80\x8C"; // ZWNJ
+        $tokens = preg_split('/(<[^>]+>)/u', $post->post_content, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $changes = 0;
+        foreach ($tokens as &$t) {
+            if ($t === '' || $t[0] === '<') continue; // skip HTML tags
+            $orig = $t;
+            // Arabic ي/ك → Persian ی/ک
+            $t = str_replace(['ي', 'ك'], ['ی', 'ک'], $t);
+            // می / نمی + verb → attach with ZWNJ
+            $t = preg_replace('/(^|[\s\x{200C}])(ن?می) ([\x{0600}-\x{06FF}])/u', '$1$2' . $z . '$3', $t);
+            // plural «ها» (+ common suffixes) → attach with ZWNJ
+            $t = preg_replace('/([\x{0600}-\x{06FF}]) (ها(?:ی|یی|یم|یت|یش|یمان|یتان|یشان)?)(?![\x{0600}-\x{06FF}])/u', '$1' . $z . '$2', $t);
+            if ($t !== $orig) $changes++;
+        }
+        unset($t);
+        $fixed = implode('', $tokens);
+        if ($fixed === $post->post_content) wp_send_json_success(['message' => 'موردی برای اصلاح یافت نشد.']);
+        wp_update_post(['ID' => $pid, 'post_content' => $fixed]);
+        wp_send_json_success(['message' => '✅ متن فارسی اصلاح و ذخیره شد (' . PersianText::format_number($changes) . ' بخش).']);
+    }
+
     /** Build llms.txt content (markdown) listing key pages to guide AI crawlers. */
     private function build_llms_txt(): string {
         $name = get_bloginfo('name');
@@ -202,9 +239,12 @@ class ModernSeo {
 
     /** Serve the generated llms.txt live at /llms.txt (no file write needed). */
     public function serve_llms_txt(): void {
+        if (is_admin()) return;
         $uri = strtok($_SERVER['REQUEST_URI'] ?? '', '?');
-        if ($uri !== '/llms.txt') return;
+        $match = (trim($uri, '/') === 'llms.txt') || (function_exists('get_query_var') && get_query_var('viraseo_llms'));
+        if (!$match) return;
         header('Content-Type: text/plain; charset=utf-8');
+        header('X-Robots-Tag: noindex');
         echo $this->build_llms_txt();
         exit;
     }

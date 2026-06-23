@@ -16,6 +16,31 @@ function toast(msg, type) {
     setTimeout(()=> el.addClass('show'), 10);
     setTimeout(()=> el.remove(), 4000);
 }
+// Generic client-side pagination over already-rendered <tr> rows.
+function vsRowPaginate($tbody, $pager, perPage) {
+    perPage = perPage || 25;
+    if (!$tbody.length || !$pager.length) return;
+    const $rows = $tbody.children('tr').not('.vs-empty').not('.vs-onpage-detail').not('.vs-fc-detail');
+    const total = $rows.length, pages = Math.ceil(total / perPage) || 1;
+    function show(p) {
+        p = Math.min(Math.max(1, p), pages);
+        // collapse any open detail rows on page change
+        $tbody.children('.vs-onpage-detail, .vs-fc-detail').hide();
+        $rows.hide().slice((p-1)*perPage, p*perPage).show();
+        let h = '';
+        if (pages > 1) {
+            if (p > 1) h += '<button class="vs-btn vs-btn-sm vs-btn-secondary vs-cpage" data-p="'+(p-1)+'">‹ قبلی</button>';
+            h += '<span class="vs-pager-info">صفحه '+p+' از '+pages+' ('+total+' مورد)</span>';
+            if (p < pages) h += '<button class="vs-btn vs-btn-sm vs-btn-secondary vs-cpage" data-p="'+(p+1)+'">بعدی ›</button>';
+        }
+        $pager.html(h).data('show', show);
+    }
+    show(1);
+}
+$(document).on('click', '.vs-cpager .vs-cpage', function(){
+    const fn = $(this).closest('.vs-cpager').data('show');
+    if (fn) { fn(parseInt($(this).data('p'),10)); $('html,body').animate({scrollTop: $(this).closest('table').offset().top - 80}, 200); }
+});
 
 // === TABS ===
 $(document).on('click', '.vs-tab', function(e){
@@ -975,6 +1000,7 @@ $(document).on('click', '#vs-fc-calc', function(){
             const ec = f.effort_color === 'green' ? 'vs-badge-green' : (f.effort_color === 'orange' ? 'vs-badge-orange' : 'vs-badge-red');
             $tb.append(`<tr><td><a href="${f.url}" target="_blank" style="color:var(--vs-primary)">${f.keyword}</a></td><td>${f.position}</td><td>${f.impressions}</td><td>${f.clicks}</td><td>${f.potential}</td><td style="color:var(--vs-success);font-weight:700">${f.growth}</td><td><span class="vs-badge ${ec}">${f.effort}</span></td><td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-fc-page" data-url="${escAttr(f.url)}" title="${escAttr(f.action)}">💡 کلمات و اقدامات</button></td></tr>`);
         });
+        vsRowPaginate($('#vs-fc-tbody'), $('#vs-fc-pager'), 25);
     });
 });
 // Per-page keyword opportunities + action checklist
@@ -988,13 +1014,55 @@ $(document).on('click', '.vs-fc-page', function(){
     post('viraseo_forecast_page', {url: url}, r => {
         if (!r.success) { $d.find('td').html('<div class="vs-inspect-err">'+(r.data||'خطا')+'</div>'); return; }
         let kws = r.data.keywords.map(k => '<tr><td>'+k.keyword+(k.is_opportunity?' <span class="vs-badge vs-badge-orange">فرصت</span>':'')+'</td><td>'+k.position+'</td><td>'+k.impressions+'</td><td>'+k.clicks+'</td></tr>').join('');
-        let checks = r.data.checklist.map(c => '<li>'+c+'</li>').join('');
+        // Rich, data-driven strategy cards (fallback to legacy checklist)
+        let strat = '';
+        if (r.data.strategy && r.data.strategy.length) {
+            strat = r.data.strategy.map(s =>
+                '<div class="vs-fc-strat"><div class="vs-fc-strat-h">'+s.icon+' <b>'+s.label+'</b></div><div class="vs-fc-strat-t">'+s.text+'</div></div>'
+            ).join('');
+        } else {
+            strat = '<ul class="vs-checklist">'+(r.data.checklist||[]).map(c => '<li>'+c+'</li>').join('')+'</ul>';
+        }
+        // Summary chips
+        const sm = r.data.summary || {};
+        let chips = '';
+        if (sm.impressions !== undefined) {
+            chips = '<div class="vs-fc-chips">'
+                + '<span class="vs-fc-chip">👁️ نمایش: <b>'+sm.impressions+'</b></span>'
+                + '<span class="vs-fc-chip">🖱️ کلیک: <b>'+sm.clicks+'</b></span>'
+                + '<span class="vs-fc-chip">📈 CTR: <b>'+sm.ctr+'</b></span>'
+                + '<span class="vs-fc-chip vs-fc-chip-g">🎯 بُرد سریع: <b>'+sm.quickwin+'</b></span>'
+                + '<span class="vs-fc-chip vs-fc-chip-b">🚀 فاصله ضربه: <b>'+sm.striking+'</b></span>'
+                + '<span class="vs-fc-chip vs-fc-chip-o">🖱️ افت CTR: <b>'+sm.ctrgap+'</b></span>'
+                + '</div>';
+        }
+        const aiBtn = r.data.ai_enabled
+            ? '<button class="vs-btn vs-btn-sm vs-btn-primary vs-fc-ai" data-url="'+escAttr(r.data.url)+'">🤖 استراتژی کامل با هوش مصنوعی</button>'
+            : '<span class="vs-muted" style="font-size:12px">برای استراتژی هوش مصنوعی، AI را در تنظیمات فعال کنید.</span>';
         $d.find('td').html(
-            '<div class="vs-fc-detail-box"><div class="vs-row" style="gap:24px;align-items:flex-start">'
+            '<div class="vs-fc-detail-box">'+chips
+            + '<div class="vs-row" style="gap:24px;align-items:flex-start">'
             + '<div style="flex:2;min-width:280px"><h4>📊 کلمات دیگری که این صفحه می‌گیرد (فرصت رشد):</h4><table class="vs-table"><thead><tr><th>کلمه</th><th>جایگاه</th><th>نمایش</th><th>کلیک</th></tr></thead><tbody>'+kws+'</tbody></table></div>'
-            + '<div style="flex:1;min-width:220px"><h4>✅ اقدامات پیشنهادی برای افزایش ترافیک:</h4><ul class="vs-checklist">'+checks+'</ul></div>'
-            + '</div></div>'
+            + '<div style="flex:1;min-width:240px"><h4>✅ استراتژی افزایش ترافیک:</h4>'+strat+'</div>'
+            + '</div>'
+            + '<div class="vs-fc-ai-wrap" style="margin-top:14px">'+aiBtn+'<div class="vs-fc-ai-out" style="display:none"></div></div>'
+            + '</div>'
         );
+    });
+});
+// AI-powered complete strategy for a single page (grounded in its real GSC data)
+$(document).on('click', '.vs-fc-ai', function(){
+    const url = $(this).data('url');
+    const $btn = $(this);
+    const $out = $btn.siblings('.vs-fc-ai-out');
+    $btn.prop('disabled', true).text('🤖 در حال تحلیل با هوش مصنوعی...');
+    $out.show().html('<div class="vs-inspect-loading">⏳ هوش مصنوعی در حال ساخت نقشه‌ی راه بر اساس داده‌های واقعی سرچ کنسول...</div>');
+    post('viraseo_forecast_ai', {url: url}, r => {
+        $btn.prop('disabled', false).text('🤖 استراتژی کامل با هوش مصنوعی');
+        if (!r.success) { $out.html('<div class="vs-inspect-err">'+(r.data||'خطا')+'</div>'); return; }
+        const cost = r.data.cost ? '<div class="vs-muted" style="font-size:11px;margin-top:8px">هزینه تقریبی: $'+r.data.cost+' • توکن: '+r.data.tokens+'</div>' : '';
+        const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+        $out.html('<div class="vs-ai-result"><div class="vs-ai-text">'+html+'</div>'+cost+'</div>');
     });
 });
 
@@ -1271,6 +1339,7 @@ $(document).on('click', '#vs-load-linkopp', function(){
         r.data.rows.forEach(o => {
             $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td><strong style="color:var(--vs-success)">'+o.impressions+'</strong></td><td>'+o.clicks+'</td><td>'+o.position+'</td><td><span class="vs-badge vs-badge-'+(o.inlinks_raw===0?'red':'orange')+'">'+o.inlinks+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
         });
+        vsRowPaginate($('#vs-linkopp-tbody'), $('#vs-linkopp-pager'), 25);
     });
 });
 // === ON-PAGE SEO CHECKLIST ===
@@ -1288,6 +1357,7 @@ $(document).on('click', '#vs-load-onpage', function(){
             let checks = o.checks.map(c => '<li class="'+(c.ok?'vs-chk-ok':'vs-chk-no')+'">'+(c.ok?'✓':'✗')+' '+c.l+(c.note?' <small>('+c.note+')</small>':'')+'</li>').join('');
             $t.append('<tr class="vs-onpage-detail vs-onpage-detail-'+i+'" style="display:none"><td colspan="6"><ul class="vs-onpage-checks">'+checks+'</ul> <a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-primary">ویرایش صفحه</a> <button class="vs-btn vs-btn-sm vs-btn-secondary vs-onpage-ai" data-id="'+o.id+'">🤖 پیشنهاد اصلاح AI</button><div class="vs-onpage-ai-box"></div></td></tr>');
         });
+        vsRowPaginate($('#vs-onpage-tbody'), $('#vs-onpage-pager'), 25);
     });
 });
 $(document).on('click', '.vs-onpage-toggle', function(){
@@ -1315,6 +1385,7 @@ $(document).on('click', '#vs-load-thin', function(){
             const pc = o.priority === 'بالا' ? 'red' : (o.priority === 'متوسط' ? 'orange' : 'blue');
             $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td><strong style="color:'+(o.words<150?'#ef4444':'#f59e0b')+'">'+o.words_fa+'</strong></td><td>'+o.impressions+'</td><td><span class="vs-badge vs-badge-'+pc+'">'+o.priority+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بازنویسی</a></td></tr>');
         });
+        vsRowPaginate($('#vs-thin-tbody'), $('#vs-thin-pager'), 25);
     });
 });
 
@@ -1457,6 +1528,7 @@ $(document).on('click', '#vs-ai-load', function(){
             const tips = o.tips.map(t=>'<li>'+t+'</li>').join('');
             $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+linkScoreBar(o.score)+'</td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+tips+'</ul></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بهبود</a></td></tr>');
         });
+        vsRowPaginate($('#vs-ai-tbody'), $('#vs-ai-pager'), 25);
     });
 });
 $(document).on('click', '#vs-fresh-load', function(){
@@ -1472,6 +1544,7 @@ $(document).on('click', '#vs-fresh-load', function(){
             const pc = o.priority==='بالا'?'red':(o.priority==='متوسط'?'orange':'blue');
             $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+o.modified+'</td><td>'+o.age+'</td><td>'+o.impressions+'</td><td><span class="vs-badge vs-badge-'+pc+'">'+o.priority+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">به‌روزرسانی</a></td></tr>');
         });
+        vsRowPaginate($('#vs-fresh-tbody'), $('#vs-fresh-pager'), 25);
     });
 });
 $(document).on('click', '#vs-fa-load', function(){
@@ -1485,8 +1558,17 @@ $(document).on('click', '#vs-fa-load', function(){
         if (!r.data.rows.length) { $t.html('<tr><td colspan="4" class="vs-empty">🎉 مشکل نگارشی مهمی یافت نشد.</td></tr>'); return; }
         r.data.rows.forEach(o => {
             const issues = o.issues.map(i=>'<li>'+i+'</li>').join('');
-            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+issues+'</ul></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+issues+'</ul></td><td><button class="vs-btn vs-btn-sm vs-btn-success vs-fa-fix" data-id="'+o.id+'">🔧 اصلاح خودکار</button> <a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
         });
+        vsRowPaginate($('#vs-fa-tbody'), $('#vs-fa-pager'), 25);
+    });
+});
+$(document).on('click', '.vs-fa-fix', function(){
+    if (!confirm('مشکلات نگارشی این صفحه (نیم‌فاصله و حروف عربی) به‌صورت خودکار اصلاح و ذخیره می‌شود. ادامه؟')) return;
+    const $b = $(this).prop('disabled', true).text('...');
+    post('viraseo_persian_fix', {post_id:$(this).data('id')}, r => {
+        if (r.success) { toast(r.data.message,'success'); $('#vs-fa-load').trigger('click'); }
+        else { toast(r.data,'err'); $b.prop('disabled',false).text('🔧 اصلاح خودکار'); }
     });
 });
 $(document).on('click', '#vs-llms-gen', function(){
