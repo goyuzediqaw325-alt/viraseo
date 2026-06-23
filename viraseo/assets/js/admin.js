@@ -52,6 +52,66 @@ $(function(){
     });
 });
 
+// === INDEX STATUS (GSC URL Inspection) ===
+function vsIdxRow(o) {
+    const badge = o.indexed ? '<span class="vs-badge vs-badge-green">ایندکس‌شده</span>' : '<span class="vs-badge vs-badge-red">ایندکس نشده</span>';
+    const probs = (o.problems && o.problems.length) ? o.problems.map(p=>'<span class="vs-badge vs-badge-orange">'+p+'</span>').join(' ') : '<span class="vs-chk-ok">بدون مشکل</span>';
+    const title = o.title ? '<a href="'+(o.edit||o.url)+'" target="_blank">'+o.title+'</a>' : '<span dir="ltr">'+o.url+'</span>';
+    return '<tr><td>'+title+'</td><td>'+badge+'</td><td>'+o.coverage+'</td><td>'+o.last_crawl+'</td><td>'+probs+'</td></tr>';
+}
+$(document).on('click', '#vs-idx-one', function(){
+    const url = $('#vs-idx-url').val().trim();
+    if (!url) { toast('آدرس را وارد کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true);
+    $('#vs-idx-one-box').html('<div class="vs-empty">در حال بررسی در سرچ کنسول...</div>');
+    post('viraseo_index_inspect', {url:url}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { $('#vs-idx-one-box').html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        $('#vs-idx-one-box').html('<table class="vs-table"><thead><tr><th>صفحه</th><th>وضعیت</th><th>پوشش</th><th>آخرین خزش</th><th>مشکلات</th></tr></thead><tbody>'+vsIdxRow(r.data)+'</tbody></table>');
+    });
+});
+$(document).on('click', '#vs-idx-batch', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-idx-tbody').html('<tr><td colspan="5" class="vs-empty">در حال بررسی دسته‌ای (ممکن است کمی طول بکشد)...</td></tr>');
+    post('viraseo_index_batch', {limit: $('#vs-idx-limit').val()||15}, r => {
+        $b.prop('disabled', false);
+        const $t = $('#vs-idx-tbody').empty();
+        if (!r.success) { $t.html('<tr><td colspan="5" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        $('#vs-idx-summary').text('ایندکس‌شده: '+r.data.indexed+' از '+r.data.total+' · دارای مشکل: '+r.data.issues);
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="5" class="vs-empty">موردی نیست.</td></tr>'); return; }
+        r.data.rows.forEach(o => $t.append(vsIdxRow(o)));
+    });
+});
+
+// === AI TOOLS PAGE ===
+function vsAiBox(sel, r) {
+    if (!r.success) { $(sel).html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+    const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+    $(sel).html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 خروجی هوش مصنوعی <span class="vs-hint">هزینه: $'+(r.data.cost||0)+' · '+(r.data.tokens||0)+' توکن</span></div><div class="vs-ai-body">'+html+'</div><button class="vs-btn vs-btn-sm vs-btn-secondary vs-ai-copy">📋 کپی</button></div>');
+}
+$(document).on('click', '#vs-aikw-go', function(){
+    const seed = $('#vs-aikw-seed').val().trim();
+    if (!seed) { toast('موضوع را وارد کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true);
+    $('#vs-aikw-box').html('<div class="vs-empty">🤖 در حال تحقیق کلمات...</div>');
+    post('viraseo_ai_keywords', {seed:seed, business:$('#vs-aikw-biz').val()}, r => { $b.prop('disabled',false); vsAiBox('#vs-aikw-box', r); });
+});
+$(document).on('click', '#vs-airev-go', function(){
+    const pid = $('#vs-airev-post').val();
+    if (!pid) { toast('صفحه را انتخاب کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true);
+    $('#vs-airev-box').html('<div class="vs-empty">🤖 در حال بازبینی محتوا...</div>');
+    post('viraseo_ai_review', {post_id:pid}, r => { $b.prop('disabled',false); vsAiBox('#vs-airev-box', r); });
+});
+$(document).on('click', '#vs-aifaq-go', function(){
+    const pid = $('#vs-aifaq-post').val();
+    const kw = $('#vs-aifaq-kw').val().trim();
+    if (!pid && !kw) { toast('صفحه یا کلمه را مشخص کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true);
+    $('#vs-aifaq-box').html('<div class="vs-empty">🤖 در حال تولید FAQ...</div>');
+    post('viraseo_ai_faq', {post_id:pid, keyword:kw}, r => { $b.prop('disabled',false); vsAiBox('#vs-aifaq-box', r); });
+});
+
 // === SETTINGS: AI models (OpenRouter) ===
 $(document).on('click', '#vs-ai-load-models', function(){
     const $b = $(this).prop('disabled', true).text('در حال بارگذاری...');
@@ -214,13 +274,22 @@ function loadCannibal() {
             $c.append(`<div class="vs-conflict ${c.severity}">
                 <div class="vs-conflict-head"><span class="vs-badge vs-badge-${c.severity==='critical'?'red':c.severity==='warning'?'orange':'blue'}">${c.severity}</span><span class="vs-conflict-kw">${c.keyword}</span></div>
                 <div class="vs-conflict-pages"><div>صفحه ۱: <a href="${c.page_1.url}" target="_blank">${c.page_1.url.substring(0,50)}</a><br>جایگاه: ${c.page_1.pos}</div><div class="vs-conflict-vs">⚡</div><div>صفحه ۲: <a href="${c.page_2.url}" target="_blank">${c.page_2.url.substring(0,50)}</a><br>جایگاه: ${c.page_2.pos}</div></div>
-                <div class="vs-conflict-foot"><span>💡 ${c.recommendation}</span><button class="vs-btn vs-btn-sm vs-btn-success vs-resolve" data-id="${c.id}">حل شد</button></div>
+                <div class="vs-conflict-foot"><span>💡 ${c.recommendation}</span><button class="vs-btn vs-btn-sm vs-btn-secondary vs-cannibal-ai" data-kw="${c.keyword}" data-u1="${c.page_1.url}" data-u2="${c.page_2.url}" data-p1="${c.page_1.pos}" data-p2="${c.page_2.pos}">🤖 راه‌حل AI</button><button class="vs-btn vs-btn-sm vs-btn-success vs-resolve" data-id="${c.id}">حل شد</button></div>
+                <div class="vs-cannibal-ai-box"></div>
             </div>`);
         });
     });
 }
 $(document).on('click', '.vs-resolve', function(){
     post('viraseo_resolve_cannibal', {id:$(this).data('id'), status:'resolved'}, ()=> loadCannibal());
+});
+$(document).on('click', '.vs-cannibal-ai', function(){
+    const $box = $(this).closest('.vs-conflict').find('.vs-cannibal-ai-box').html('<div class="vs-empty">🤖 در حال تحلیل راه‌حل...</div>');
+    post('viraseo_ai_cannibal', {keyword:$(this).data('kw'), url1:$(this).data('u1'), url2:$(this).data('u2'), pos1:$(this).data('p1'), pos2:$(this).data('p2')}, r => {
+        if (!r.success) { $box.html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+        $box.html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 راه‌حل هوش مصنوعی <span class="vs-hint">هزینه: $'+(r.data.cost||0)+'</span></div><div class="vs-ai-body">'+html+'</div></div>');
+    });
 });
 
 // === SERP ANALYSIS ===
@@ -1098,12 +1167,20 @@ $(document).on('click', '#vs-load-onpage', function(){
         r.data.rows.forEach((o, i) => {
             $t.append('<tr class="vs-onpage-row" data-i="'+i+'"><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+o.keyword+'</td><td>'+o.impressions+'</td><td>'+linkScoreBar(o.score)+'</td><td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-onpage-toggle" data-i="'+i+'">جزئیات ▾</button></td></tr>');
             let checks = o.checks.map(c => '<li class="'+(c.ok?'vs-chk-ok':'vs-chk-no')+'">'+(c.ok?'✓':'✗')+' '+c.l+(c.note?' <small>('+c.note+')</small>':'')+'</li>').join('');
-            $t.append('<tr class="vs-onpage-detail vs-onpage-detail-'+i+'" style="display:none"><td colspan="6"><ul class="vs-onpage-checks">'+checks+'</ul> <a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-primary">ویرایش صفحه</a></td></tr>');
+            $t.append('<tr class="vs-onpage-detail vs-onpage-detail-'+i+'" style="display:none"><td colspan="6"><ul class="vs-onpage-checks">'+checks+'</ul> <a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-primary">ویرایش صفحه</a> <button class="vs-btn vs-btn-sm vs-btn-secondary vs-onpage-ai" data-id="'+o.id+'">🤖 پیشنهاد اصلاح AI</button><div class="vs-onpage-ai-box"></div></td></tr>');
         });
     });
 });
 $(document).on('click', '.vs-onpage-toggle', function(){
     $('.vs-onpage-detail-'+$(this).data('i')).toggle();
+});
+$(document).on('click', '.vs-onpage-ai', function(){
+    const $box = $(this).siblings('.vs-onpage-ai-box').html('<div class="vs-empty">🤖 در حال تهیه پیشنهاد اصلاح...</div>');
+    post('viraseo_ai_content', {post_id:$(this).data('id'), mode:'improve'}, r => {
+        if (!r.success) { $box.html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+        $box.html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 پیشنهاد اصلاح <span class="vs-hint">هزینه: $'+(r.data.cost||0)+'</span></div><div class="vs-ai-body">'+html+'</div></div>');
+    });
 });
 
 $(document).on('click', '#vs-load-thin', function(){
@@ -1339,6 +1416,15 @@ $(document).on('click', '#vs-run-diag', function(){
             n8nHtml += '<div class="vs-alert vs-alert-info" style="margin-top:16px;"><span class="dashicons dashicons-info"></span><p><strong>ورکفلو ❌ ؟</strong> فایل JSON مربوطه را از «ورکفلوهای n8n» دانلود → در n8n Import → Active کنید.</p></div>';
         }
         $('#vs-diag-n8n-content').html(n8nHtml);
+
+        // AI
+        if (d.ai) {
+            var aiCls = d.ai.status === 'ok' ? 'green' : (d.ai.status === 'warning' ? 'orange' : 'red');
+            var aiHtml = '<p style="font-size:14px;">' + d.ai.message + '</p>';
+            aiHtml += '<p style="font-size:12px;color:var(--vs-text-muted);">مدل: <code>' + d.ai.model + '</code> | پروکسی: <code dir="ltr">' + d.ai.proxy + '</code></p>';
+            if ($('#vs-diag-ai-content').length) $('#vs-diag-ai-content').html(aiHtml);
+            else $('#vs-diag-n8n-content').after('<div class="vs-card" style="margin-top:16px;"><h3 class="vs-card-title">🤖 هوش مصنوعی (OpenRouter) <span class="vs-badge vs-badge-'+aiCls+'">'+(d.ai.status==='ok'?'سالم':(d.ai.status==='warning'?'غیرفعال':'خطا'))+'</span></h3><div id="vs-diag-ai-content">'+aiHtml+'</div></div>');
+        }
 
         // Data
         var dataHtml = '<table class="vs-table"><tbody>';

@@ -42,7 +42,9 @@ export default {
     const auth = request.headers.get('Authorization');
     if (auth) headers.set('Authorization', auth);
     headers.set('Content-Type', request.headers.get('Content-Type') || 'application/json');
-    headers.set('HTTP-Referer', 'https://viraseo.com');
+    // Pass the calling site's referer through (any domain), fall back to the worker's own origin
+    const ref = request.headers.get('X-Site-Url') || request.headers.get('Referer') || url.origin;
+    headers.set('HTTP-Referer', ref);
     headers.set('X-Title', 'ViraSEO');
 
     const init = {

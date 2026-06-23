@@ -148,6 +148,15 @@ class Diagnostics {
             'webhooks' => $n8n_webhooks,
         ];
 
+        // 3b. AI (OpenRouter) connectivity test
+        $ai = \ViraSEO\Api\AiClient::test();
+        $results['ai'] = [
+            'status' => $ai['ok'] ? 'ok' : (\ViraSEO\Admin\Dashboard::get('ai_enabled') ? 'error' : 'warning'),
+            'message' => $ai['msg'],
+            'proxy' => \ViraSEO\Admin\Dashboard::get('ai_proxy_url') ?: '(بدون پروکسی — اتصال مستقیم)',
+            'model' => \ViraSEO\Api\AiClient::model(),
+        ];
+
         // 4. Data Summary
         $kw_count = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}viraseo_gsc_keywords");
         $orphan_count = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}viraseo_orphan_pages WHERE status='orphan'");

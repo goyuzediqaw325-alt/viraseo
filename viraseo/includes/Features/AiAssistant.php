@@ -15,6 +15,94 @@ class AiAssistant {
         add_action('wp_ajax_viraseo_ai_models', [$this, 'ajax_models']);
         add_action('wp_ajax_viraseo_ai_serp_strategy', [$this, 'ajax_serp_strategy']);
         add_action('wp_ajax_viraseo_ai_content', [$this, 'ajax_content']);
+        add_action('wp_ajax_viraseo_ai_cannibal', [$this, 'ajax_cannibal']);
+        add_action('wp_ajax_viraseo_ai_faq', [$this, 'ajax_faq']);
+        add_action('wp_ajax_viraseo_ai_keywords', [$this, 'ajax_keywords']);
+        add_action('wp_ajax_viraseo_ai_review', [$this, 'ajax_review']);
+    }
+
+    /** Shared guard + run helper. */
+    private function run(string $system, string $user, float $temp = 0.5): void {
+        if (!AiClient::is_enabled()) wp_send_json_error('هوش مصنوعی فعال نیست. در تنظیمات فعال کنید.');
+        $res = AiClient::chat($system, $user, $temp);
+        if (isset($res['error'])) wp_send_json_error($res['error']);
+        wp_send_json_success(['text'=>$res['text'], 'cost'=>$res['cost'], 'tokens'=>$res['tokens']]);
+    }
+
+    private const SEO_PERSONA = 'شما متخصص ارشد سئوی فارسی هستید و اصول Helpful Content و E-E-A-T گوگل را کامل می‌شناسید. فقط فارسی، دقیق و ساختارمند با تیتر پاسخ بده.';
+
+    /** AI plan to resolve keyword cannibalization between two pages. */
+    public function ajax_cannibal(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        $kw = sanitize_text_field($_POST['keyword'] ?? '');
+        $u1 = esc_url_raw($_POST['url1'] ?? ''); $u2 = esc_url_raw($_POST['url2'] ?? '');
+        $p1 = sanitize_text_field($_POST['pos1'] ?? '-'); $p2 = sanitize_text_field($_POST['pos2'] ?? '-');
+        if (!$kw || !$u1 || !$u2) wp_send_json_error('داده ناقص.');
+        $user = "تعارض کلمه‌ای (Cannibalization) برای کلمه «{$kw}»:\n"
+              . "صفحه ۱: {$u1} (جایگاه {$p1})\nصفحه ۲: {$u2} (جایگاه {$p2})\n\n"
+              . "تحلیل کن و دقیق بگو: کدام صفحه باید صفحه‌ی اصلی بماند؟ آیا ادغام (merge) بهتر است یا ریدایرکت ۳۰۱ یا متمایزسازی محتوا؟ "
+              . "گام‌به‌گام بگو چه کنم، شامل پیشنهاد لینک داخلی و کانونیکال.";
+        $this->run(self::SEO_PERSONA, $user, 0.4);
+    }
+
+    /** AI generates FAQ Q&A + valid FAQPage JSON-LD for a page. */
+    public function ajax_faq(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        $pid = absint($_POST['post_id'] ?? 0);
+        $kw = PersianText::normalize(sanitize_text_field($_POST['keyword'] ?? ''));
+        $ctx = '';
+        if ($pid) {
+            $post = get_post($pid);
+            if ($post) {
+                if ($kw === '') $kw = TargetKeywords::get($pid);
+                $ctx = "عنوان: {$post->post_title}\nخلاصه محتوا: " . mb_substr(wp_strip_all_tags($post->post_content), 0, 1200) . "\n";
+            }
+        }
+        if ($kw === '' && $ctx === '') wp_send_json_error('کلمه هدف یا صفحه مشخص نیست.');
+        $user = "{$ctx}کلمه هدف: «{$kw}»\n\n"
+              . "۶ تا ۸ سوال متداول واقعی کاربران فارسی درباره این موضوع بنویس با پاسخ‌های کوتاه و دقیق. "
+              . "سپس یک بلوک کامل و معتبر <script type=\"application/ld+json\"> با اسکیمای FAQPage بده که آماده‌ی کپی در صفحه باشد.";
+        $this->run(self::SEO_PERSONA, $user, 0.5);
+    }
+
+    /** AI keyword research from a seed topic — grouped by intent. */
+    public function ajax_keywords(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        $seed = PersianText::normalize(sanitize_text_field($_POST['seed'] ?? ''));
+        if ($seed === '') wp_send_json_error('موضوع یا کلمه‌ی دانه را وارد کنید.');
+        $biz = sanitize_text_field($_POST['business'] ?? '');
+        $user = "موضوع/کلمه‌ی اصلی: «{$seed}»" . ($biz ? "\nزمینه‌ی کسب‌وکار: {$biz}" : '') . "\n\n"
+              . "یک تحقیق کلمات کلیدی کامل برای بازار فارسی‌زبان ایران انجام بده:\n"
+              . "۱) کلمات کلیدی اطلاعاتی (Informational) با نوع محتوای پیشنهادی (مقاله/راهنما)\n"
+              . "۲) کلمات تجاری/خرید (Commercial/Transactional) مناسب صفحه محصول یا خدمات\n"
+              . "۳) کلمات دم‌بلند (Long-tail) کم‌رقابت\n"
+              . "۴) سوالات پرتکرار کاربران (برای FAQ و زیرعنوان)\n"
+              . "۵) پیشنهاد خوشه‌بندی موضوعی (Topic Clusters) و صفحه‌ی ستون.\n"
+              . "هر بخش را با لیست مرتب ارائه بده.";
+        $this->run(self::SEO_PERSONA, $user, 0.6);
+    }
+
+    /** AI content review/audit of a page (quality, E-E-A-T, helpful content, gaps). */
+    public function ajax_review(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        $pid = absint($_POST['post_id'] ?? 0);
+        if (!$pid) wp_send_json_error('صفحه‌ای انتخاب نشده.');
+        $post = get_post($pid);
+        if (!$post) wp_send_json_error('صفحه یافت نشد.');
+        $kw = TargetKeywords::get($pid);
+        $content = mb_substr(wp_strip_all_tags($post->post_content), 0, 4000);
+        $user = "کلمه هدف: «{$kw}»\nعنوان: {$post->post_title}\n\nمحتوای صفحه:\n{$content}\n\n"
+              . "این محتوا را بازبینی و تحلیل کن و گزارش بده:\n"
+              . "۱) امتیاز کیفیت کلی (۰ تا ۱۰۰) و دلیل\n"
+              . "۲) رعایت اصول Helpful Content و E-E-A-T (تجربه، تخصص، اعتبار، اعتماد)\n"
+              . "۳) نقاط ضعف و بخش‌های ناقص که باید اضافه شوند\n"
+              . "۴) مشکلات خوانایی و ساختار\n"
+              . "۵) فهرست اقدامات مشخص برای بهبود رتبه این صفحه.";
+        $this->run(self::SEO_PERSONA, $user, 0.4);
     }
 
     public function ajax_models(): void {

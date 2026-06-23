@@ -180,7 +180,22 @@ class GoogleOAuth {
         return $data ?: [];
     }
 
-    /** AJAX: Get sites list */
+    /** URL Inspection API (different base host than webmasters/v3). */
+    public static function inspect(string $site, string $url): array {
+        $token = self::get_access_token();
+        if (!$token) return ['error' => true, 'message' => 'به سرچ کنسول متصل نیستید.'];
+        $resp = wp_remote_post('https://searchconsole.googleapis.com/v1/urlInspection/index:inspect', [
+            'timeout' => 30,
+            'headers' => ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
+            'body' => wp_json_encode(['inspectionUrl' => $url, 'siteUrl' => $site, 'languageCode' => 'fa']),
+        ]);
+        if (is_wp_error($resp)) return ['error' => true, 'message' => $resp->get_error_message()];
+        $code = wp_remote_retrieve_response_code($resp);
+        $data = json_decode(wp_remote_retrieve_body($resp), true);
+        if ($code === 401) { delete_option(self::TOKEN_OPT); return ['error' => true, 'message' => 'توکن منقضی. مجدداً متصل شوید.']; }
+        if ($code >= 400) return ['error' => true, 'message' => $data['error']['message'] ?? "HTTP {$code}"];
+        return $data ?: [];
+    }
     public function ajax_sites(): void {
         check_ajax_referer('viraseo_nonce', 'nonce');
         $r = self::api('/sites', [], 'GET');
@@ -292,6 +307,7 @@ class GoogleOAuth {
         }
 
         update_option('viraseo_last_gsc_sync', current_time('mysql'));
+        update_option('viraseo_gsc_site', $site);
 
         // Store a per-page snapshot for winners/losers trend comparison (keep last 6 snapshots)
         $agg = [];

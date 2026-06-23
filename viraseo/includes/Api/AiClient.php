@@ -34,9 +34,9 @@ class AiClient {
 
         $r = wp_remote_get(self::base() . '/models', [
             'timeout' => 25,
-            'headers' => ['Authorization' => 'Bearer ' . $key],
+            'headers' => ['Authorization' => 'Bearer ' . $key, 'X-Site-Url' => home_url()],
         ]);
-        if (is_wp_error($r)) return ['error' => 'خطا در اتصال به OpenRouter: ' . $r->get_error_message()];
+        if (is_wp_error($r)) return ['error' => 'خطا در اتصال به ' . self::base() . ' — ' . $r->get_error_message()];
         $body = json_decode(wp_remote_retrieve_body($r), true);
         if (empty($body['data'])) return ['error' => 'لیست مدل‌ها دریافت نشد. کلید را بررسی کنید.'];
 
@@ -59,6 +59,30 @@ class AiClient {
         return ['models' => $models];
     }
 
+    /** Quick connectivity test (used by Diagnostics). Returns status + latency + which URL. */
+    public static function test(): array {
+        $key = Dashboard::get('openrouter_key');
+        if (!Dashboard::get('ai_enabled')) return ['ok'=>false, 'msg'=>'هوش مصنوعی در تنظیمات فعال نیست.'];
+        if (!$key) return ['ok'=>false, 'msg'=>'کلید OpenRouter وارد نشده.'];
+        $base = self::base();
+        $proxy = Dashboard::get('ai_proxy_url') ? 'پروکسی Cloudflare' : 'اتصال مستقیم به OpenRouter';
+        $t0 = microtime(true);
+        $r = wp_remote_get($base . '/models', [
+            'timeout' => 20,
+            'headers' => ['Authorization' => 'Bearer ' . $key, 'X-Site-Url' => home_url()],
+        ]);
+        $ms = (int) round((microtime(true) - $t0) * 1000);
+        if (is_wp_error($r)) {
+            return ['ok'=>false, 'msg'=>'❌ اتصال ناموفق ('.$proxy.'): '.$r->get_error_message().' — '.$base, 'ms'=>$ms];
+        }
+        $code = (int) wp_remote_retrieve_response_code($r);
+        if ($code === 401) return ['ok'=>false, 'msg'=>'❌ کلید OpenRouter نامعتبر است (۴۰۱).', 'ms'=>$ms];
+        if ($code < 200 || $code >= 300) return ['ok'=>false, 'msg'=>'❌ پاسخ HTTP '.$code.' از '.$base, 'ms'=>$ms];
+        $body = json_decode(wp_remote_retrieve_body($r), true);
+        $n = is_array($body['data'] ?? null) ? count($body['data']) : 0;
+        return ['ok'=>true, 'msg'=>'✅ اتصال موفق ('.$proxy.') — '.$n.' مدل در '.$ms.' میلی‌ثانیه.', 'ms'=>$ms];
+    }
+
     /** Run a chat completion. Returns ['text'=>..., 'cost'=>..., 'tokens'=>...] or ['error'=>...]. */
     public static function chat(string $system, string $user, float $temperature = 0.4): array {
         $key = Dashboard::get('openrouter_key');
@@ -66,11 +90,12 @@ class AiClient {
         $model = self::model();
 
         $r = wp_remote_post(self::base() . '/chat/completions', [
-            'timeout' => 90,
+            'timeout' => 60,
             'headers' => [
                 'Authorization' => 'Bearer ' . $key,
                 'Content-Type'  => 'application/json',
                 'HTTP-Referer'  => home_url(),
+                'X-Site-Url'    => home_url(),
                 'X-Title'       => 'ViraSEO',
             ],
             'body' => wp_json_encode([
@@ -82,7 +107,7 @@ class AiClient {
                 'temperature' => $temperature,
             ]),
         ]);
-        if (is_wp_error($r)) return ['error' => 'خطا در اتصال به AI: ' . $r->get_error_message()];
+        if (is_wp_error($r)) return ['error' => 'خطا در اتصال به ' . self::base() . ' — ' . $r->get_error_message() . ' (اگر هاست ایران است، پروکسی Cloudflare را در تنظیمات تعریف کنید)'];
         $code = wp_remote_retrieve_response_code($r);
         $body = json_decode(wp_remote_retrieve_body($r), true);
         if ($code < 200 || $code >= 300) {
