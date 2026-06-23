@@ -989,6 +989,34 @@ function downloadFile(name, content) {
     URL.revokeObjectURL(url);
 }
 
+// === GSC WINNERS & LOSERS ===
+$(document).on('click', '#vs-load-winners', function(){
+    const $b = $(this).prop('disabled', true);
+    $('#vs-win-tbody,#vs-lose-tbody').html('<tr><td colspan="4" class="vs-empty">در حال محاسبه...</td></tr>');
+    post('viraseo_gsc_winners', {metric: $('#vs-win-metric').val(), back: $('#vs-win-back').val()||1}, r => {
+        $b.prop('disabled', false);
+        if (!r.success) { $('#vs-win-tbody,#vs-lose-tbody').html('<tr><td colspan="4" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        // Fill comparison dropdown once
+        const $back = $('#vs-win-back');
+        if (r.data.snapshots && $back.find('option').length <= 1) {
+            const n = r.data.snapshots.length;
+            $back.empty();
+            for (let k = 1; k < n; k++) $back.append('<option value="'+k+'">مقایسه با '+r.data.snapshots[n-1-k].date+'</option>');
+        }
+        $('#vs-win-range').text('از ' + r.data.prev + ' تا ' + r.data.latest);
+        const render = (rows, sel) => {
+            const $t = $(sel).empty();
+            if (!rows.length) { $t.html('<tr><td colspan="4" class="vs-empty">موردی نیست.</td></tr>'); return; }
+            rows.forEach(o => {
+                const color = o.delta > 0 ? '#10b981' : '#ef4444';
+                $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a><br><small style="color:var(--vs-text-muted)">جایگاه: '+o.pos_was+' → '+o.pos_now+'</small></td><td>'+o.was+'</td><td>'+o.now+'</td><td style="color:'+color+';font-weight:700">'+o.delta_fa+'</td></tr>');
+            });
+        };
+        render(r.data.winners, '#vs-win-tbody');
+        render(r.data.losers, '#vs-lose-tbody');
+    });
+});
+
 // === GSC SMART INSIGHTS ===
 $(document).on('click', '#vs-load-insights', function(){
     const $b = $(this).prop('disabled', true);

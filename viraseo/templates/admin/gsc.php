@@ -99,6 +99,7 @@ $gsc_connected = !empty($_GET['gsc_connected']);
     <button class="vs-tab active" data-tab="keywords">📊 کلمات کلیدی</button>
     <button class="vs-tab" data-tab="timeline">📅 نمای زمانی</button>
     <button class="vs-tab" data-tab="insights">💡 تحلیل هوشمند</button>
+    <button class="vs-tab" data-tab="winners">📈 برد و باخت</button>
     <button class="vs-tab" data-tab="striking">⭐ فرصت نزدیک (Striking)</button>
     <button class="vs-tab" data-tab="cannibal">⚠️ کنیبالایزیشن</button>
   </div>
@@ -160,6 +161,31 @@ $gsc_connected = !empty($_GET['gsc_connected']);
       <h3 class="vs-card-title">👀 پرنمایش بدون کلیک</h3>
       <p class="vs-hint">نمایش زیاد ولی صفر کلیک — نیازمند بازنگری جدی در عنوان/محتوا یا هدف‌گذاری کلمه.</p>
       <table class="vs-table"><thead><tr><th>کلمه</th><th>صفحه</th><th>جایگاه</th><th>نمایش</th></tr></thead><tbody id="vs-ins-zero"></tbody></table>
+    </div>
+  </div>
+
+  <div class="vs-tab-panel" id="panel-winners">
+    <div class="vs-alert vs-alert-info">
+      <span class="dashicons dashicons-chart-line"></span>
+      <p>مقایسه‌ی دو همگام‌سازی در زمان‌های مختلف: کدام صفحات کلیک/نمایش <strong>گرفتند</strong> و کدام <strong>از دست دادند</strong>. تأثیر کارهایت را اینجا ببین. (به حداقل دو بار «دریافت داده» در روزهای مختلف نیاز است.)</p>
+    </div>
+    <div class="vs-toolbar">
+      <select class="vs-input" id="vs-win-metric"><option value="clicks">بر اساس کلیک</option><option value="impressions">بر اساس نمایش</option></select>
+      <select class="vs-input" id="vs-win-back"><option value="1">مقایسه با همگام‌سازی قبلی</option></select>
+      <button class="vs-btn vs-btn-primary" id="vs-load-winners"><span class="dashicons dashicons-update"></span> محاسبه برد/باخت</button>
+      <span id="vs-win-range" class="vs-hint"></span>
+    </div>
+    <div class="vs-row" style="gap:20px;align-items:flex-start;">
+      <div style="flex:1;min-width:300px;">
+        <div class="vs-card"><h3 class="vs-card-title" style="color:#10b981">📈 برندگان (رشد)</h3>
+          <table class="vs-table"><thead><tr><th>صفحه</th><th>قبل</th><th>اکنون</th><th>تغییر</th></tr></thead><tbody id="vs-win-tbody"><tr><td colspan="4" class="vs-empty">—</td></tr></tbody></table>
+        </div>
+      </div>
+      <div style="flex:1;min-width:300px;">
+        <div class="vs-card"><h3 class="vs-card-title" style="color:#ef4444">📉 بازندگان (افت)</h3>
+          <table class="vs-table"><thead><tr><th>صفحه</th><th>قبل</th><th>اکنون</th><th>تغییر</th></tr></thead><tbody id="vs-lose-tbody"><tr><td colspan="4" class="vs-empty">—</td></tr></tbody></table>
+        </div>
+      </div>
     </div>
   </div>
 

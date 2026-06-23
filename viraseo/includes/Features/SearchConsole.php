@@ -14,6 +14,64 @@ class SearchConsole {
         add_action('wp_ajax_viraseo_resolve_cannibal', [$this, 'ajax_resolve']);
         add_action('wp_ajax_viraseo_detect_cannibal', [$this, 'ajax_detect']);
         add_action('wp_ajax_viraseo_gsc_insights', [$this, 'ajax_insights']);
+        add_action('wp_ajax_viraseo_gsc_winners', [$this, 'ajax_winners']);
+    }
+
+    /**
+     * Winners & Losers — compare the latest GSC snapshot to a previous one
+     * to surface pages that gained or lost clicks/impressions over time.
+     */
+    public function ajax_winners(): void {
+        check_ajax_referer('viraseo_nonce','nonce');
+        $snaps = get_option('viraseo_gsc_snapshots', []);
+        if (!is_array($snaps) || count($snaps) < 2) {
+            wp_send_json_error('برای مقایسه حداقل به دو همگام‌سازی در زمان‌های مختلف نیاز است. بعداً دوباره داده‌ها را دریافت کنید.');
+        }
+        $metric = in_array($_POST['metric'] ?? 'clicks', ['clicks','impressions'], true) ? $_POST['metric'] : 'clicks';
+        $key = $metric === 'clicks' ? 'c' : 'i';
+
+        $latest = $snaps[count($snaps) - 1];
+        // Pick comparison snapshot (default: previous one)
+        $back = max(1, absint($_POST['back'] ?? 1));
+        $idx = max(0, count($snaps) - 1 - $back);
+        $prev = $snaps[$idx];
+
+        $rows = [];
+        $urls = array_unique(array_merge(array_keys($latest['pages']), array_keys($prev['pages'])));
+        foreach ($urls as $u) {
+            $now = (int)($latest['pages'][$u][$key] ?? 0);
+            $was = (int)($prev['pages'][$u][$key] ?? 0);
+            $delta = $now - $was;
+            if ($delta === 0) continue;
+            $pid = url_to_postid($u);
+            $rows[] = [
+                'url'=>$u,
+                'title'=> $pid ? (get_the_title($pid) ?: $u) : $u,
+                'now'=>PersianText::format_number($now),
+                'was'=>PersianText::format_number($was),
+                'delta'=>$delta,
+                'delta_fa'=>($delta>0?'+':'−').PersianText::format_number(abs($delta)),
+                'pos_now'=>JalaliDate::to_fa((string)($latest['pages'][$u]['p'] ?? 0)),
+                'pos_was'=>JalaliDate::to_fa((string)($prev['pages'][$u]['p'] ?? 0)),
+            ];
+        }
+        $winners = array_filter($rows, fn($r)=>$r['delta'] > 0);
+        $losers = array_filter($rows, fn($r)=>$r['delta'] < 0);
+        usort($winners, fn($a,$b)=>$b['delta']<=>$a['delta']);
+        usort($losers, fn($a,$b)=>$a['delta']<=>$b['delta']);
+
+        // Snapshot list for the comparison dropdown
+        $labels = [];
+        foreach ($snaps as $i => $s) $labels[] = ['i'=>$i, 'date'=>JalaliDate::format($s['date'].':00', 'datetime')];
+
+        wp_send_json_success([
+            'winners'=>array_slice(array_values($winners), 0, 100),
+            'losers'=>array_slice(array_values($losers), 0, 100),
+            'latest'=>JalaliDate::format($latest['date'].':00','datetime'),
+            'prev'=>JalaliDate::format($prev['date'].':00','datetime'),
+            'snapshots'=>$labels,
+            'metric'=>$metric,
+        ]);
     }
 
     /**

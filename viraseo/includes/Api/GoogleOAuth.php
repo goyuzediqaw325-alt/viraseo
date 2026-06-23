@@ -293,6 +293,27 @@ class GoogleOAuth {
 
         update_option('viraseo_last_gsc_sync', current_time('mysql'));
 
+        // Store a per-page snapshot for winners/losers trend comparison (keep last 6 snapshots)
+        $agg = [];
+        foreach ($rows as $row) {
+            $page = $row['keys'][1] ?? '';
+            if (!$page) continue;
+            if (!isset($agg[$page])) $agg[$page] = ['c'=>0,'i'=>0,'p'=>0,'n'=>0];
+            $agg[$page]['c'] += (int)($row['clicks'] ?? 0);
+            $agg[$page]['i'] += (int)($row['impressions'] ?? 0);
+            $agg[$page]['p'] += (float)($row['position'] ?? 0);
+            $agg[$page]['n']++;
+        }
+        // Average position per page; keep top 1500 by impressions to bound option size
+        foreach ($agg as $u => $v) { $agg[$u]['p'] = $v['n'] ? round($v['p'] / $v['n'], 1) : 0; unset($agg[$u]['n']); }
+        uasort($agg, fn($a, $b) => $b['i'] <=> $a['i']);
+        $agg = array_slice($agg, 0, 1500, true);
+        $snaps = get_option('viraseo_gsc_snapshots', []);
+        if (!is_array($snaps)) $snaps = [];
+        $snaps[] = ['date' => current_time('Y-m-d H:i'), 'days' => $days, 'pages' => $agg];
+        if (count($snaps) > 6) $snaps = array_slice($snaps, -6);
+        update_option('viraseo_gsc_snapshots', $snaps, false);
+
         // Fetch a time-series (by date) for the "نمای زمانی" view — lightweight, one extra call.
         $daily = self::api('/sites/' . urlencode($site) . '/searchAnalytics/query', [
             'startDate' => date('Y-m-d', strtotime("-{$days} days")),
