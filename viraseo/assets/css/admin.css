@@ -751,3 +751,9 @@
 .vs-onpage-checks li { font-size: 12px; padding: 6px 10px; border-radius: 6px; }
 .vs-chk-ok { background: rgba(16,185,129,.1); color: #6ee7b7; }
 .vs-chk-no { background: rgba(239,68,68,.1); color: #fca5a5; }
+
+
+/* === AI output === */
+.vs-ai-output { background: linear-gradient(135deg, rgba(99,102,241,.08), rgba(16,185,129,.06)); border: 1px solid rgba(129,140,248,.3); border-radius: 12px; padding: 16px; }
+.vs-ai-head { font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+.vs-ai-body { font-size: 13px; line-height: 2; color: var(--vs-text,#e2e8f0); max-height: 600px; overflow-y: auto; margin-bottom: 10px; }

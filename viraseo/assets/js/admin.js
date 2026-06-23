@@ -52,6 +52,26 @@ $(function(){
     });
 });
 
+// === SETTINGS: AI models (OpenRouter) ===
+$(document).on('click', '#vs-ai-load-models', function(){
+    const $b = $(this).prop('disabled', true).text('در حال بارگذاری...');
+    post('viraseo_ai_models', {force:1}, r => {
+        $b.prop('disabled', false).text('بارگذاری مدل‌ها + هزینه');
+        if (!r.success) { toast(r.data||'خطا', 'err'); return; }
+        const cur = r.data.current;
+        const $sel = $('#vs-ai-model').empty();
+        r.data.models.forEach(m => {
+            const cost = m.free ? 'رایگان' : ('$'+m.in+' / $'+m.out+' در میلیون توکن');
+            $sel.append('<option value="'+m.id+'" data-cost="'+cost+'"'+(m.id===cur?' selected':'')+'>'+m.name+' — '+cost+'</option>');
+        });
+        $('#vs-ai-model-cost').text('قیمت‌ها برای ورودی/خروجی هر یک میلیون توکن است.');
+        toast(r.data.models.length+' مدل بارگذاری شد','success');
+    });
+});
+$(document).on('change', '#vs-ai-model', function(){
+    $('#vs-ai-model-cost').text('هزینه: ' + ($(this).find(':selected').data('cost')||'-'));
+});
+
 // === SETTINGS: Test n8n ===
 $(document).on('click', '#vs-test-n8n', function(){
     const $s = $('#vs-n8n-status').text('...').removeClass('ok err');
@@ -315,6 +335,23 @@ function loadSerpResults(id) {
     });
 }
 
+
+// === SERP: AI competitor-beating strategy ===
+function vsAiRender(boxSel, r) {
+    const html = (r.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+    $(boxSel).show().html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 خروجی هوش مصنوعی <span class="vs-hint">هزینه تقریبی: $'+(r.cost||0)+' · '+(r.tokens||0)+' توکن</span></div><div class="vs-ai-body">'+html+'</div><button class="vs-btn vs-btn-sm vs-btn-secondary vs-ai-copy">📋 کپی</button></div>');
+}
+$(document).on('click', '#vs-serp-ai', function(){
+    if (!window._vsSerpId) { toast('ابتدا یک تحلیل را باز کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true).text('🤖 در حال تحلیل با AI...');
+    $('#vs-serp-ai-box').show().html('<div class="vs-empty">هوش مصنوعی در حال تدوین استراتژی و طرح نگارش است... (ممکن است تا یک دقیقه طول بکشد)</div>');
+    post('viraseo_ai_serp_strategy', {analysis_id: window._vsSerpId}, r => {
+        $b.prop('disabled', false).text('🤖 استراتژی هوش مصنوعی (شکست رقبا)');
+        if (!r.success) { $('#vs-serp-ai-box').html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        vsAiRender('#vs-serp-ai-box', r.data);
+    });
+});
+$(document).on('click', '.vs-ai-copy', function(){ copyText($(this).siblings('.vs-ai-body').text()); toast('کپی شد','success'); });
 
 // === SERP: deep-analyze all 10 results (real data basis) ===
 $(document).on('click', '#vs-serp-deep', function(){
@@ -1059,7 +1096,7 @@ function loadTargets() {
                 + '<td style="font-size:11px">'+stats+'</td>'
                 + '<td style="font-size:11px;max-width:240px">'+intentCell+'</td>'
                 + '<td>'+suggest+'</td>'
-                + '<td><button class="vs-btn vs-btn-sm vs-btn-success vs-tg-save" data-id="'+o.id+'">ذخیره</button> '+serpBtn+'</td>'
+                + '<td><button class="vs-btn vs-btn-sm vs-btn-success vs-tg-save" data-id="'+o.id+'">ذخیره</button> '+serpBtn+' <button class="vs-btn vs-btn-sm vs-btn-secondary vs-tg-ai" data-id="'+o.id+'" title="کمک هوش مصنوعی برای محتوا">🤖</button></td>'
                 + '</tr>');
         });
     });
@@ -1082,6 +1119,19 @@ function renderTgPager(page, pages) {
     if (page < pages) $p.append('<button class="vs-btn vs-btn-sm vs-btn-secondary vs-tg-page" data-p="'+(page+1)+'">بعدی ›</button>');
 }
 $(document).on('click', '.vs-tg-page', function(){ vsTgPage = parseInt($(this).data('p'),10)||1; loadTargets(); $('html,body').animate({scrollTop:0},200); });
+$(document).on('click', '.vs-tg-ai', function(){
+    const id = $(this).data('id');
+    const $row = $(this).closest('tr');
+    const $next = $row.next('.vs-tg-ai-detail');
+    if ($next.length) { $next.remove(); return; }
+    const $d = $('<tr class="vs-tg-ai-detail"><td colspan="8"><div class="vs-empty">🤖 هوش مصنوعی در حال تدوین طرح محتوا...</div></td></tr>');
+    $row.after($d);
+    post('viraseo_ai_content', {post_id: id, mode: 'outline'}, r => {
+        if (!r.success) { $d.find('td').html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+        $d.find('td').html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 طرح محتوا <span class="vs-hint">هزینه: $'+(r.data.cost||0)+'</span></div><div class="vs-ai-body">'+html+'</div></div>');
+    });
+});
 $(document).on('click', '.vs-tg-use', function(){
     const $row = $(this).closest('tr');
     $row.find('.vs-tg-kw').val($(this).data('kw'));

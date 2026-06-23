@@ -15,6 +15,16 @@
     <h3 class="vs-card-title">کلید Serper API (برای تحلیل SERP)</h3>
     <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span><p>گوگل اسکرپ مستقیم را از سرور مسدود می‌کند. برای تحلیل رقبا از سرویس رایگان <a href="https://serper.dev" target="_blank">Serper.dev</a> استفاده می‌کنیم (۲۵۰۰ جستجوی رایگان). ثبت‌نام کنید، کلید API را کپی و اینجا وارد کنید. این کلید به‌صورت امن به n8n ارسال می‌شود.</p></div>
     <div class="vs-field"><label class="vs-label">کلید Serper API</label><input class="vs-input vs-input-ltr" name="viraseo_settings[serper_api_key]" value="<?php echo esc_attr($s['serper_api_key'] ?? ''); ?>" placeholder="مثلا: 0a1b2c3d4e5f..."><span class="vs-hint">از <a href="https://serper.dev/api-key" target="_blank">serper.dev/api-key</a> دریافت کنید</span></div>
+
+    <h3 class="vs-card-title">🤖 هوش مصنوعی (OpenRouter)</h3>
+    <div class="vs-alert vs-alert-info"><span class="dashicons dashicons-info"></span><p>با فعال‌سازی هوش مصنوعی، افزونه تحلیل‌های فوق‌پیشرفته ارائه می‌دهد: استراتژی شکست رقبا، طرح نگارش، و کمک به ساخت/بازنویسی محتوا بر اساس Helpful Content گوگل. کلید را از <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a> بگیرید.</p></div>
+    <div class="vs-field"><label class="vs-label"><input type="checkbox" name="viraseo_settings[ai_enabled]" value="1" <?php checked(!empty($s['ai_enabled'])); ?>> فعال‌سازی هوش مصنوعی</label></div>
+    <div class="vs-field"><label class="vs-label">کلید OpenRouter API</label><input class="vs-input vs-input-ltr" name="viraseo_settings[openrouter_key]" value="<?php echo esc_attr($s['openrouter_key'] ?? ''); ?>" placeholder="sk-or-..."></div>
+    <div class="vs-field"><label class="vs-label">مدل هوش مصنوعی</label>
+      <select class="vs-input vs-input-ltr" id="vs-ai-model" name="viraseo_settings[ai_model]"><option value="<?php echo esc_attr($s['ai_model'] ?? ''); ?>"><?php echo esc_html($s['ai_model'] ?? 'انتخاب مدل'); ?></option></select>
+      <button type="button" class="vs-btn vs-btn-secondary vs-btn-sm" id="vs-ai-load-models">بارگذاری مدل‌ها + هزینه</button>
+      <span class="vs-hint" id="vs-ai-model-cost"></span>
+    </div>
     <div class="vs-toolbar"><button type="button" class="vs-btn vs-btn-secondary vs-btn-sm" id="vs-test-n8n">تست اتصال</button><span id="vs-n8n-status"></span></div>
     <h3 class="vs-card-title">تنظیمات تحلیل</h3>
     <div class="vs-row">

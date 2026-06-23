@@ -80,6 +80,9 @@ class Dashboard {
             'n8n_url' => esc_url_raw(rtrim($i['n8n_url'] ?? '', '/')),
             'n8n_secret' => sanitize_text_field($i['n8n_secret'] ?? ''),
             'serper_api_key' => sanitize_text_field($i['serper_api_key'] ?? ''),
+            'ai_enabled' => !empty($i['ai_enabled']),
+            'openrouter_key' => sanitize_text_field($i['openrouter_key'] ?? ''),
+            'ai_model' => sanitize_text_field($i['ai_model'] ?? 'openai/gpt-4o-mini'),
             'oauth_proxy_url' => esc_url_raw(rtrim($i['oauth_proxy_url'] ?? '', '/')),
             'gsc_client_id' => sanitize_text_field($i['gsc_client_id'] ?? ''),
             'gsc_client_secret' => sanitize_text_field($i['gsc_client_secret'] ?? ''),
@@ -96,7 +99,7 @@ class Dashboard {
 
     public static function get(string $key = ''): mixed {
         $s = wp_parse_args(get_option(self::OPT, []), [
-            'n8n_url'=>'','n8n_secret'=>'','serper_api_key'=>'','oauth_proxy_url'=>'',
+            'n8n_url'=>'','n8n_secret'=>'','serper_api_key'=>'','ai_enabled'=>false,'openrouter_key'=>'','ai_model'=>'openai/gpt-4o-mini','oauth_proxy_url'=>'',
             'gsc_client_id'=>'','gsc_client_secret'=>'',
             'striking_min'=>11,'striking_max'=>20,'min_impressions'=>10,'rank_max_pages'=>3,'rank_auto_enabled'=>false,'rank_alert_email'=>false,'rank_alert_threshold'=>3,'remove_data'=>false,
         ]);
