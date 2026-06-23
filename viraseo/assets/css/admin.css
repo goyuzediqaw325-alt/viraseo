@@ -724,3 +724,18 @@
 .vs-cluster-members-list { grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); }
 .vs-cluster-members-list li label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .vs-cl-pillar { margin: 0 6px; }
+
+
+/* === Action plan === */
+.vs-health { display: flex; flex-direction: column; align-items: center; }
+.vs-health-label { font-size: 10px; color: var(--vs-text-muted); }
+.vs-health-score { font-size: 22px; font-weight: 800; }
+.vs-task { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 8px; background: rgba(148,163,184,.06); border-radius: 10px; border-right: 4px solid #6366f1; }
+.vs-task-red { border-right-color: #ef4444; }
+.vs-task-orange { border-right-color: #f59e0b; }
+.vs-task-blue { border-right-color: #0ea5e9; }
+.vs-task-num { width: 26px; height: 26px; border-radius: 50%; background: rgba(99,102,241,.2); color: #818cf8; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+.vs-task-icon { font-size: 22px; flex-shrink: 0; }
+.vs-task-body { flex: 1; min-width: 0; }
+.vs-task-title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+.vs-task-desc { font-size: 12px; color: var(--vs-text-muted); }

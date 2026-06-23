@@ -30,6 +30,28 @@ $(document).on('click', '.vs-tab', function(e){
     $panel.addClass('active');
 });
 
+// === ACTION PLAN (dashboard) ===
+$(function(){
+    if (!$('#vs-action-list').length) return;
+    post('viraseo_action_plan', {}, r => {
+        if (!r.success) { $('#vs-action-list').html('<div class="vs-empty">'+(r.data||'خطا')+'</div>'); return; }
+        const sc = r.data.score;
+        const scColor = sc >= 75 ? '#10b981' : (sc >= 45 ? '#f59e0b' : '#ef4444');
+        $('#vs-health').html('<span class="vs-health-label">سلامت سئو</span><span class="vs-health-score" style="color:'+scColor+'">'+sc+'/۱۰۰</span>');
+        const $l = $('#vs-action-list').empty();
+        if (r.data.done) { $l.html('<div class="vs-empty">🎉 عالی! در حال حاضر کار فوری مهمی نیست. داده‌ها را به‌روز نگه دارید.</div>'); return; }
+        const sevColor = {critical:'red', high:'orange', warn:'orange', normal:'blue'};
+        r.data.tasks.forEach((t, i) => {
+            $l.append('<div class="vs-task vs-task-'+(sevColor[t.severity]||'blue')+'">'
+                + '<div class="vs-task-num">'+(i+1)+'</div>'
+                + '<div class="vs-task-icon">'+t.icon+'</div>'
+                + '<div class="vs-task-body"><div class="vs-task-title">'+t.title+'</div><div class="vs-task-desc">'+t.desc+'</div></div>'
+                + '<a class="vs-btn vs-btn-sm vs-btn-primary" href="'+t.url+'">'+t.btn+' ›</a>'
+                + '</div>');
+        });
+    });
+});
+
 // === SETTINGS: Test n8n ===
 $(document).on('click', '#vs-test-n8n', function(){
     const $s = $('#vs-n8n-status').text('...').removeClass('ok err');
