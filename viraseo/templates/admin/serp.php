@@ -32,6 +32,26 @@ $n8n_ready = !empty($n8n_url);
     <p style="font-size:11px;color:var(--vs-text-muted);margin-top:8px;">n8n ده نتیجه برتر گوگل فارسی را اسکرپ و تحلیل می‌کند. (۱-۳ دقیقه)</p>
   </div>
 
+  <!-- Dedicated Competitor Analysis Section -->
+  <div class="vs-card vs-competitor-analysis-card" style="margin-bottom:20px;">
+    <h3 class="vs-card-title"><span class="dashicons dashicons-visibility"></span> تحلیل اختصاصی رقیب</h3>
+    <p style="font-size:12px;color:var(--vs-text-muted);margin-bottom:12px;">آدرس یک صفحه رقیب و کلمه کلیدی هدف را وارد کنید تا تحلیل کامل سئو آن صفحه انجام شود.</p>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="vs-field" style="flex:2;min-width:300px;margin-bottom:0;">
+        <label class="vs-label">آدرس صفحه رقیب:</label>
+        <input type="url" class="vs-input" id="vs-comp-url" placeholder="https://example.com/page">
+      </div>
+      <div class="vs-field" style="flex:1;min-width:200px;margin-bottom:0;">
+        <label class="vs-label">کلمه کلیدی هدف:</label>
+        <input type="text" class="vs-input" id="vs-comp-keyword" placeholder="کلمه کلیدی">
+      </div>
+      <button class="vs-btn vs-btn-primary" id="vs-comp-analyze" style="padding:12px 24px;">
+        <span class="dashicons dashicons-search"></span> تحلیل اختصاصی
+      </button>
+    </div>
+    <div id="vs-comp-result" style="margin-top:16px;"></div>
+  </div>
+
   <div id="vs-serp-progress" style="display:none;">
     <div class="vs-progress"><div class="vs-progress-bar"></div><span class="vs-progress-text">n8n در حال تحلیل نتایج گوگل...</span></div>
   </div>
@@ -56,6 +76,7 @@ $n8n_ready = !empty($n8n_url);
       <h3 class="vs-card-title">۱۰ نتیجه برتر گوگل</h3>
       <div class="vs-toolbar">
         <button class="vs-btn vs-btn-primary" id="vs-serp-deep"><span class="dashicons dashicons-search"></span> 🔬 آنالیز دقیق هر ۱۰ صفحه</button>
+        <button class="vs-btn vs-btn-success" id="vs-serp-batch-deep"><span class="dashicons dashicons-chart-area"></span> 📊 تحلیل جامع رقبا (همه متریک‌ها)</button>
         <button class="vs-btn vs-btn-secondary" id="vs-serp-ai">🤖 استراتژی هوش مصنوعی (شکست رقبا)</button>
         <span id="vs-serp-deep-status" class="vs-hint"></span>
       </div>

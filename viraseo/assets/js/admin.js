@@ -657,6 +657,96 @@ $(document).on('click', '#vs-serp-deep', function(){
     next();
 });
 
+// === SERP: Batch competitor analysis (all enhanced metrics at once) ===
+$(document).on('click', '#vs-serp-batch-deep', function(){
+    if (!window._vsSerpId) { toast('ابتدا یک تحلیل را باز کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true).text('📊 در حال تحلیل جامع...');
+    const $st = $('#vs-serp-deep-status');
+    $st.text('تحلیل جامع همه رقبا در حال انجام است... (ممکن است ۱-۲ دقیقه طول بکشد)');
+    post('viraseo_serp_competitor_analysis', {analysis_id: window._vsSerpId}, r => {
+        $b.prop('disabled', false).html('<span class="dashicons dashicons-chart-area"></span> 📊 تحلیل جامع رقبا (همه متریک‌ها)');
+        if (!r.success) { $st.text(''); toast(r.data||'خطا','err'); return; }
+        $st.text('✅ تحلیل جامع کامل شد.');
+        $('#vs-serp-conclusion').show().html('<div class="vs-alert vs-alert-info"><span class="dashicons dashicons-awards"></span><div><strong>نتیجه‌گیری (بر اساس داده واقعی):</strong><br>میانگین کلمات رقبا: '+r.data.avg_words+' | بلندترین رقیب: '+r.data.max_words+' | میانگین هدینگ: '+r.data.avg_headings+'<br>🎯 '+r.data.recommendation+'</div></div>');
+        // Update table rows with real data
+        if (r.data.results) {
+            const $rows = $('#vs-serp-tbody .vs-serp-row');
+            r.data.results.forEach(function(res, i){
+                if (res.error || !res.word_count) return;
+                const $row = $rows.eq(i);
+                $row.find('.vs-c-words').html(res.word_count_fa || res.word_count || 0);
+                $row.find('.vs-c-head').text((res.h1||0)+'/'+(res.h2||0)+'/'+(res.h3||0));
+                $row.find('.vs-c-img').text(res.images||'-');
+            });
+        }
+        toast('تحلیل جامع رقبا با موفقیت انجام شد.', 'success');
+    });
+});
+
+// === SERP: Dedicated Competitor Analysis ===
+$(document).on('click', '#vs-comp-analyze', function(){
+    const url = $('#vs-comp-url').val().trim();
+    const kw = $('#vs-comp-keyword').val().trim();
+    if (!url) { toast('آدرس صفحه رقیب را وارد کنید.','err'); return; }
+    if (!kw) { toast('کلمه کلیدی هدف را وارد کنید.','err'); return; }
+    const $b = $(this).prop('disabled', true).text('در حال تحلیل...');
+    const $res = $('#vs-comp-result').html('<div class="vs-empty">⏳ در حال دریافت و تحلیل صفحه رقیب...</div>');
+    post('viraseo_serp_inspect_full', {url: url, keyword: kw}, r => {
+        $b.prop('disabled', false).html('<span class="dashicons dashicons-search"></span> تحلیل اختصاصی');
+        if (!r.success) { $res.html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
+        const d = r.data;
+        const ka = d.keyword_analysis || {};
+        const topKw = (d.top_keywords||[]).map(function(k){ return '<span class="vs-tag">'+k.word+' ('+k.count+')</span>'; }).join('');
+        const sections = (d.section_words||[]).map(function(s){ return '<li><strong>'+s.heading+'</strong>: '+s.words+' کلمه</li>'; }).join('');
+        const recs = (ka.recommendations||[]).map(function(r){ return '<li>'+r+'</li>'; }).join('');
+        const jsNote = d.note ? '<div class="vs-alert vs-alert-warning" style="margin-top:10px"><span class="dashicons dashicons-warning"></span><p>'+d.note+'</p></div>' : '';
+        $res.html(
+            '<div class="vs-comp-full-result">'
+            + jsNote
+            + '<div class="vs-inspect-grid vs-comp-grid">'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.word_count_fa||d.word_count||0)+'</span><span class="vs-im-lbl">تعداد کلمات</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.h1||0)+'/'+(d.h2||0)+'/'+(d.h3||0)+'</span><span class="vs-im-lbl">H1/H2/H3</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.images||0)+'</span><span class="vs-im-lbl">تصاویر ('+(d.images_no_alt||0)+' بدون alt)</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.internal_links||0)+'/'+(d.external_links||0)+'</span><span class="vs-im-lbl">لینک داخلی/خارجی</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.response_time||0)+'ms</span><span class="vs-im-lbl">زمان پاسخ</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.reading_level||0)+'</span><span class="vs-im-lbl">سطح خوانایی</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.tables||0)+'</span><span class="vs-im-lbl">جدول</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.videos||0)+'</span><span class="vs-im-lbl">ویدیو</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.has_faq?'بله':'خیر')+'</span><span class="vs-im-lbl">بخش FAQ</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.content_type||'-')+'</span><span class="vs-im-lbl">نوع محتوا</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.keyword_density||0)+'%</span><span class="vs-im-lbl">تراکم کلمه کلیدی</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.word_count_score||0)+'/۱۰۰</span><span class="vs-im-lbl">امتیاز محتوا</span></div>'
+            + '</div>'
+            + '<div class="vs-comp-details">'
+            +   '<div class="vs-comp-section">'
+            +     '<h4>تحلیل کلمه کلیدی:</h4>'
+            +     '<div class="vs-comp-kw-grid">'
+            +       '<span class="vs-kw-check '+(ka.in_title?'vs-kw-yes':'vs-kw-no')+'">عنوان: '+(ka.in_title?'✓':'✗')+'</span>'
+            +       '<span class="vs-kw-check '+(ka.in_h1?'vs-kw-yes':'vs-kw-no')+'">H1: '+(ka.in_h1?'✓':'✗')+'</span>'
+            +       '<span class="vs-kw-check '+(ka.in_h2?'vs-kw-yes':'vs-kw-no')+'">H2: '+(ka.in_h2?'✓':'✗')+'</span>'
+            +       '<span class="vs-kw-check '+(ka.in_meta?'vs-kw-yes':'vs-kw-no')+'">متا: '+(ka.in_meta?'✓':'✗')+'</span>'
+            +       '<span class="vs-kw-check '+(ka.in_url?'vs-kw-yes':'vs-kw-no')+'">URL: '+(ka.in_url?'✓':'✗')+'</span>'
+            +       '<span class="vs-kw-prominence">برجستگی: '+(ka.prominence||0)+'/۱۰۰</span>'
+            +     '</div>'
+            +     (recs ? '<ul class="vs-comp-recs">'+recs+'</ul>' : '')
+            +   '</div>'
+            +   '<div class="vs-comp-section">'
+            +     '<h4>کلمات پرتکرار:</h4>'
+            +     '<div class="vs-tags">'+topKw+'</div>'
+            +   '</div>'
+            +   (sections ? '<div class="vs-comp-section"><h4>تعداد کلمات هر بخش:</h4><ul class="vs-comp-sections">'+sections+'</ul></div>' : '')
+            +   '<div class="vs-comp-section">'
+            +     '<h4>عنوان صفحه:</h4><p>'+(d.title||'-')+'</p>'
+            +     '<h4>توضیحات متا:</h4><p>'+(d.meta_desc||'-')+'</p>'
+            +     '<h4>OG Title:</h4><p>'+(d.og_title||'-')+'</p>'
+            +     '<h4>Canonical:</h4><p style="direction:ltr;text-align:left">'+(d.canonical_url||'-')+'</p>'
+            +     '<h4>Robots:</h4><p>'+(d.robots_meta||'-')+'</p>'
+            +   '</div>'
+            + '</div></div>'
+        );
+    });
+});
+
 // === SERP DEEP INSPECT (on-demand per result) ===
 $(document).on('click', '.vs-serp-row', function(){
     const $row = $(this);
@@ -671,23 +761,37 @@ $(document).on('click', '.vs-serp-row', function(){
     post('viraseo_serp_inspect', {url: url}, r => {
         if (!r.success) { $detail.find('td').html('<div class="vs-inspect-err">❌ '+(r.data||'خطا در تحلیل')+'</div>'); return; }
         const d = r.data;
-        let h2list = (d.h2_texts||[]).map(t=>'<li>'+t+'</li>').join('') || '<li class="vs-empty">—</li>';
+        let h2list = (d.h2_texts||[]).map(t=>'<li>'+t+'</li>').join('') || '<li class="vs-empty">-</li>';
         let schema = (d.schema||[]).length ? (d.schema||[]).map(s=>'<span class="vs-tag">'+s+'</span>').join('') : '<span class="vs-empty">ندارد</span>';
+        let topKw = (d.top_keywords||[]).map(function(k){ return '<span class="vs-tag">'+k.word+' ('+k.count+')</span>'; }).join('') || '<span class="vs-empty">-</span>';
+        let jsNote = d.note ? '<div class="vs-alert vs-alert-warning" style="margin:8px 0"><span class="dashicons dashicons-warning"></span><p>'+d.note+'</p></div>' : '';
+        let wordZeroNote = (d.word_count === 0) ? '<div class="vs-alert vs-alert-warning" style="margin:8px 0"><span class="dashicons dashicons-info"></span><p>تعداد کلمات صفر است. احتمالا این صفحه محتوا را با JavaScript رندر می‌کند و از سمت سرور قابل خواندن نیست.</p></div>' : '';
         $detail.find('td').html(
             '<div class="vs-inspect">'
+            + wordZeroNote + jsNote
             + '<div class="vs-inspect-grid">'
-            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.word_count_fa+'</span><span class="vs-im-lbl">تعداد دقیق کلمات</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.word_count_fa||d.word_count||0)+'</span><span class="vs-im-lbl">تعداد دقیق کلمات</span></div>'
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.h1+'/'+d.h2+'/'+d.h3+'</span><span class="vs-im-lbl">H1/H2/H3</span></div>'
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.images+'</span><span class="vs-im-lbl">تصاویر ('+d.images_no_alt+' بدون alt)</span></div>'
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.internal_links+'/'+d.external_links+'</span><span class="vs-im-lbl">لینک داخلی/خارجی</span></div>'
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.paragraphs+'</span><span class="vs-im-lbl">پاراگراف</span></div>'
-            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.word_count_score+'/۱۰۰</span><span class="vs-im-lbl">امتیاز محتوا</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.word_count_score||0)+'/۱۰۰</span><span class="vs-im-lbl">امتیاز محتوا</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.response_time||0)+'ms</span><span class="vs-im-lbl">زمان پاسخ</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.reading_level||0)+'</span><span class="vs-im-lbl">سطح خوانایی</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.tables||0)+'</span><span class="vs-im-lbl">جدول</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.videos||0)+'</span><span class="vs-im-lbl">ویدیو</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.has_faq?'بله':'خیر')+'</span><span class="vs-im-lbl">بخش FAQ</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.content_type||'-')+'</span><span class="vs-im-lbl">نوع محتوا</span></div>'
             + '</div>'
             + '<div class="vs-inspect-cols">'
             +   '<div><h4>ساختار هدینگ‌ها (H2):</h4><ul class="vs-inspect-h2">'+h2list+'</ul></div>'
-            +   '<div><h4>عنوان صفحه (Title):</h4><p class="vs-inspect-title">'+(d.title||'—')+'</p>'
-            +       '<h4>توضیحات متا:</h4><p class="vs-inspect-desc">'+(d.meta_desc||'—')+'</p>'
-            +       '<h4>اسکیما (Schema):</h4><div class="vs-tags">'+schema+'</div></div>'
+            +   '<div><h4>عنوان صفحه (Title):</h4><p class="vs-inspect-title">'+(d.title||'-')+'</p>'
+            +       '<h4>توضیحات متا:</h4><p class="vs-inspect-desc">'+(d.meta_desc||'-')+'</p>'
+            +       '<h4>اسکیما (Schema):</h4><div class="vs-tags">'+schema+'</div>'
+            +       '<h4>کلمات پرتکرار:</h4><div class="vs-tags">'+topKw+'</div>'
+            +       (d.keyword_density ? '<h4>تراکم کلمه کلیدی:</h4><p>'+d.keyword_density+'%</p>' : '')
+            +       '<h4>Canonical:</h4><p style="direction:ltr;text-align:left;font-size:11px">'+(d.canonical_url||'-')+'</p>'
+            +       '<h4>Robots:</h4><p>'+(d.robots_meta||'-')+'</p></div>'
             + '</div></div>'
         );
     });

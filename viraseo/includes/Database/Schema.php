@@ -81,6 +81,17 @@ class Schema {
             h3_count tinyint unsigned DEFAULT 0,
             images_count smallint unsigned DEFAULT 0,
             schema_types varchar(500) DEFAULT NULL,
+            internal_links smallint unsigned DEFAULT 0,
+            external_links smallint unsigned DEFAULT 0,
+            response_time int unsigned DEFAULT 0,
+            canonical_url varchar(2048) DEFAULT NULL,
+            has_faq tinyint(1) DEFAULT 0,
+            has_video tinyint(1) DEFAULT 0,
+            has_table tinyint(1) DEFAULT 0,
+            reading_level tinyint unsigned DEFAULT 0,
+            top_keywords text DEFAULT NULL,
+            meta_title varchar(500) DEFAULT NULL,
+            meta_desc text DEFAULT NULL,
             PRIMARY KEY (id),
             KEY idx_aid (analysis_id)
         ) {$c};");
