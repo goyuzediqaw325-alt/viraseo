@@ -66,12 +66,35 @@ class CoreWebVitals {
         if ($key) $args['key'] = $key;
 
         $endpoint = self::PSI . '?' . http_build_query($args);
-        $resp = wp_remote_get($endpoint, ['timeout' => 60]);
-        if (is_wp_error($resp)) {
-            return ['error' => 'خطا در اتصال به PageSpeed: ' . $resp->get_error_message()];
+
+        // Use cURL proxy for PSI if configured (Iran hosts can't reach Google APIs directly)
+        if (!empty(Dashboard::get('psi_use_proxy')) && Dashboard::get('ai_curl_proxy')) {
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $endpoint,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 60,
+                CURLOPT_CONNECTTIMEOUT => 15,
+                CURLOPT_PROXY => Dashboard::get('ai_curl_proxy'),
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
+            ]);
+            $px = Dashboard::get('ai_curl_proxy');
+            if (strpos($px, '@') !== false) curl_setopt($ch, CURLOPT_PROXYAUTH, CURLAUTH_BASIC);
+            $rawBody = curl_exec($ch);
+            $err = curl_error($ch);
+            $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($err) return ['error' => 'خطا در اتصال به PageSpeed (از طریق پروکسی): ' . $err];
+            $body = json_decode($rawBody, true);
+        } else {
+            $resp = wp_remote_get($endpoint, ['timeout' => 60]);
+            if (is_wp_error($resp)) {
+                return ['error' => 'خطا در اتصال به PageSpeed: ' . $resp->get_error_message()];
+            }
+            $code = (int) wp_remote_retrieve_response_code($resp);
+            $body = json_decode(wp_remote_retrieve_body($resp), true);
         }
-        $code = (int) wp_remote_retrieve_response_code($resp);
-        $body = json_decode(wp_remote_retrieve_body($resp), true);
         if ($code === 429) return ['error' => 'محدودیت نرخ PageSpeed. کمی صبر کنید یا کلید PSI رایگان را در تنظیمات وارد کنید.'];
         if ($code >= 400) return ['error' => $body['error']['message'] ?? "خطای PageSpeed (HTTP {$code})"];
         if (empty($body['lighthouseResult'])) return ['error' => 'پاسخ نامعتبر از PageSpeed.'];

@@ -22,11 +22,27 @@ class TargetKeywords {
         add_action('wp_ajax_viraseo_target_save', [$this, 'ajax_target_save']);
     }
 
-    /** All public post types except attachment (so big/Woo sites show every page type). */
+    /** All public post types except attachment (so big/Woo sites show every page type).
+     * If user has configured allowed types in settings, only those are returned. */
     public static function public_types(): array {
+        $allowed = \ViraSEO\Admin\Dashboard::get('allowed_post_types');
+        if (!empty($allowed) && is_array($allowed)) {
+            return array_values($allowed);
+        }
         $types = get_post_types(['public' => true], 'names');
         unset($types['attachment']);
         return array_values($types);
+    }
+
+    /** All registered public post types (for the settings picker). */
+    public static function all_public_types(): array {
+        $types = get_post_types(['public' => true], 'objects');
+        unset($types['attachment']);
+        $out = [];
+        foreach ($types as $slug => $obj) {
+            $out[] = ['slug' => $slug, 'label' => $obj->labels->name . ' (' . $slug . ')'];
+        }
+        return $out;
     }
 
     /** True if the page is marked noindex (Rank Math robots meta). */
