@@ -88,6 +88,7 @@ class Dashboard {
             'n8n_url' => esc_url_raw(rtrim($i['n8n_url'] ?? '', '/')),
             'n8n_secret' => sanitize_text_field($i['n8n_secret'] ?? ''),
             'serper_api_key' => sanitize_text_field($i['serper_api_key'] ?? ''),
+            'browserless_token' => sanitize_text_field($i['browserless_token'] ?? ''),
             'psi_api_key' => sanitize_text_field($i['psi_api_key'] ?? ''),
             'ai_enabled' => !empty($i['ai_enabled']),
             'openrouter_key' => sanitize_text_field($i['openrouter_key'] ?? ''),

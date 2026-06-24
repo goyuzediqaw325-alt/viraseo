@@ -143,7 +143,11 @@ class SerpInspector {
     public function analyze(string $url, string $keyword = ''): array {
         // 1) Try the dedicated n8n Page Inspector workflow (synchronous response)
         if (\ViraSEO\Admin\Dashboard::get('n8n_url')) {
-            $res = \ViraSEO\Api\WebhookHandler::to_n8n('viraseo-page-inspect', ['url' => $url, 'keyword' => $keyword]);
+            $res = \ViraSEO\Api\WebhookHandler::to_n8n('viraseo-page-inspect', [
+                'url' => $url,
+                'keyword' => $keyword,
+                'browserless_token' => Dashboard::get('browserless_token'),
+            ]);
             if (!isset($res['error']) && is_array($res['data'] ?? null)) {
                 $d = $res['data'];
                 if (empty($d['error']) && isset($d['word_count']) && (int)$d['word_count'] > 0) {
