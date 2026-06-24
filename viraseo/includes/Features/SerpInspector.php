@@ -176,54 +176,89 @@ class SerpInspector {
         $start_time = microtime(true);
         $html = '';
         $code = 0;
+        $proxy = Dashboard::get('ai_curl_proxy');
 
-        // Try fetching with UA rotation + retry logic
-        $attempts = min(count($this->user_agents), 3);
+        // Strategy: try proxy FIRST if configured (Iran hosts often blocked by target sites)
+        // Then fall back to direct fetch if proxy failed.
+        $methods = $proxy ? ['proxy', 'direct'] : ['direct'];
         $shuffled_uas = $this->user_agents;
         shuffle($shuffled_uas);
 
-        for ($i = 0; $i < $attempts; $i++) {
-            $r = wp_remote_get($url, [
-                'timeout'     => 20,
-                'redirection' => 4,
-                'sslverify'   => false,
-                'user-agent'  => $shuffled_uas[$i],
-                'headers'     => [
-                    'Accept'          => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language'  => 'fa,en;q=0.8',
-                    'Accept-Encoding'  => 'gzip, deflate',
-                    'Cache-Control'    => 'no-cache',
-                    'Connection'       => 'keep-alive',
-                ],
-            ]);
-            if (is_wp_error($r)) continue;
-            $code = wp_remote_retrieve_response_code($r);
-            if ($code >= 200 && $code < 400) {
-                $html = wp_remote_retrieve_body($r);
-                if ($html) break;
+        foreach ($methods as $method) {
+            if ($html && strlen($html) > 500) break; // already got content
+
+            if ($method === 'proxy') {
+                // Use raw cURL with proxy for maximum compatibility
+                $ch = curl_init();
+                curl_setopt_array($ch, [
+                    CURLOPT_URL => $url,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 25,
+                    CURLOPT_CONNECTTIMEOUT => 10,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_MAXREDIRS => 5,
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_SSL_VERIFYHOST => 0,
+                    CURLOPT_PROXY => $proxy,
+                    CURLOPT_USERAGENT => $shuffled_uas[0],
+                    CURLOPT_HTTPHEADER => [
+                        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language: fa,en;q=0.8',
+                        'Accept-Encoding: gzip, deflate',
+                        'Cache-Control: no-cache',
+                    ],
+                    CURLOPT_ENCODING => '', // auto decompress gzip/deflate
+                ]);
+                if (strpos($proxy, '@') !== false) curl_setopt($ch, CURLOPT_PROXYAUTH, CURLAUTH_BASIC);
+                $html = curl_exec($ch);
+                $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($html && $code >= 200 && $code < 400) continue;
+                $html = ''; // reset for next method
+            } else {
+                // Direct fetch with UA rotation
+                $attempts = min(count($shuffled_uas), 3);
+                for ($i = 0; $i < $attempts; $i++) {
+                    $r = wp_remote_get($url, [
+                        'timeout'     => 20,
+                        'redirection' => 4,
+                        'sslverify'   => false,
+                        'user-agent'  => $shuffled_uas[$i],
+                        'headers'     => [
+                            'Accept'          => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                            'Accept-Language'  => 'fa,en;q=0.8',
+                            'Accept-Encoding'  => 'gzip, deflate',
+                            'Cache-Control'    => 'no-cache',
+                            'Connection'       => 'keep-alive',
+                        ],
+                    ]);
+                    if (is_wp_error($r)) continue;
+                    $code = wp_remote_retrieve_response_code($r);
+                    if ($code >= 200 && $code < 400) {
+                        $html = wp_remote_retrieve_body($r);
+                        if ($html && strlen($html) > 500) break;
+                    }
+                }
             }
         }
 
-        // Proxy fallback if direct fetch failed or returned empty
-        if (!$html || $code < 200 || $code >= 400) {
-            $proxy = Dashboard::get('ai_curl_proxy');
-            if ($proxy) {
-                $r = wp_remote_get($url, [
-                    'timeout'     => 25,
-                    'redirection' => 4,
-                    'sslverify'   => false,
-                    'user-agent'  => $shuffled_uas[0],
-                    'headers'     => [
-                        'Accept'         => 'text/html,application/xhtml+xml',
-                        'Accept-Language' => 'fa,en;q=0.8',
-                    ],
-                    'proxy' => $proxy,
-                ]);
-                if (!is_wp_error($r)) {
-                    $code = wp_remote_retrieve_response_code($r);
-                    $html = wp_remote_retrieve_body($r);
-                }
-            }
+        // If still no content after proxy+direct, try one more time with proxy + different UA
+        if ((!$html || strlen($html) < 200) && $proxy) {
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_PROXY => $proxy,
+                CURLOPT_USERAGENT => $shuffled_uas[1] ?? $shuffled_uas[0],
+                CURLOPT_ENCODING => '',
+            ]);
+            if (strpos($proxy, '@') !== false) curl_setopt($ch, CURLOPT_PROXYAUTH, CURLAUTH_BASIC);
+            $html = curl_exec($ch);
+            $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
         }
 
         $response_time = (int)round((microtime(true) - $start_time) * 1000);
@@ -245,9 +280,19 @@ class SerpInspector {
         }
 
         // JS-rendered page detection
-        $js_note = ($word_count < 30 && strlen($html) > 15000)
-            ? 'به نظر می‌رسد این صفحه محتوا را با جاوااسکریپت بارگذاری می‌کند؛ تحلیل سمت سرور ممکن نیست.'
-            : '';
+        $js_note = '';
+        if ($word_count < 50 && strlen($html) > 10000) {
+            $js_note = 'به‌نظر می‌رسد این صفحه محتوا را با JavaScript رندر می‌کند (HTML دریافت‌شده بزرگ ولی محتوای متنی کم). تعداد کلمات و هدینگ‌ها کمتر از واقعیت نشان داده می‌شوند. برای تحلیل دقیق‌تر، سایت‌هایی که محتوا را سمت سرور (SSR) رندر می‌کنند قابل خواندن هستند.';
+        } elseif ($word_count < 50 && strlen($html) < 2000) {
+            $js_note = 'صفحه پاسخ بسیار کوتاهی برگرداند. ممکن است سایت رقیب IP شما/هاست‌تان را بلاک کرده باشد.';
+        }
+
+        // Even for JS-rendered pages, we can still extract metadata from <head>
+        $title = $this->meta_title($html);
+        $meta_desc_val = $this->meta_desc($html);
+        // If title is empty, try og:title
+        if (!$title) $title = $this->extract_og($html, 'title');
+        if (!$meta_desc_val) $meta_desc_val = $this->extract_og($html, 'description');
 
         $headings      = $this->headings($html);
         $images        = preg_match_all('/<img\b[^>]*>/i', $html, $im) ?: 0;
@@ -288,8 +333,8 @@ class SerpInspector {
             'images_no_alt'    => $img_no_alt,
             'internal_links'   => $links['internal'],
             'external_links'   => $links['external'],
-            'title'            => $this->meta_title($html),
-            'meta_desc'        => $this->meta_desc($html),
+            'title'            => $title,
+            'meta_desc'        => $meta_desc_val,
             'schema'           => $this->schema_types($html),
             'word_count_score' => $this->score($word_count, $headings, $images),
             'paragraphs'       => preg_match_all('/<p\b[^>]*>/i', $html) ?: 0,
