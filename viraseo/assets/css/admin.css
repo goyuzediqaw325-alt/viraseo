@@ -890,3 +890,33 @@
 .vs-schema-badge-service { background: rgba(244,114,182,.15); color: #f472b6; display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin: 2px; }
 .vs-schema-badge-webpage { background: rgba(148,163,184,.12); color: #cbd5e1; display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin: 2px; }
 .vs-schema-json { background: var(--vs-bg); border: 1px solid var(--vs-border); border-radius: var(--vs-radius-sm); padding: 16px; font-family: 'JetBrains Mono','Fira Code',monospace; font-size: 12px; line-height: 1.6; color: #a5b4fc; overflow-x: auto; white-space: pre-wrap; max-height: 400px; direction: ltr; text-align: left; }
+
+/* === Link Health Score === */
+.vs-health-big { text-align: center; padding: 24px 0; }
+.vs-health-score-box { display: inline-block; border: 3px solid; border-radius: 16px; padding: 24px 40px; text-align: center; }
+.vs-health-score-num { font-size: 56px; font-weight: 800; line-height: 1.1; }
+.vs-health-score-label { font-size: 14px; color: #94a3b8; margin-top: 6px; }
+.vs-health-delta { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; font-size: 14px; font-weight: 600; }
+.vs-health-delta-arrow { font-size: 18px; }
+.vs-health-delta-num { font-weight: 700; }
+.vs-health-delta-label { font-weight: 400; color: #94a3b8; }
+.vs-health-factors { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-top: 20px; }
+.vs-health-factor-card { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 16px; text-align: center; }
+.vs-health-factor-icon { font-size: 24px; margin-bottom: 6px; }
+.vs-health-factor-name { font-size: 12px; font-weight: 600; color: #e2e8f0; margin-bottom: 8px; }
+.vs-health-factor-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; margin-bottom: 6px; }
+.vs-health-factor-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+.vs-health-factor-score { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.vs-health-factor-detail { font-size: 11px; color: #94a3b8; line-height: 1.6; }
+.vs-health-trend { margin-top: 24px; }
+.vs-health-trend-title { font-size: 14px; font-weight: 700; color: #e2e8f0; margin-bottom: 12px; }
+.vs-health-trend-chart { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: 20px; }
+.vs-health-trend-bars { display: flex; align-items: flex-end; height: 120px; gap: 4px; }
+.vs-health-trend-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.vs-health-trend-bar { width: 100%; min-width: 18px; max-width: 40px; border-radius: 4px 4px 0 0; transition: height .3s; }
+.vs-health-trend-label { font-size: 11px; font-weight: 700; color: #e2e8f0; margin-top: 4px; }
+.vs-health-trend-date { font-size: 9px; color: #64748b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px; }
+.vs-health-actions { margin-top: 20px; }
+.vs-health-actions-title { font-size: 14px; font-weight: 700; color: #fbbf24; margin-bottom: 10px; }
+.vs-health-actions-list { list-style: disc; padding-right: 20px; margin: 0; }
+.vs-health-actions-list li { font-size: 13px; color: #cbd5e1; padding: 4px 0; line-height: 1.8; }

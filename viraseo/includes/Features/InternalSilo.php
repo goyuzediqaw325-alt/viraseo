@@ -26,6 +26,8 @@ class InternalSilo {
         add_action('wp_ajax_viraseo_cluster_content_single', [$this, 'ajax_cluster_content_single']);
         add_action('wp_ajax_viraseo_cluster_content_apply', [$this, 'ajax_cluster_content_apply']);
         add_action('wp_ajax_viraseo_cluster_content_generate', [$this, 'ajax_cluster_content_generate']);
+        add_action('wp_ajax_viraseo_link_health', [$this, 'ajax_link_health']);
+        add_action('wp_ajax_viraseo_link_health_history', [$this, 'ajax_link_health_history']);
     }
 
     /** AI content generation for a single cluster member page. */
@@ -779,6 +781,184 @@ class InternalSilo {
         wp_send_json_success(['message'=>sprintf('✅ %d صفحه به ستون «%s» لینک شد.%s', $linked, $title, $note)]);
     }
 
+    /**
+     * Compute global internal link health score (0-100) based on 5 weighted factors.
+     */
+    public function compute_link_health(): array {
+        global $wpdb;
+        $lt = $wpdb->prefix . 'viraseo_internal_links';
+
+        // Total published pages
+        $total_pages = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product')");
+        if ($total_pages < 1) {
+            return ['score' => 0, 'factors' => [
+                'orphan' => ['score' => 0, 'detail' => 'صفحه منتشرشده‌ای یافت نشد.'],
+                'avg_inlinks' => ['score' => 0, 'detail' => 'داده‌ای نیست.'],
+                'distribution' => ['score' => 0, 'detail' => 'داده‌ای نیست.'],
+                'broken' => ['score' => 70, 'detail' => 'بررسی نشده.'],
+                'coverage' => ['score' => 0, 'detail' => 'داده‌ای نیست.'],
+            ]];
+        }
+
+        // Inlinks per page
+        $inlinks_data = $wpdb->get_results("SELECT target_id, COUNT(*) c FROM {$lt} GROUP BY target_id");
+        $inlinks_map = [];
+        foreach ($inlinks_data as $r) $inlinks_map[(int) $r->target_id] = (int) $r->c;
+
+        // Outlinks per page
+        $outlinks_data = $wpdb->get_results("SELECT source_id, COUNT(*) c FROM {$lt} GROUP BY source_id");
+        $outlinks_map = [];
+        foreach ($outlinks_data as $r) $outlinks_map[(int) $r->source_id] = (int) $r->c;
+
+        // All published page IDs
+        $page_ids = $wpdb->get_col("SELECT ID FROM {$wpdb->posts} WHERE post_status='publish' AND post_type IN ('post','page','product')");
+
+        // Factor 1: Orphan ratio (weight 25)
+        $orphan_count = 0;
+        foreach ($page_ids as $pid) {
+            if (empty($inlinks_map[(int) $pid])) $orphan_count++;
+        }
+        $orphan_ratio = $orphan_count / $total_pages * 100;
+        $orphan_score = max(0, (int) round(100 - $orphan_ratio));
+        $orphan_detail = PersianText::format_number($orphan_count) . ' صفحه یتیم از ' . PersianText::format_number($total_pages) . ' صفحه';
+
+        // Factor 2: Average inlinks (weight 20)
+        $total_inlinks = array_sum($inlinks_map);
+        $avg = $total_pages > 0 ? $total_inlinks / $total_pages : 0;
+        if ($avg >= 6) $avg_score = 100;
+        elseif ($avg >= 3) $avg_score = 70;
+        elseif ($avg >= 1) $avg_score = 40;
+        else $avg_score = 0;
+        $avg_detail = 'میانگین ' . PersianText::format_number(round($avg, 1)) . ' لینک ورودی به هر صفحه';
+
+        // Factor 3: Distribution (weight 20) - how evenly link equity is spread
+        $dist_score = 100;
+        if ($total_inlinks > 0 && count($inlinks_map) > 0) {
+            $sorted_inlinks = array_values($inlinks_map);
+            rsort($sorted_inlinks);
+            $top5 = array_sum(array_slice($sorted_inlinks, 0, 5));
+            $top5_pct = $top5 / $total_inlinks * 100;
+            if ($top5_pct > 80) $dist_score = 20;
+            elseif ($top5_pct > 60) $dist_score = 50;
+            elseif ($top5_pct > 40) $dist_score = 80;
+            else $dist_score = 100;
+        }
+        $dist_detail = '۵ صفحه برتر ' . PersianText::format_number((int) round($top5_pct ?? 0)) . '٪ از لینک‌ها را دارند';
+
+        // Factor 4: Broken ratio (weight 15)
+        $broken_cache = get_transient('viraseo_broken_count');
+        if ($broken_cache !== false) {
+            $broken_count = (int) $broken_cache;
+            $total_links = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$lt}");
+            $broken_score = $total_links > 0 ? max(0, (int) round(100 - ($broken_count / $total_links * 100))) : 100;
+            $broken_detail = PersianText::format_number($broken_count) . ' لینک شکسته از ' . PersianText::format_number($total_links) . ' لینک';
+        } else {
+            $broken_score = 70;
+            $broken_detail = 'هنوز بررسی نشده (پیش‌فرض ۷۰)';
+        }
+
+        // Factor 5: Coverage (weight 20) - pages with BOTH inlink AND outlink
+        $covered = 0;
+        foreach ($page_ids as $pid) {
+            $pid = (int) $pid;
+            if (!empty($inlinks_map[$pid]) && !empty($outlinks_map[$pid])) $covered++;
+        }
+        $coverage_pct = $total_pages > 0 ? (int) round($covered / $total_pages * 100) : 0;
+        $coverage_score = $coverage_pct;
+        $coverage_detail = PersianText::format_number($covered) . ' صفحه از ' . PersianText::format_number($total_pages) . ' هم لینک ورودی و هم خروجی دارند (' . PersianText::format_number($coverage_pct) . '٪)';
+
+        // Weighted total
+        $score = (int) round(
+            $orphan_score * 0.25 +
+            $avg_score * 0.20 +
+            $dist_score * 0.20 +
+            $broken_score * 0.15 +
+            $coverage_score * 0.20
+        );
+
+        return [
+            'score' => $score,
+            'factors' => [
+                'orphan' => ['score' => $orphan_score, 'detail' => $orphan_detail],
+                'avg_inlinks' => ['score' => $avg_score, 'detail' => $avg_detail],
+                'distribution' => ['score' => $dist_score, 'detail' => $dist_detail],
+                'broken' => ['score' => $broken_score, 'detail' => $broken_detail],
+                'coverage' => ['score' => $coverage_score, 'detail' => $coverage_detail],
+            ],
+        ];
+    }
+
+    /** AJAX: Get current link health score + comparison with previous entry. */
+    public function ajax_link_health(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+
+        $current = $this->compute_link_health();
+        $history = get_option('viraseo_link_health_history', []);
+        if (!is_array($history)) $history = [];
+
+        $comparison = null;
+        if (count($history) >= 1) {
+            $prev = end($history);
+            // If current date matches last entry, compare with the one before
+            $today = date('Y-m-d');
+            if (isset($prev['date_raw']) && $prev['date_raw'] === $today && count($history) >= 2) {
+                $prev = $history[count($history) - 2];
+            }
+            $delta = $current['score'] - ($prev['score'] ?? 0);
+            $comparison = [
+                'prev_score' => $prev['score'] ?? 0,
+                'prev_date' => $prev['date'] ?? '',
+                'delta' => $delta,
+                'trend' => $delta > 0 ? 'up' : ($delta < 0 ? 'down' : 'same'),
+            ];
+        }
+
+        wp_send_json_success([
+            'score' => $current['score'],
+            'factors' => $current['factors'],
+            'comparison' => $comparison,
+        ]);
+    }
+
+    /** AJAX: Get all link health history entries. */
+    public function ajax_link_health_history(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+
+        $history = get_option('viraseo_link_health_history', []);
+        if (!is_array($history)) $history = [];
+
+        wp_send_json_success(['entries' => $history]);
+    }
+
+    /**
+     * Record a link health snapshot (max 1 per day).
+     */
+    private function record_link_health_snapshot(): void {
+        $current = $this->compute_link_health();
+        $history = get_option('viraseo_link_health_history', []);
+        if (!is_array($history)) $history = [];
+
+        $today = date('Y-m-d');
+        // Check if today is already recorded
+        foreach ($history as $entry) {
+            if (isset($entry['date_raw']) && $entry['date_raw'] === $today) return;
+        }
+
+        $history[] = [
+            'date' => \ViraSEO\Utils\JalaliDate::format($today, 'relative'),
+            'date_raw' => $today,
+            'score' => $current['score'],
+            'factors' => $current['factors'],
+        ];
+
+        // Keep last 60 entries max
+        if (count($history) > 60) $history = array_slice($history, -60);
+
+        update_option('viraseo_link_health_history', $history);
+    }
+
     public function scan(): array {
         global $wpdb;
         $lt = $wpdb->prefix.'viraseo_internal_links';
@@ -820,6 +1000,9 @@ class InternalSilo {
         $orphan_count = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$ot} WHERE status='orphan'");
         update_option('viraseo_link_scores', $this->compute_link_scores());
         update_option('viraseo_last_scan', current_time('mysql'));
+
+        // Record link health snapshot (max 1 per day)
+        $this->record_link_health_snapshot();
 
         return ['links'=>$link_count, 'orphans'=>$orphan_count];
     }

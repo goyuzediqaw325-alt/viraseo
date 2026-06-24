@@ -882,7 +882,7 @@ $(document).on('click', '#vs-scan-links', function(){
     const $s = $('#vs-scan-status').text('اسکن...');
     post('viraseo_trigger_scan', {}, r => {
         $s.text(r.success? r.data.message : 'خطا');
-        if (r.success) { loadOrphans(); loadSuggestions(); loadLinkPower(); }
+        if (r.success) { loadOrphans(); loadSuggestions(); loadLinkPower(); loadLinkHealth(); }
     });
 });
 function loadOrphans() {
@@ -1279,6 +1279,103 @@ $(document).on('click', '#vs-load-broken', function(){
     });
 });
 
+// === LINK HEALTH SCORE ===
+function loadLinkHealth() {
+    if (!$('#vs-link-health-score').length) return;
+    $('#vs-link-health-score').html('<div class="vs-empty">در حال محاسبه امتیاز سلامت...</div>');
+    post('viraseo_link_health', {}, function(r) {
+        if (!r.success) { $('#vs-link-health-score').html('<div class="vs-empty">'+(r.data||'خطا')+'</div>'); return; }
+        var sc = r.data.score;
+        var scColor = sc >= 75 ? '#10b981' : (sc >= 45 ? '#f59e0b' : '#ef4444');
+        var scLabel = sc >= 75 ? 'عالی' : (sc >= 45 ? 'متوسط' : 'ضعیف');
+        var html = '<div class="vs-health-score-box" style="border-color:'+scColor+'">'
+            + '<div class="vs-health-score-num" style="color:'+scColor+'">'+sc+'</div>'
+            + '<div class="vs-health-score-label">از ۱۰۰ — '+scLabel+'</div>'
+            + '</div>';
+        // Comparison delta
+        if (r.data.comparison) {
+            var delta = r.data.comparison.delta;
+            var arrow = delta > 0 ? '▲' : (delta < 0 ? '▼' : '—');
+            var dColor = delta > 0 ? '#10b981' : (delta < 0 ? '#ef4444' : '#94a3b8');
+            html += '<div class="vs-health-delta" style="color:'+dColor+'">'
+                + '<span class="vs-health-delta-arrow">'+arrow+'</span> '
+                + '<span class="vs-health-delta-num">'+(delta > 0 ? '+' : '')+delta+'</span>'
+                + '<span class="vs-health-delta-label"> نسبت به '+r.data.comparison.prev_date+'</span>'
+                + '</div>';
+        }
+        $('#vs-link-health-score').html(html);
+
+        // Factor cards
+        var factors = r.data.factors;
+        var factorNames = {
+            orphan: 'نسبت صفحات یتیم',
+            avg_inlinks: 'میانگین لینک ورودی',
+            distribution: 'توزیع قدرت لینک',
+            broken: 'لینک‌های شکسته',
+            coverage: 'پوشش دوطرفه'
+        };
+        var factorIcons = {orphan:'🏝️', avg_inlinks:'📥', distribution:'⚖️', broken:'🔗', coverage:'🔄'};
+        var fHtml = '';
+        for (var key in factorNames) {
+            if (!factors[key]) continue;
+            var f = factors[key];
+            var fColor = f.score >= 75 ? '#10b981' : (f.score >= 45 ? '#f59e0b' : '#ef4444');
+            fHtml += '<div class="vs-health-factor-card">'
+                + '<div class="vs-health-factor-icon">'+factorIcons[key]+'</div>'
+                + '<div class="vs-health-factor-name">'+factorNames[key]+'</div>'
+                + '<div class="vs-health-factor-bar"><div class="vs-health-factor-fill" style="width:'+f.score+'%;background:'+fColor+'"></div></div>'
+                + '<div class="vs-health-factor-score" style="color:'+fColor+'">'+f.score+'</div>'
+                + '<div class="vs-health-factor-detail">'+f.detail+'</div>'
+                + '</div>';
+        }
+        $('#vs-link-health-factors').html(fHtml);
+
+        // Load history for trend chart
+        loadLinkHealthHistory();
+
+        // Action items based on weak factors
+        var actions = [];
+        if (factors.orphan && factors.orphan.score < 60) actions.push('صفحات یتیم زیاد! از تب «صفحات یتیم» لینک‌های داخلی اضافه کنید.');
+        if (factors.avg_inlinks && factors.avg_inlinks.score < 60) actions.push('میانگین لینک ورودی کم است. پیشنهادات لینک را اعمال کنید.');
+        if (factors.distribution && factors.distribution.score < 60) actions.push('قدرت لینک در چند صفحه متمرکز شده. لینک‌ها را بین صفحات پخش کنید.');
+        if (factors.broken && factors.broken.score < 60) actions.push('لینک‌های شکسته زیاد! از تب «لینک‌های شکسته» اصلاح کنید.');
+        if (factors.coverage && factors.coverage.score < 60) actions.push('خیلی از صفحات لینک ورودی یا خروجی ندارند. پوشش لینک‌سازی را افزایش دهید.');
+        if (actions.length) {
+            var aHtml = '<h4 class="vs-health-actions-title">🎯 پیشنهادهای بهبود</h4><ul class="vs-health-actions-list">';
+            actions.forEach(function(a){ aHtml += '<li>'+a+'</li>'; });
+            aHtml += '</ul>';
+            $('#vs-link-health-actions').html(aHtml);
+        } else {
+            $('#vs-link-health-actions').html('<div class="vs-empty" style="margin-top:12px">🎉 عالی! سلامت لینک‌سازی داخلی در وضعیت خوبی است.</div>');
+        }
+    });
+}
+function loadLinkHealthHistory() {
+    if (!$('#vs-link-health-trend').length) return;
+    post('viraseo_link_health_history', {}, function(r) {
+        if (!r.success || !r.data.entries || r.data.entries.length < 2) {
+            $('#vs-link-health-trend').html('<div class="vs-empty" style="margin-top:12px">برای نمایش روند تاریخی، حداقل ۲ اسکن در روزهای مختلف لازم است.</div>');
+            return;
+        }
+        var entries = r.data.entries.slice(-12); // last 12
+        var maxScore = 100;
+        var barW = Math.floor(100 / entries.length);
+        var svg = '<h4 class="vs-health-trend-title">📈 روند امتیاز سلامت</h4><div class="vs-health-trend-chart">';
+        svg += '<div class="vs-health-trend-bars">';
+        entries.forEach(function(e){
+            var pct = Math.max(2, e.score);
+            var color = e.score >= 75 ? '#10b981' : (e.score >= 45 ? '#f59e0b' : '#ef4444');
+            svg += '<div class="vs-health-trend-col" style="width:'+barW+'%">'
+                + '<div class="vs-health-trend-bar" style="height:'+pct+'%;background:'+color+'" title="'+e.date+': '+e.score+'"></div>'
+                + '<div class="vs-health-trend-label">'+e.score+'</div>'
+                + '<div class="vs-health-trend-date">'+e.date+'</div>'
+                + '</div>';
+        });
+        svg += '</div></div>';
+        $('#vs-link-health-trend').html(svg);
+    });
+}
+
 // === BACKLINK IMPORT FROM GSC ===
 $(document).on('change', '#vs-bl-import-file', function(){
     const f = this.files && this.files[0];
@@ -1609,7 +1706,7 @@ $(function(){
     // GSC page
     if ($('#vs-kw-tbody').length) { loadKeywords(); loadStriking(); loadCannibal(); loadDaily(); }
     // Links page
-    if ($('#vs-orphans-tbody').length) { loadOrphans(); loadSuggestions(); loadLinkPower(); }
+    if ($('#vs-orphans-tbody').length) { loadOrphans(); loadSuggestions(); loadLinkPower(); loadLinkHealth(); }
     // Backlinks page
     if ($('#vs-bl-tbody').length) { loadBacklinks(); loadDisavow(); }
     // Workflows page

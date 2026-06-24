@@ -14,6 +14,7 @@
     <button class="vs-tab" data-tab="clusters">🧩 خوشه‌های موضوعی</button>
     <button class="vs-tab" data-tab="power">💪 قدرت و گراف لینک‌ها</button>
     <button class="vs-tab" data-tab="broken">🚫 لینک‌های شکسته</button>
+    <button class="vs-tab" data-tab="health">❤️ سلامت لینک‌ها</button>
   </div>
 
   <div class="vs-tab-panel active" data-panel="orphans">
@@ -87,5 +88,16 @@
       <thead><tr><th>صفحه‌ی مبدا</th><th>لینک شکسته</th><th>انکر</th><th>مشکل</th><th>عملیات</th></tr></thead>
       <tbody id="vs-broken-tbody"><tr><td colspan="5" class="vs-empty">دکمه «بررسی لینک‌های شکسته» را بزنید.</td></tr></tbody>
     </table>
+  </div>
+
+  <div class="vs-tab-panel" data-panel="health">
+    <div class="vs-alert vs-alert-info">
+      <span class="dashicons dashicons-heart"></span>
+      <p><strong>امتیاز سلامت لینک‌سازی داخلی</strong> — این امتیاز بر اساس ۵ فاکتور محاسبه می‌شود: نسبت صفحات یتیم، میانگین لینک‌های ورودی، توزیع برابر قدرت لینک، لینک‌های شکسته، و پوشش دوطرفه. برای به‌روزرسانی، «اسکن لینک‌ها» را بزنید.</p>
+    </div>
+    <div id="vs-link-health-score" class="vs-health-big"></div>
+    <div id="vs-link-health-factors" class="vs-health-factors"></div>
+    <div id="vs-link-health-trend" class="vs-health-trend"></div>
+    <div id="vs-link-health-actions" class="vs-health-actions"></div>
   </div>
 </div>
