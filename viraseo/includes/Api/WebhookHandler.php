@@ -236,6 +236,7 @@ class WebhookHandler {
             'lsi_keywords'   => wp_json_encode(array_slice($lsi, 0, 20)),
             'content_gap'    => wp_json_encode([]),
             'questions'      => wp_json_encode(array_slice($questions, 0, 10)),
+            'ecommerce_data' => wp_json_encode(['error'=>'','debug'=>'','ecommerce'=>null]),
         ], ['id' => $id]);
 
         return ['success'=>true,'analysis_id'=>$id];

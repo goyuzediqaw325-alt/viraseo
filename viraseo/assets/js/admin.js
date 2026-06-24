@@ -555,7 +555,7 @@ function loadSerpResults(id) {
         if (!r.success || r.data.status!=='completed') return;
         const d = r.data;
         // If n8n returned an error or no competitors, show a clear reason instead of an empty table
-        if (d.error || !d.competitors || d.competitors.length === 0) {
+        if ((d.error && d.error.length > 0) || !d.competitors || d.competitors.length === 0) {
             $('#vs-serp-results').hide();
             $('#vs-serp-error').show();
             var reason = d.error
