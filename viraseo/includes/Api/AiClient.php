@@ -286,6 +286,78 @@ class AiClient {
         return trim($text);
     }
 
+    /**
+     * Extract images/media from HTML content and replace them with placeholders.
+     * Returns ['text' => stripped content, 'images' => [...tags...]]
+     * Used to preserve original images when AI rewrites content.
+     */
+    public static function extract_images(string $html): array {
+        $images = [];
+        $i = 0;
+        // Match <img>, <figure>, and WordPress image blocks
+        $text = preg_replace_callback(
+            '/(<figure[^>]*>.*?<\/figure>|<img[^>]*\/?>)/uis',
+            function($m) use (&$images, &$i) {
+                $i++;
+                $images[$i] = $m[0];
+                return "[تصویر-{$i}]";
+            },
+            $html
+        );
+        return ['text' => $text, 'images' => $images];
+    }
+
+    /**
+     * Re-inject original images into AI-generated content.
+     * If AI kept the [تصویر-N] placeholders, replaces them with original tags.
+     * If AI didn't include them, appends images at logical positions (after first H2/paragraph sections).
+     */
+    public static function inject_images(string $new_html, array $images): string {
+        if (empty($images)) return $new_html;
+
+        // First: replace any placeholders the AI kept
+        $remaining = [];
+        foreach ($images as $idx => $tag) {
+            $placeholder = "[تصویر-{$idx}]";
+            if (strpos($new_html, $placeholder) !== false) {
+                $new_html = str_replace($placeholder, $tag, $new_html);
+            } else {
+                $remaining[] = $tag;
+            }
+        }
+
+        // If AI dropped some images, insert them at logical positions
+        if (!empty($remaining)) {
+            // Find positions after </h2> or </p> tags to insert images
+            $positions = [];
+            preg_match_all('/<\/(?:h2|p)>/i', $new_html, $matches, PREG_OFFSET_CAPTURE);
+            foreach ($matches[0] as $m) {
+                $positions[] = $m[1] + strlen($m[0]);
+            }
+
+            // Distribute images evenly across the content
+            $total_positions = count($positions);
+            foreach ($remaining as $ri => $img) {
+                if ($total_positions > 0) {
+                    // Pick a position roughly evenly spaced
+                    $pos_idx = min((int)(($ri + 1) * $total_positions / (count($remaining) + 1)), $total_positions - 1);
+                    $insert_at = $positions[$pos_idx];
+                    $new_html = substr($new_html, 0, $insert_at) . "\n" . $img . "\n" . substr($new_html, $insert_at);
+                    // Shift subsequent positions
+                    $shift = strlen($img) + 2;
+                    for ($j = $pos_idx + 1; $j < $total_positions; $j++) {
+                        $positions[$j] += $shift;
+                    }
+                } else {
+                    // No good positions found, append at end
+                    $new_html .= "\n" . $img;
+                }
+            }
+        }
+
+        return $new_html;
+    }
+
     /** Approximate USD cost for a request. */
     public static function estimate_cost(string $model, int $in_tokens, int $out_tokens): float {
         $cache = get_transient('viraseo_or_models') ?: [];

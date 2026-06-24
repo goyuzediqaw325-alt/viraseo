@@ -241,7 +241,12 @@ class ModernSeo {
         $tips = isset($_POST['tips']) ? array_map('sanitize_text_field', (array)$_POST['tips']) : [];
         $title = get_the_title($pid);
         $content = $post->post_content;
-        $contentPreview = implode(' ', array_slice(preg_split('/\\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 1200));
+
+        // Preserve images
+        $extracted = \ViraSEO\Api\AiClient::extract_images($content);
+        $images = $extracted['images'];
+        $contentPreview = implode(' ', array_slice(preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($extracted['text']))), 0, 1200));
+        $imgNote = count($images) ? "\n- تصاویر اصلی را حفظ کن. عبارت [تصویر-N] را در جای مناسب قرار بده.\n" : '';
 
         $system = 'شما متخصص ارشد GEO (Generative Engine Optimization) و سئوی فارسی هستید. '
                 . 'وظیفه: محتوای موجود را بهبود دهید تا برای AI Overview گوگل و موتورهای هوش مصنوعی بهینه باشد. '
@@ -260,11 +265,13 @@ class ModernSeo {
               . "- جدول اطلاعاتی اضافه کن اگر مرتبط است\n"
               . "- فهرست/لیست مراحل بنویس\n"
               . "- عبارات کلیدی را Bold کن\n"
-              . "- محتوا انسانی و مفید باشد نه ربات‌نوشته";
+              . "- محتوا انسانی و مفید باشد نه ربات‌نوشته"
+              . $imgNote;
 
         $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.5, 8000);
         if (isset($res['error'])) wp_send_json_error($res['error']);
         $text = \ViraSEO\Api\AiClient::clean_html($res['text']);
+        $text = \ViraSEO\Api\AiClient::inject_images($text, $images);
         update_post_meta($pid, '_viraseo_proposed_content', $text);
         wp_send_json_success([
             'post_id' => $pid, 'title' => $title,
@@ -289,7 +296,12 @@ class ModernSeo {
         $title = get_the_title($pid);
         $content = $post->post_content;
         $target = TargetKeywords::get($pid);
-        $contentPreview = implode(' ', array_slice(preg_split('/\\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 1200));
+
+        // Preserve images
+        $extracted = \ViraSEO\Api\AiClient::extract_images($content);
+        $images = $extracted['images'];
+        $contentPreview = implode(' ', array_slice(preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($extracted['text']))), 0, 1200));
+        $imgNote = count($images) ? "\n- این صفحه " . count($images) . " تصویر دارد. عبارت [تصویر-N] را در جای مناسب بنویس.\n" : '';
 
         $system = 'شما ویراستار ارشد محتوای فارسی هستید و اصول Google Helpful Content Update (2024-2026) را کامل می‌شناسید. '
                 . 'وظیفه: محتوای قدیمی/کهنه را بروزرسانی کن. قوانین سختگیرانه:\n'
@@ -305,11 +317,13 @@ class ModernSeo {
         $user = "عنوان: {$title}\n" . ($target ? "کلمه هدف: «{$target}»\n" : '')
               . "\nمحتوای فعلی:\n{$contentPreview}\n\n"
               . "محتوای بروزرسانی‌شده را بنویس. خلاقانه باش: جدول اضافه کن، مقایسه بنویس، "
-              . "FAQ اضافه کن، نکات عملی ۲۰۲۶ اضافه کن. ولی هسته‌ی محتوا را از بین نبر.";
+              . "FAQ اضافه کن، نکات عملی ۲۰۲۶ اضافه کن. ولی هسته‌ی محتوا را از بین نبر."
+              . $imgNote;
 
         $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.5, 8000);
         if (isset($res['error'])) wp_send_json_error($res['error']);
         $text = \ViraSEO\Api\AiClient::clean_html($res['text']);
+        $text = \ViraSEO\Api\AiClient::inject_images($text, $images);
         update_post_meta($pid, '_viraseo_proposed_content', $text);
         wp_send_json_success([
             'post_id' => $pid, 'title' => $title,

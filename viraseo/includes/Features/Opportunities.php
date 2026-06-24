@@ -251,8 +251,13 @@ class Opportunities {
         $title = get_the_title($pid);
         $content = $post->post_content;
         $target = \ViraSEO\Features\TargetKeywords::get($pid);
-        $words = preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content)));
+
+        // Preserve images
+        $extracted = \ViraSEO\Api\AiClient::extract_images($content);
+        $images = $extracted['images'];
+        $words = preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($extracted['text'])));
         $contentPreview = implode(' ', array_slice($words, 0, 1200));
+        $imgNote = count($images) ? "\n- این صفحه " . count($images) . " تصویر دارد. عبارت [تصویر-N] را در جای مناسب بنویس.\n" : '';
 
         $issueList = implode("\n", array_map(fn($i) => "- {$i}", $issues));
         $system = 'شما متخصص سئوی on-page فارسی هستید. وظیفه: محتوای موجود را طوری ویرایش/تکمیل کن که ایرادهای سئوی مشخص‌شده رفع شوند. '
@@ -261,12 +266,13 @@ class Opportunities {
         $user = "عنوان: {$title}\n" . ($target ? "کلمه هدف: «{$target}»\n" : '')
               . "\nایرادهای on-page که باید رفع شوند:\n{$issueList}\n\n"
               . "محتوای فعلی:\n{$contentPreview}\n\n"
-              . "محتوای اصلاح‌شده (HTML) را برگردان.";
+              . "محتوای اصلاح‌شده (HTML) را برگردان." . $imgNote;
 
         $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.4, 8000);
         if (isset($res['error'])) wp_send_json_error($res['error']);
 
         $text = \ViraSEO\Api\AiClient::clean_html($res['text']);
+        $text = \ViraSEO\Api\AiClient::inject_images($text, $images);
 
         update_post_meta($pid, '_viraseo_proposed_content', $text);
         wp_send_json_success([

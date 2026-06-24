@@ -265,9 +265,17 @@ class TrafficForecaster {
         $secondary = TargetKeywords::get_secondary($pid);
         $title = get_the_title($pid);
         $content = $post->post_content;
-        // Truncate content for AI context (keep first ~1500 words)
-        $words = preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content)));
+
+        // Extract images from content so AI doesn't lose them
+        $extracted = AiClient::extract_images($content);
+        $images = $extracted['images'];
+
+        // Prepare text-only preview for AI (with image placeholders)
+        $textContent = wp_strip_all_tags(strip_shortcodes($extracted['text']));
+        $words = preg_split('/\s+/u', $textContent);
         $contentPreview = implode(' ', array_slice($words, 0, 1200));
+        // Tell AI about the images
+        $imgNote = count($images) ? "\n\nتوجه: این صفحه " . count($images) . " تصویر دارد. در جایی که مناسب است عبارت [تصویر-N] را قرار بده تا تصاویر اصلی در همان جا نگه داشته شوند.\n" : '';
 
         $kwLines = '';
         foreach ($rows as $r) {
@@ -286,7 +294,7 @@ class TrafficForecaster {
               . ($target ? "کلمه هدف اصلی: «{$target}»\n" : '')
               . ($secondary ? "کلمات فرعی: " . implode('، ', $secondary) . "\n" : '')
               . "\nکلمات کلیدی واقعی این صفحه در سرچ کنسول (فرصت‌های رشد):\n{$kwLines}\n"
-              . "خلاصه‌ی محتوای فعلی (اول ۱۵۰۰ کلمه):\n{$contentPreview}\n\n"
+              . "خلاصه‌ی محتوای فعلی:\n{$contentPreview}\n" . $imgNote . "\n"
               . "حالا محتوای بهبودیافته را بنویس. قوانین:\n"
               . "۱) کلمات «فاصله‌ی ضربه» (جایگاه ۱۱-۲۰ با نمایش بالا) را حتماً در زیربخش‌های H2/H3 جدید پوشش بده\n"
               . "۲) کلماتی که جایگاه ۴-۱۰ دارند را در پاراگراف‌های اول صفحه تقویت کن\n"
@@ -300,6 +308,9 @@ class TrafficForecaster {
         if (isset($res['error'])) wp_send_json_error($res['error']);
 
         $text = AiClient::clean_html($res['text']);
+
+        // Re-inject original images into the AI output
+        $text = AiClient::inject_images($text, $images);
 
         // Save the proposed content temporarily in post meta for the apply step
         update_post_meta($pid, '_viraseo_proposed_content', $text);
