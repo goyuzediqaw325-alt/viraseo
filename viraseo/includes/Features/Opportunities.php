@@ -252,7 +252,7 @@ class Opportunities {
         $content = $post->post_content;
         $target = \ViraSEO\Features\TargetKeywords::get($pid);
         $words = preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content)));
-        $contentPreview = implode(' ', array_slice($words, 0, 500));
+        $contentPreview = implode(' ', array_slice($words, 0, 1000));
 
         $issueList = implode("\n", array_map(fn($i) => "- {$i}", $issues));
         $system = 'شما متخصص سئوی on-page فارسی هستید. وظیفه: محتوای موجود را طوری ویرایش/تکمیل کن که ایرادهای سئوی مشخص‌شده رفع شوند. '

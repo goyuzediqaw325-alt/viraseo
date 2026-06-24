@@ -18,21 +18,70 @@ class AiClient {
         return $proxy ? rtrim($proxy, '/') . '/v1' : self::ENDPOINT;
     }
 
-    /** Hooked to http_api_curl — routes AI requests through a custom proxy (xray/SOCKS/HTTP)
-     *  when configured. Only applies while an AI request is in flight. */
+    /** Hooked to http_api_curl — enforces timeout + applies cURL proxy for AI requests.
+     *  Only applies while an AI request is in flight ($proxy_active=true). */
     public static function apply_curl_proxy($handle): void {
         if (!self::$proxy_active) return;
-        // Always enforce adequate timeout for AI calls (host/proxy defaults may be 30s)
-        curl_setopt($handle, CURLOPT_TIMEOUT, 150);
+
+        // Force cURL timeout to 180s — overrides any WP/host default of 30s.
+        // This is the REAL fix for "Operation timed out after 30001 milliseconds"
+        // because wp_remote_post 'timeout' only sets CURLOPT_TIMEOUT if WP uses cURL transport,
+        // but some hosts/plugins override it. Setting it here in the hook is authoritative.
+        curl_setopt($handle, CURLOPT_TIMEOUT, 180);
         curl_setopt($handle, CURLOPT_CONNECTTIMEOUT, 30);
+
+        // Disable SSL verify for proxy connections (common for Iran proxies)
         $px = Dashboard::get('ai_curl_proxy');
         if (!$px) return;
         curl_setopt($handle, CURLOPT_PROXY, $px);
-        // socks5h:// / socks5:// / http:// are auto-detected from the scheme by cURL
+        curl_setopt($handle, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($handle, CURLOPT_SSL_VERIFYHOST, 0);
+
+        // If proxy URL contains @ (auth), cURL handles it automatically from URL format
+        // user:pass@host:port — but let's also set PROXYAUTH explicitly
+        if (strpos($px, '@') !== false) {
+            curl_setopt($handle, CURLOPT_PROXYAUTH, CURLAUTH_BASIC);
+        }
     }
 
     public static function is_enabled(): bool {
         return Dashboard::get('ai_enabled') && Dashboard::get('openrouter_key');
+    }
+
+    /** Test the cURL proxy connectivity (not the Worker — the raw proxy). */
+    public static function test_proxy(): array {
+        $px = Dashboard::get('ai_curl_proxy');
+        if (!$px) return ['ok' => false, 'msg' => 'پروکسی cURL تنظیم نشده.'];
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => 'https://openrouter.ai/api/v1/models',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_PROXY => $px,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . Dashboard::get('openrouter_key')],
+        ]);
+        if (strpos($px, '@') !== false) {
+            curl_setopt($ch, CURLOPT_PROXYAUTH, CURLAUTH_BASIC);
+        }
+        $t0 = microtime(true);
+        $body = curl_exec($ch);
+        $ms = (int)round((microtime(true) - $t0) * 1000);
+        $err = curl_error($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($err) return ['ok' => false, 'msg' => "❌ خطای پروکسی: {$err}"];
+        if ($code === 0) return ['ok' => false, 'msg' => '❌ اتصال برقرار نشد. پروکسی در دسترس نیست یا پورت اشتباه است.'];
+        if ($code === 407) return ['ok' => false, 'msg' => '❌ احراز هویت پروکسی ناموفق (407). نام‌کاربری/رمز را بررسی کنید.'];
+        if ($code >= 400) return ['ok' => false, 'msg' => "❌ پروکسی جواب داد ولی OpenRouter خطا برگرداند (HTTP {$code})."];
+
+        $data = json_decode($body, true);
+        $n = count($data['data'] ?? []);
+        return ['ok' => true, 'msg' => "✅ پروکسی سالم — اتصال به OpenRouter در {$ms}ms · {$n} مدل یافت شد."];
     }
 
     public static function model(): string {
@@ -114,9 +163,10 @@ class AiClient {
             @set_time_limit(300);
         }
 
-        // Cap max_tokens to 3000 to keep response time within Cloudflare Worker 30s limit.
-        // 3000 tokens ≈ 2000+ words Persian — sufficient for most page rewrites.
-        $effective_max = min($max_tokens, 3000);
+        // When using a direct proxy (ai_curl_proxy) without Worker, no 30s limit exists.
+        // Only cap when going through Cloudflare Worker (ai_proxy_url is set).
+        $via_worker = !empty(Dashboard::get('ai_proxy_url'));
+        $effective_max = $via_worker ? min($max_tokens, 3000) : $max_tokens;
 
         // Register the curl timeout hook if not already registered
         if (!has_action('http_api_curl', [self::class, 'apply_curl_proxy'])) {

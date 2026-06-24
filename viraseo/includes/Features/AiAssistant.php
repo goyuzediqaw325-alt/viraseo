@@ -14,6 +14,7 @@ class AiAssistant {
     public function __construct() {
         add_action('http_api_curl', ['\ViraSEO\Api\AiClient', 'apply_curl_proxy'], 10, 1);
         add_action('wp_ajax_viraseo_ai_models', [$this, 'ajax_models']);
+        add_action('wp_ajax_viraseo_test_proxy', [$this, 'ajax_test_proxy']);
         add_action('wp_ajax_viraseo_ai_serp_strategy', [$this, 'ajax_serp_strategy']);
         add_action('wp_ajax_viraseo_ai_content', [$this, 'ajax_content']);
         add_action('wp_ajax_viraseo_ai_cannibal', [$this, 'ajax_cannibal']);
@@ -155,6 +156,15 @@ class AiAssistant {
         $res = AiClient::models(!empty($_POST['force']));
         if (isset($res['error'])) wp_send_json_error($res['error']);
         wp_send_json_success(['models' => $res['models'], 'current' => AiClient::model()]);
+    }
+
+    /** Test the cURL proxy connectivity. */
+    public function ajax_test_proxy(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        $res = AiClient::test_proxy();
+        if ($res['ok']) wp_send_json_success($res['msg']);
+        else wp_send_json_error($res['msg']);
     }
 
     /** AI competitor-beating strategy + content brief from a SERP analysis. */

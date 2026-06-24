@@ -241,7 +241,7 @@ class ModernSeo {
         $tips = isset($_POST['tips']) ? array_map('sanitize_text_field', (array)$_POST['tips']) : [];
         $title = get_the_title($pid);
         $content = $post->post_content;
-        $contentPreview = implode(' ', array_slice(preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 600));
+        $contentPreview = implode(' ', array_slice(preg_split('/\\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 1000));
 
         $system = 'شما متخصص ارشد GEO (Generative Engine Optimization) و سئوی فارسی هستید. '
                 . 'وظیفه: محتوای موجود را بهبود دهید تا برای AI Overview گوگل و موتورهای هوش مصنوعی بهینه باشد. '
@@ -289,7 +289,7 @@ class ModernSeo {
         $title = get_the_title($pid);
         $content = $post->post_content;
         $target = TargetKeywords::get($pid);
-        $contentPreview = implode(' ', array_slice(preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 600));
+        $contentPreview = implode(' ', array_slice(preg_split('/\\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 1000));
 
         $system = 'شما ویراستار ارشد محتوای فارسی هستید و اصول Google Helpful Content Update (2024-2026) را کامل می‌شناسید. '
                 . 'وظیفه: محتوای قدیمی/کهنه را بروزرسانی کن. قوانین سختگیرانه:\n'

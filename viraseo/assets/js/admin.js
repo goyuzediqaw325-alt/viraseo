@@ -317,6 +317,13 @@ $(document).on('click', '#vs-test-n8n', function(){
         else $s.text(r.data).addClass('err');
     });
 });
+// === SETTINGS: Test cURL proxy ===
+$(document).on('click', '#vs-test-proxy', function(){
+    const $s = $('#vs-proxy-result').text('در حال تست...');
+    post('viraseo_test_proxy', {}, r => {
+        $s.text(r.success ? r.data : r.data).css('color', r.success ? '#10b981' : '#ef4444');
+    });
+});
 
 
 // === GSC OAuth ===
