@@ -1780,6 +1780,19 @@ $(document).on('click', '.vs-restore-backup', function(){
     });
 });
 
+// === BACKUP MANAGEMENT (diagnostics page) ===
+$(document).on('click', '#vs-load-backups', function(){
+    const $t = $('#vs-backup-tbody').html('<tr><td colspan="4" class="vs-empty">در حال بارگذاری...</td></tr>');
+    post('viraseo_list_backups', {}, r => {
+        const $tb = $('#vs-backup-tbody').empty();
+        if (!r.success) { $tb.html('<tr><td colspan="4" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
+        if (!r.data.rows.length) { $tb.html('<tr><td colspan="4" class="vs-empty">🎉 هیچ بکاپی وجود ندارد (هنوز محتوایی با AI اصلاح نشده یا همه بازگردانی شده‌اند).</td></tr>'); return; }
+        r.data.rows.forEach(o => {
+            $tb.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td>'+o.type+'</td><td>'+o.backup_time+'</td><td><button class="vs-btn vs-btn-sm vs-btn-primary vs-restore-backup" data-pid="'+o.id+'">↩️ بازگردانی</button> <a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">ویرایش</a></td></tr>');
+        });
+    });
+});
+
 $(document).on('click', '#vs-llms-gen', function(){
     const $b = $(this).prop('disabled', true);
     post('viraseo_llms_txt', {}, r => {

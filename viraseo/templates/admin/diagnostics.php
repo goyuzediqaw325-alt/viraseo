@@ -49,5 +49,16 @@
       <div id="vs-diag-env-content"></div>
     </div>
 
+    <!-- Backup Management -->
+    <div class="vs-card" style="margin-top:20px;">
+      <h3 class="vs-card-title">↩️ بکاپ‌های محتوا (بازگردانی تغییرات AI)</h3>
+      <p class="vs-hint">هر وقت محتوای صفحه‌ای با هوش مصنوعی اصلاح و تأیید شود، نسخه‌ی قبلی به‌عنوان بکاپ نگه داشته می‌شود. از اینجا می‌توانید هر زمان محتوای اصلی را بازگردانید.</p>
+      <button class="vs-btn vs-btn-secondary" id="vs-load-backups"><span class="dashicons dashicons-backup"></span> نمایش بکاپ‌ها</button>
+      <table class="vs-table" style="margin-top:12px;">
+        <thead><tr><th>صفحه</th><th>نوع</th><th>زمان بکاپ</th><th>عملیات</th></tr></thead>
+        <tbody id="vs-backup-tbody"><tr><td colspan="4" class="vs-empty">دکمه «نمایش بکاپ‌ها» را بزنید.</td></tr></tbody>
+      </table>
+    </div>
+
   </div>
 </div>

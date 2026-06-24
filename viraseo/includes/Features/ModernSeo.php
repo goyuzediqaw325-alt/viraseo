@@ -23,6 +23,7 @@ class ModernSeo {
         add_action('wp_ajax_viraseo_seo_rewrite', [$this, 'ajax_seo_rewrite']);
         add_action('wp_ajax_viraseo_seo_rewrite_apply', [$this, 'ajax_seo_rewrite_apply']);
         add_action('wp_ajax_viraseo_restore_backup', [$this, 'ajax_restore_backup']);
+        add_action('wp_ajax_viraseo_list_backups', [$this, 'ajax_list_backups']);
         add_action('wp_ajax_viraseo_llms_txt', [$this, 'ajax_llms_txt']);
         // Serve a live llms.txt at the site root (rewrite rule + early + template_redirect fallbacks)
         add_action('init', [$this, 'add_rewrite']);
@@ -362,6 +363,35 @@ class ModernSeo {
         delete_post_meta($pid, '_viraseo_content_backup');
         delete_post_meta($pid, '_viraseo_content_backup_time');
         wp_send_json_success(['message' => '✅ محتوای قبلی بازگردانی شد.']);
+    }
+
+    /** List all posts that have a backup (from AI rewrites). */
+    public function ajax_list_backups(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        global $wpdb;
+        $rows = $wpdb->get_results(
+            "SELECT p.ID, p.post_title, p.post_type, pm2.meta_value as backup_time
+             FROM {$wpdb->postmeta} pm
+             JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             LEFT JOIN {$wpdb->postmeta} pm2 ON pm2.post_id = pm.post_id AND pm2.meta_key = '_viraseo_content_backup_time'
+             WHERE pm.meta_key = '_viraseo_content_backup'
+             ORDER BY pm2.meta_value DESC
+             LIMIT 200"
+        );
+        $data = [];
+        foreach ($rows ?: [] as $r) {
+            $o = get_post_type_object($r->post_type);
+            $data[] = [
+                'id' => (int)$r->ID,
+                'title' => $r->post_title ?: '(بدون عنوان)',
+                'type' => $o ? $o->labels->singular_name : $r->post_type,
+                'url' => get_permalink($r->ID),
+                'edit' => get_edit_post_link($r->ID, 'raw'),
+                'backup_time' => $r->backup_time ? \ViraSEO\Utils\JalaliDate::format($r->backup_time, 'relative') : '—',
+            ];
+        }
+        wp_send_json_success(['rows' => $data]);
     }
 
     /** Build llms.txt content (markdown) listing key pages to guide AI crawlers. */
