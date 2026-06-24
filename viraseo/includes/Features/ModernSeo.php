@@ -330,7 +330,7 @@ class ModernSeo {
         update_post_meta($pid, '_viraseo_content_backup_time', current_time('mysql'));
         wp_update_post(['ID' => $pid, 'post_content' => $content]);
         delete_post_meta($pid, '_viraseo_proposed_content');
-        wp_send_json_success(['message' => '✅ محتوای بروزرسانی‌شده ذخیره شد. نسخه‌ی قبلی بکاپ گرفته شد.']);
+        wp_send_json_success(['message' => '✅ محتوای بهبودیافته ذخیره شد. نسخه‌ی قبلی بکاپ گرفته شد. صفحه در بارگذاری بعدی از لیست مشکلات حذف می‌شود (چون اصلاح شده).']);
     }
 
     /**

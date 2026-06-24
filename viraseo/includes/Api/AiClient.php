@@ -22,6 +22,9 @@ class AiClient {
      *  when configured. Only applies while an AI request is in flight. */
     public static function apply_curl_proxy($handle): void {
         if (!self::$proxy_active) return;
+        // Always enforce adequate timeout for AI calls (host/proxy defaults may be 30s)
+        curl_setopt($handle, CURLOPT_TIMEOUT, 150);
+        curl_setopt($handle, CURLOPT_CONNECTTIMEOUT, 30);
         $px = Dashboard::get('ai_curl_proxy');
         if (!$px) return;
         curl_setopt($handle, CURLOPT_PROXY, $px);
@@ -104,9 +107,15 @@ class AiClient {
         if (!$key) return ['error' => 'کلید OpenRouter وارد نشده.'];
         $model = self::model();
 
+        // Ensure PHP has enough execution time for long AI responses (shared hosting often limits to 30s)
+        $orig_time = (int) ini_get('max_execution_time');
+        if ($orig_time > 0 && $orig_time < 180) {
+            @set_time_limit(180);
+        }
+
         self::$proxy_active = true;
         $r = wp_remote_post(self::base() . '/chat/completions', [
-            'timeout' => 120,
+            'timeout' => 150,
             'headers' => [
                 'Authorization' => 'Bearer ' . $key,
                 'Content-Type'  => 'application/json',
