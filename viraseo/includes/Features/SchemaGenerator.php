@@ -199,12 +199,12 @@ class SchemaGenerator {
         $content = $post->post_content;
         $questions = [];
 
-        // Extract H2/H3 + following paragraph pairs
+        // Extract H2/H3 + following paragraph pairs (only if heading is a question)
         if (preg_match_all('/<h[23][^>]*>(.*?)<\/h[23]>\s*<p[^>]*>(.*?)<\/p>/isu', $content, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $m) {
                 $q = wp_strip_all_tags($m[1]);
                 $a = wp_strip_all_tags($m[2]);
-                if ($q && $a) {
+                if ($q && $a && $this->is_question_heading($q)) {
                     $questions[] = [
                         '@type'          => 'Question',
                         'name'           => $q,
@@ -234,6 +234,30 @@ class SchemaGenerator {
             '@type'      => 'FAQPage',
             'mainEntity' => $questions,
         ];
+    }
+
+    /**
+     * Check if a heading text looks like a question (ends with ? or contains Persian question words).
+     */
+    private function is_question_heading(string $text): bool {
+        $text = trim($text);
+        // Ends with Latin or Persian question mark
+        if (preg_match('/[?\x{061F}]\s*$/u', $text)) return true;
+        // Contains common Persian question words
+        $question_words = [
+            "\xDA\x86\xDA\xAF\xD9\x88\xD9\x86\xD9\x87",   // چگونه
+            "\xDA\x86\xDB\x8C\xD8\xB3\xD8\xAA",             // چیست
+            "\xDA\x86\xD8\xB7\xD9\x88\xD8\xB1",             // چطور
+            "\xD8\xA2\xDB\x8C\xD8\xA7",                     // آیا
+            "\xDA\x86\xD8\xB1\xD8\xA7",                     // چرا
+            "\xDA\xA9\xD8\xAC\xD8\xA7",                     // کجا
+            "\xDA\xA9\xD8\xAF\xD8\xA7\xD9\x85",             // کدام
+            "\xDA\x86\xD9\x86\xD8\xAF",                     // چند
+        ];
+        foreach ($question_words as $word) {
+            if (mb_strpos($text, $word) !== false) return true;
+        }
+        return false;
     }
 
     private function build_howto(\WP_Post $post): array {
@@ -382,11 +406,11 @@ class SchemaGenerator {
 
     private function other_schema_active(): bool {
         // Yoast SEO
-        if (defined('WPSEO_VERSION') && has_action('wpseo_json_ld')) return true;
+        if (defined('WPSEO_VERSION')) return true;
         // RankMath
-        if (class_exists('RankMath') && has_filter('rank_math/json_ld')) return true;
+        if (class_exists('RankMath')) return true;
         // AIOSEO
-        if (defined('AIOSEO_VERSION') || function_exists('aioseo')) return true;
+        if (defined('AIOSEO_VERSION') || class_exists('AIOSEO\\Plugin\\AIOSEO')) return true;
 
         return false;
     }

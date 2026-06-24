@@ -6,6 +6,8 @@ use ViraSEO\Utils\PersianText;
 
 /** Feature 3: Internal Links + Orphan Pages + Suggestions [🟢 مستقل] */
 class InternalSilo {
+    private ?array $cached_health = null;
+
     public function __construct() {
         add_action('viraseo_scan_orphan_pages', [$this, 'scan']);
         add_action('viraseo_generate_link_suggestions', [$this, 'suggest']);
@@ -783,8 +785,13 @@ class InternalSilo {
 
     /**
      * Compute global internal link health score (0-100) based on 5 weighted factors.
+     * Result is cached for the request lifecycle to avoid redundant SQL queries.
      */
     public function compute_link_health(): array {
+        if ($this->cached_health !== null) {
+            return $this->cached_health;
+        }
+
         global $wpdb;
         $lt = $wpdb->prefix . 'viraseo_internal_links';
 
@@ -876,7 +883,7 @@ class InternalSilo {
             $coverage_score * 0.20
         );
 
-        return [
+        $this->cached_health = [
             'score' => $score,
             'factors' => [
                 'orphan' => ['score' => $orphan_score, 'detail' => $orphan_detail],
@@ -886,6 +893,8 @@ class InternalSilo {
                 'coverage' => ['score' => $coverage_score, 'detail' => $coverage_detail],
             ],
         ];
+
+        return $this->cached_health;
     }
 
     /** AJAX: Get current link health score + comparison with previous entry. */
