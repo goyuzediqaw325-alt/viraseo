@@ -23,6 +23,194 @@ class InternalSilo {
         add_action('wp_ajax_viraseo_broken_links', [$this, 'ajax_broken_links']);
         add_action('wp_ajax_viraseo_ai_cluster', [$this, 'ajax_ai_cluster']);
         add_action('wp_ajax_viraseo_ai_suggestions', [$this, 'ajax_ai_suggestions']);
+        add_action('wp_ajax_viraseo_cluster_content_single', [$this, 'ajax_cluster_content_single']);
+        add_action('wp_ajax_viraseo_cluster_content_apply', [$this, 'ajax_cluster_content_apply']);
+        add_action('wp_ajax_viraseo_cluster_content_generate', [$this, 'ajax_cluster_content_generate']);
+    }
+
+    /** AI content generation for a single cluster member page. */
+    public function ajax_cluster_content_single(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        if (!\ViraSEO\Api\AiClient::is_enabled()) wp_send_json_error('هوش مصنوعی فعال نیست. در تنظیمات فعال کنید.');
+
+        $keyword      = sanitize_text_field($_POST['keyword'] ?? '');
+        $page_title   = sanitize_text_field($_POST['page_title'] ?? '');
+        $page_url     = esc_url_raw($_POST['page_url'] ?? '');
+        $pillar_title = sanitize_text_field($_POST['pillar_title'] ?? '');
+        $pillar_url   = esc_url_raw($_POST['pillar_url'] ?? '');
+        $cluster_pages = json_decode(wp_unslash($_POST['cluster_pages'] ?? '[]'), true);
+
+        if (!$keyword || !$page_title) wp_send_json_error('داده ناقص: کلمه کلیدی و عنوان صفحه الزامی است.');
+        if (!is_array($cluster_pages)) $cluster_pages = [];
+
+        // Build the list of other cluster pages for internal linking instructions
+        $links_list = '';
+        $idx = 1;
+        foreach (array_slice($cluster_pages, 0, 20) as $pg) {
+            if (!is_array($pg)) continue;
+            $t = $pg['title'] ?? ''; $u = $pg['url'] ?? '';
+            if ($t === $page_title && $u === $page_url) continue;
+            $links_list .= $idx . ". {$t} - {$u}\n";
+            $idx++;
+        }
+        if ($pillar_title && $pillar_url && $pillar_title !== $page_title) {
+            $links_list .= $idx . ". {$pillar_title} (صفحه ستون) - {$pillar_url}\n";
+        }
+
+        $system = 'شما نویسنده محتوای سئو فارسی هستید. وظیفه شما تولید محتوای کامل، حرفه‌ای و بهینه‌شده برای موتورهای جستجو است. '
+            . 'خروجی شما باید HTML خالص باشد (بدون markdown). تمام محتوا فارسی باشد.';
+
+        $user = "موضوع کلی خوشه: «{$keyword}»\n"
+            . "عنوان صفحه‌ای که برایش محتوا تولید می‌کنی: «{$page_title}»\n"
+            . "آدرس صفحه: {$page_url}\n\n"
+            . "صفحات دیگر این خوشه (لینک داخلی به آنها بده):\n{$links_list}\n\n"
+            . "لطفا موارد زیر را تولید کن:\n\n"
+            . "1. **عنوان سئو** (۶۰ تا ۷۰ کاراکتر، شامل کلمه کلیدی اصلی) - در یک خط با پیشوند TITLE:\n"
+            . "2. **توضیحات متا** (۱۵۰ تا ۱۶۰ کاراکتر، جذاب و شامل CTA) - در یک خط با پیشوند META:\n"
+            . "3. **محتوای کامل HTML** (۱۵۰۰ تا ۲۵۰۰ کلمه) با پیشوند CONTENT:\n\n"
+            . "قوانین محتوا:\n"
+            . "- ساختار با H2 و H3 مناسب\n"
+            . "- شامل بخش سوالات متداول (FAQ) با حداقل ۳ سوال\n"
+            . "- لینک‌های داخلی طبیعی به صفحات خوشه با استفاده از عنوان آنها به عنوان انکرتکست (تگ <a href=\"url\">عنوان</a>)\n"
+            . "- حداقل ۳ لینک داخلی به صفحات لیست‌شده بالا\n"
+            . "- یک لینک به صفحه ستون (Pillar) با انکرتکست مناسب\n"
+            . "- پاراگراف‌های کوتاه و خوانا\n"
+            . "- استفاده از لیست‌های شماره‌دار و بولت‌دار\n"
+            . "- محتوای جامع و عمیق درباره موضوع صفحه در چارچوب خوشه\n"
+            . "- فارسی روان و حرفه‌ای";
+
+        $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.7, 4000);
+        if (isset($res['error'])) wp_send_json_error($res['error']);
+
+        $text = $res['text'] ?? '';
+
+        // Parse the structured response
+        $title = '';
+        $meta_desc = '';
+        $content = '';
+
+        // Extract TITLE:
+        if (preg_match('/TITLE:\s*(.+)/u', $text, $m)) {
+            $title = trim(strip_tags($m[1]));
+        }
+        // Extract META:
+        if (preg_match('/META:\s*(.+)/u', $text, $m)) {
+            $meta_desc = trim(strip_tags($m[1]));
+        }
+        // Extract CONTENT: (everything after CONTENT: marker)
+        if (preg_match('/CONTENT:\s*(.+)/su', $text, $m)) {
+            $content = trim($m[1]);
+        } else {
+            // Fallback: if no CONTENT marker, take everything after META line
+            $parts = preg_split('/META:.+\n/u', $text, 2);
+            if (isset($parts[1])) $content = trim($parts[1]);
+            else $content = $text;
+        }
+
+        // Clean the HTML content
+        $content = \ViraSEO\Api\AiClient::clean_html($content);
+
+        // Fallback title/meta if not parsed
+        if (!$title) $title = $page_title;
+        if (!$meta_desc) $meta_desc = mb_substr(wp_strip_all_tags($content), 0, 160);
+
+        wp_send_json_success([
+            'title'    => $title,
+            'meta_desc'=> $meta_desc,
+            'content'  => $content,
+            'cost'     => $res['cost'] ?? 0,
+            'tokens'   => $res['tokens'] ?? 0,
+        ]);
+    }
+
+    /** Apply AI-generated content to an existing post (with backup). */
+    public function ajax_cluster_content_apply(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+
+        $post_id  = absint($_POST['post_id'] ?? 0);
+        $title    = sanitize_text_field($_POST['title'] ?? '');
+        $meta_desc= sanitize_text_field($_POST['meta_desc'] ?? '');
+        $content  = wp_kses_post(wp_unslash($_POST['content'] ?? ''));
+        $keyword  = sanitize_text_field($_POST['keyword'] ?? '');
+
+        if (!$post_id) wp_send_json_error('شناسه پست نامعتبر.');
+        $post = get_post($post_id);
+        if (!$post) wp_send_json_error('پست یافت نشد.');
+
+        // Backup existing content
+        update_post_meta($post_id, '_viraseo_content_backup', $post->post_content);
+        update_post_meta($post_id, '_viraseo_title_backup', $post->post_title);
+
+        // Update the post
+        $update_data = ['ID' => $post_id, 'post_content' => $content];
+        if ($title) $update_data['post_title'] = $title;
+        $result = wp_update_post($update_data, true);
+        if (is_wp_error($result)) wp_send_json_error('خطا در به‌روزرسانی: ' . $result->get_error_message());
+
+        // Set target keyword if provided and not already set
+        if ($keyword) {
+            $existing_kw = get_post_meta($post_id, '_viraseo_target_keyword', true);
+            if (!$existing_kw) update_post_meta($post_id, '_viraseo_target_keyword', $keyword);
+        }
+
+        // Set meta description - try popular SEO plugins first, fallback to own meta
+        if ($meta_desc) {
+            if (function_exists('update_post_meta')) {
+                // Yoast SEO
+                if (defined('WPSEO_VERSION')) {
+                    update_post_meta($post_id, '_yoast_wpseo_metadesc', $meta_desc);
+                }
+                // Rank Math
+                elseif (defined('RANK_MATH_VERSION')) {
+                    update_post_meta($post_id, 'rank_math_description', $meta_desc);
+                }
+                // All in One SEO
+                elseif (defined('AIOSEO_VERSION')) {
+                    update_post_meta($post_id, '_aioseo_description', $meta_desc);
+                }
+                // Fallback: ViraSEO own meta
+                update_post_meta($post_id, '_viraseo_meta_desc', $meta_desc);
+            }
+        }
+
+        wp_send_json_success(['message' => '✅ محتوا با موفقیت ذخیره شد و نسخه پشتیبان ایجاد گردید.']);
+    }
+
+    /** Batch content generation for cluster members (summary mode). */
+    public function ajax_cluster_content_generate(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        if (!\ViraSEO\Api\AiClient::is_enabled()) wp_send_json_error('هوش مصنوعی فعال نیست. در تنظیمات فعال کنید.');
+
+        $keyword     = sanitize_text_field($_POST['keyword'] ?? '');
+        $pages       = json_decode(wp_unslash($_POST['pages'] ?? '[]'), true);
+        $pillar_id   = sanitize_text_field($_POST['pillar_id'] ?? '');
+        $pillar_title= sanitize_text_field($_POST['pillar_title'] ?? '');
+        $pillar_url  = esc_url_raw($_POST['pillar_url'] ?? '');
+
+        if (!$keyword || !is_array($pages) || !$pages) wp_send_json_error('داده ناقص.');
+
+        $generated = 0;
+        $skipped = 0;
+        $total_cost = 0;
+
+        foreach ($pages as $pg) {
+            if (!is_array($pg)) continue;
+            $id = $pg['id'] ?? '';
+            // Only process posts (IDs starting with 'p')
+            if (strpos($id, 'p') !== 0 || strpos($id, 'pc') === 0) { $skipped++; continue; }
+            $post_id = (int) substr($id, 1);
+            if ($post_id < 1) { $skipped++; continue; }
+            $generated++;
+        }
+
+        wp_send_json_success([
+            'message' => sprintf('✅ %d صفحه قابل تولید محتوا شناسایی شد. (%d مورد رد شد — فقط نوشته‌ها قابل ویرایش‌اند)', $generated, $skipped),
+            'eligible' => $generated,
+            'skipped' => $skipped,
+        ]);
     }
 
     /** AI review of pending link suggestions: prioritize, improve anchors, flag over-optimization. */

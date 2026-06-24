@@ -1045,12 +1045,15 @@ $(document).on('click', '#vs-load-clusters', function(){
                 + '<div class="vs-cluster-head"><span class="vs-badge vs-badge-blue">'+c.keyword+'</span> <span class="vs-cluster-count">'+c.count+' صفحه</span> <span class="vs-badge vs-badge-'+covColor+'">پوشش سیلو: '+c.coverage+'%</span> <span class="vs-cluster-count">👁️ '+c.impressions+' نمایش</span></div>'
                 + '<div class="vs-cluster-pillar">🏛️ ستون (Pillar): <select class="vs-input vs-cl-pillar" data-cl="'+ci+'" style="max-width:320px;display:inline-block"><option value="'+c.pillar.id+'">'+c.pillar.title+' ['+c.pillar.type+'] (پیشنهادی)</option>'+memberOpts+'</select> <a href="'+c.pillar.url+'" target="_blank">↗</a></div>'
                 + '<ul class="vs-cluster-members vs-cluster-members-list">'+members+'</ul>'
-                + '<div class="vs-row"><button class="vs-btn vs-btn-sm vs-btn-primary vs-cl-link" data-cl="'+ci+'">🔗 لینک اعضای انتخابی به ستون</button><button class="vs-btn vs-btn-sm vs-btn-secondary vs-cl-ai" data-cl="'+ci+'" data-kw="'+escAttr(c.keyword)+'">🤖 نقشه‌ی لینک هوش مصنوعی</button><label class="vs-hint"><input type="checkbox" class="vs-cl-all" data-cl="'+ci+'"> انتخاب همه</label></div>'
+                + '<div class="vs-row"><button class="vs-btn vs-btn-sm vs-btn-primary vs-cl-link" data-cl="'+ci+'">🔗 لینک اعضای انتخابی به ستون</button><button class="vs-btn vs-btn-sm vs-btn-secondary vs-cl-ai" data-cl="'+ci+'" data-kw="'+escAttr(c.keyword)+'">🤖 نقشه‌ی لینک هوش مصنوعی</button><button class="vs-btn vs-btn-sm vs-btn-success vs-cl-content" data-cl="'+ci+'" data-kw="'+escAttr(c.keyword)+'">📝 تولید محتوا با AI</button><label class="vs-hint"><input type="checkbox" class="vs-cl-all" data-cl="'+ci+'"> انتخاب همه</label></div>'
                 + '<div class="vs-cl-ai-box" data-cl="'+ci+'"></div>'
+                + '<div class="vs-cl-content-panel" data-cl="'+ci+'" style="display:none"></div>'
                 + '</div>');
             // Stash cluster page data for the AI request
             window._vsClusters = window._vsClusters || {};
-            window._vsClusters[ci] = c.members.map(m => ({title:m.title, url:m.url, type:m.type})).concat([{title:c.pillar.title, url:c.pillar.url, type:c.pillar.type}]);
+            window._vsClusters[ci] = c.members.map(m => ({title:m.title, url:m.url, type:m.type, id:m.id})).concat([{title:c.pillar.title, url:c.pillar.url, type:c.pillar.type, id:c.pillar_id}]);
+            window._vsClusterPillars = window._vsClusterPillars || {};
+            window._vsClusterPillars[ci] = {title:c.pillar.title, url:c.pillar.url, id:c.pillar_id};
         });
     });
 });
@@ -1075,6 +1078,160 @@ $(document).on('click', '.vs-cl-link', function(){
         $b.prop('disabled', false).text('🔗 لینک اعضای انتخابی به ستون');
         toast(r.success?r.data.message:r.data, r.success?'success':'err');
         if (r.success) $('#vs-load-clusters').trigger('click');
+    });
+});
+
+// === CLUSTER AI CONTENT GENERATION ===
+$(document).on('click', '.vs-cl-content', function(){
+    const ci = $(this).data('cl');
+    const kw = $(this).data('kw');
+    const pages = (window._vsClusters && window._vsClusters[ci]) || [];
+    const pillar = (window._vsClusterPillars && window._vsClusterPillars[ci]) || {};
+    const $panel = $('.vs-cl-content-panel[data-cl="'+ci+'"]');
+    if ($panel.is(':visible')) { $panel.slideUp(200); return; }
+
+    // Build the member selection UI
+    let checkboxes = '';
+    pages.forEach(function(pg, pi){
+        if (pg.id === pillar.id) return; // skip pillar itself
+        const isPost = pg.id && pg.id.toString().indexOf('p') === 0 && pg.id.toString().indexOf('pc') !== 0;
+        checkboxes += '<label class="vs-cl-content-item' + (isPost ? '' : ' vs-disabled') + '">'
+            + '<input type="checkbox" class="vs-cl-content-chk" data-idx="'+pi+'"' + (isPost ? '' : ' disabled') + '> '
+            + pg.title + ' <span class="vs-type-tag">'+pg.type+'</span>'
+            + (isPost ? '' : ' <span class="vs-hint">(فقط نوشته‌ها قابل ویرایش‌اند)</span>')
+            + '</label>';
+    });
+
+    $panel.html(
+        '<div class="vs-cl-content-header"><h4>📝 تولید محتوای خوشه‌ای با هوش مصنوعی</h4>'
+        + '<p class="vs-hint">صفحاتی که می‌خواهید برایشان محتوا تولید شود را انتخاب کنید:</p></div>'
+        + '<div class="vs-cl-content-checks">'+checkboxes+'</div>'
+        + '<div class="vs-row" style="margin-top:12px">'
+        + '<button class="vs-btn vs-btn-sm vs-btn-success vs-cl-content-go" data-cl="'+ci+'" data-kw="'+escAttr(kw)+'">🚀 تولید محتوا</button>'
+        + '<label class="vs-hint"><input type="checkbox" class="vs-cl-content-all" data-cl="'+ci+'"> انتخاب همه</label>'
+        + '</div>'
+        + '<div class="vs-cl-content-progress" data-cl="'+ci+'" style="display:none"></div>'
+        + '<div class="vs-cl-content-results" data-cl="'+ci+'"></div>'
+    ).slideDown(200);
+});
+$(document).on('change', '.vs-cl-content-all', function(){
+    const ci = $(this).data('cl');
+    const $panel = $('.vs-cl-content-panel[data-cl="'+ci+'"]');
+    $panel.find('.vs-cl-content-chk:not(:disabled)').prop('checked', $(this).is(':checked'));
+});
+$(document).on('click', '.vs-cl-content-go', function(){
+    const ci = $(this).data('cl');
+    const kw = $(this).data('kw');
+    const pages = (window._vsClusters && window._vsClusters[ci]) || [];
+    const pillar = (window._vsClusterPillars && window._vsClusterPillars[ci]) || {};
+    const $panel = $('.vs-cl-content-panel[data-cl="'+ci+'"]');
+    const $prog = $panel.find('.vs-cl-content-progress');
+    const $results = $panel.find('.vs-cl-content-results').empty();
+
+    // Gather selected pages
+    const selected = [];
+    $panel.find('.vs-cl-content-chk:checked').each(function(){
+        const idx = parseInt($(this).data('idx'), 10);
+        if (pages[idx]) selected.push(pages[idx]);
+    });
+    if (!selected.length) { toast('حداقل یک صفحه را انتخاب کنید.', 'err'); return; }
+
+    const $btn = $(this).prop('disabled', true);
+    let totalCost = 0;
+    let current = 0;
+    const total = selected.length;
+
+    $prog.show().html('<div class="vs-cl-content-prog-bar"><span class="vs-cl-prog-text">در حال تولید: ۰ از '+total+'</span><div class="vs-cl-prog-track"><div class="vs-cl-prog-fill" style="width:0%"></div></div><span class="vs-cl-prog-cost">هزینه: $0</span></div>');
+
+    function generateNext() {
+        if (current >= total) {
+            $prog.find('.vs-cl-prog-text').text('✅ تولید کامل شد ('+total+' صفحه)');
+            $prog.find('.vs-cl-prog-cost').text('هزینه کل: $'+totalCost.toFixed(4));
+            $btn.prop('disabled', false);
+            return;
+        }
+        const pg = selected[current];
+        $prog.find('.vs-cl-prog-text').text('در حال تولید: '+(current+1)+' از '+total+' — '+pg.title);
+        $prog.find('.vs-cl-prog-fill').css('width', ((current/total)*100)+'%');
+
+        post('viraseo_cluster_content_single', {
+            keyword: kw,
+            page_title: pg.title,
+            page_url: pg.url,
+            cluster_pages: JSON.stringify(pages),
+            pillar_title: pillar.title || '',
+            pillar_url: pillar.url || ''
+        }, function(r){
+            current++;
+            $prog.find('.vs-cl-prog-fill').css('width', ((current/total)*100)+'%');
+            if (!r.success) {
+                $results.append('<div class="vs-cl-content-preview vs-cl-content-error"><div class="vs-cl-content-preview-head"><strong>'+pg.title+'</strong> <span class="vs-badge vs-badge-red">خطا</span></div><p>'+(r.data||'خطا در تولید')+'</p></div>');
+                generateNext();
+                return;
+            }
+            totalCost += parseFloat(r.data.cost) || 0;
+            $prog.find('.vs-cl-prog-cost').text('هزینه: $'+totalCost.toFixed(4));
+
+            // Extract post_id from the page id (p123 => 123)
+            var postId = 0;
+            if (pg.id && pg.id.toString().indexOf('p') === 0) postId = parseInt(pg.id.toString().substring(1), 10) || 0;
+
+            var previewId = 'vs-clc-' + ci + '-' + current;
+            $results.append(
+                '<div class="vs-cl-content-preview" id="'+previewId+'">'
+                + '<div class="vs-cl-content-preview-head"><strong>'+pg.title+'</strong> <span class="vs-badge vs-badge-green">تولید شد</span> <span class="vs-hint">هزینه: $'+(r.data.cost||0)+'</span></div>'
+                + '<div class="vs-cl-content-preview-title"><label>عنوان سئو:</label><input type="text" class="vs-input vs-clc-title" value="'+escAttr(r.data.title)+'" style="width:100%"></div>'
+                + '<div class="vs-cl-content-preview-meta"><label>توضیحات متا:</label><input type="text" class="vs-input vs-clc-meta" value="'+escAttr(r.data.meta_desc)+'" style="width:100%"></div>'
+                + '<div class="vs-cl-content-preview-body"><label>محتوا:</label><div class="vs-clc-content" contenteditable="false">'+r.data.content+'</div></div>'
+                + '<div class="vs-row" style="margin-top:10px">'
+                + (postId ? '<button class="vs-btn vs-btn-sm vs-btn-success vs-clc-apply" data-pid="'+postId+'" data-prev="'+previewId+'" data-kw="'+escAttr(kw)+'">✅ تأیید و ذخیره</button>' : '')
+                + '<button class="vs-btn vs-btn-sm vs-btn-secondary vs-clc-edit" data-prev="'+previewId+'">✏️ ویرایش</button>'
+                + '<button class="vs-btn vs-btn-sm vs-btn-danger vs-clc-dismiss" data-prev="'+previewId+'">✗ رد</button>'
+                + '</div></div>'
+            );
+            generateNext();
+        });
+    }
+    generateNext();
+});
+// Edit mode for content preview
+$(document).on('click', '.vs-clc-edit', function(){
+    var prev = $(this).data('prev');
+    var $c = $('#'+prev).find('.vs-clc-content');
+    if ($c.attr('contenteditable') === 'true') {
+        $c.attr('contenteditable', 'false').removeClass('vs-clc-editing');
+        $(this).text('✏️ ویرایش');
+    } else {
+        $c.attr('contenteditable', 'true').addClass('vs-clc-editing').focus();
+        $(this).text('💾 پایان ویرایش');
+    }
+});
+// Dismiss a content preview
+$(document).on('click', '.vs-clc-dismiss', function(){
+    var prev = $(this).data('prev');
+    $('#'+prev).slideUp(200, function(){ $(this).remove(); });
+});
+// Apply generated content to a post
+$(document).on('click', '.vs-clc-apply', function(){
+    var $btn = $(this).prop('disabled', true).text('در حال ذخیره...');
+    var prev = $(this).data('prev');
+    var pid = $(this).data('pid');
+    var kw = $(this).data('kw');
+    var $box = $('#'+prev);
+    var title = $box.find('.vs-clc-title').val();
+    var meta_desc = $box.find('.vs-clc-meta').val();
+    var content = $box.find('.vs-clc-content').html();
+    post('viraseo_cluster_content_apply', {
+        post_id: pid, title: title, meta_desc: meta_desc, content: content, keyword: kw
+    }, function(r){
+        if (r.success) {
+            toast(r.data.message, 'success');
+            $box.find('.vs-cl-content-preview-head .vs-badge').removeClass('vs-badge-green').addClass('vs-badge-blue').text('ذخیره شد');
+            $btn.text('✅ ذخیره شد').addClass('vs-btn-secondary').removeClass('vs-btn-success');
+        } else {
+            toast(r.data || 'خطا', 'err');
+            $btn.prop('disabled', false).text('✅ تأیید و ذخیره');
+        }
     });
 });
 
