@@ -1,0 +1,33 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Auto Schema Generator: Automatically detect the most appropriate Schema.org structured data type for each page (FAQ, HowTo, Product, Article, BreadcrumbList, LocalBusiness, Service) and inject it as JSON-LD in the frontend. Includes an admin UI to preview/edit schemas and a bulk generator.",
+  "status": "in_progress",
+  "steps": [
+    "1. Create new file viraseo/includes/Features/SchemaGenerator.php: (a) In constructor, register AJAX handlers and a wp_head hook for frontend injection. (b) Method `detect_schema_type(int $post_id): string` - analyzes post content, post type, and structure to determine best schema type. Rules: WooCommerce products get Product schema; posts with FAQ sections get FAQ+Article; posts with step-by-step lists get HowTo+Article; regular posts get Article; pages with service keywords get Service; all pages get BreadcrumbList. (c) Method `generate_schema(int $post_id): array` - builds the full JSON-LD array for the detected schema type(s). For Article: headline, author, datePublished, dateModified, image, publisher. For Product: name, description, offers (from WooCommerce if available), aggregateRating. For FAQ: mainEntity with questions/answers extracted from content. For HowTo: steps extracted from ordered lists. For BreadcrumbList: computed from the page's category hierarchy. (d) Frontend hook `wp_head` action: outputs the generated JSON-LD for the current singular page (only if schema not already present from another plugin like Yoast/RankMath). (e) AJAX `viraseo_schema_preview`: returns schema JSON for a given post_id. (f) AJAX `viraseo_schema_bulk`: returns schema status for all published posts (which have schema, which type). (g) AJAX `viraseo_schema_save_custom`: lets user save a custom/edited schema override for a post (stored in post_meta `_viraseo_custom_schema`). (h) AJAX `viraseo_schema_toggle`: enable/disable schema per post. (i) AJAX `viraseo_schema_settings`: global on/off, exclude post types.",
+    "2. Update viraseo/includes/Database/Schema.php: No new table needed - use post_meta for per-post schema storage. Add a global option `viraseo_schema_settings` with defaults.",
+    "3. Create template viraseo/templates/admin/schema.php: Admin page with tabs: (a) Overview tab - table of all posts with their detected schema type, status (active/disabled/custom), preview button. Filter by post type and schema type. (b) Settings tab - global enable/disable, choose which post types get auto-schema, choose which schema types to generate. (c) Single post preview - shows the JSON-LD that would be injected, with an editor to customize.",
+    "4. Update viraseo/includes/Admin/Dashboard.php: Add menu item for Schema Generator page ('اسکیمای خودکار' with appropriate icon). Add page renderer method.",
+    "5. Update viraseo/viraseo.php: Instantiate SchemaGenerator in the plugins_loaded hook.",
+    "6. Update viraseo/assets/js/admin.js: Add handlers for schema page - load bulk list, preview individual schema, toggle on/off, save custom schema, copy JSON-LD. Include a JSON editor textarea for custom schemas.",
+    "7. Update viraseo/assets/css/admin.css: Styles for schema preview cards, JSON display, schema type badges."
+  ],
+  "acceptance_criteria": [
+    "php -l passes on viraseo/includes/Features/SchemaGenerator.php",
+    "php -l passes on modified Dashboard.php and viraseo.php",
+    "node --check passes on admin.js",
+    "SchemaGenerator class detects at least 5 schema types (Article, Product, FAQ, HowTo, BreadcrumbList)",
+    "Frontend injection via wp_head outputs valid JSON-LD",
+    "Admin page template exists with overview and settings tabs",
+    "Menu item registered in Dashboard.php"
+  ],
+  "verification": [
+    "cd /projects/sandbox/viraseo && php -l viraseo/includes/Features/SchemaGenerator.php",
+    "cd /projects/sandbox/viraseo && php -l viraseo/includes/Admin/Dashboard.php",
+    "cd /projects/sandbox/viraseo && php -l viraseo/viraseo.php",
+    "cd /projects/sandbox/viraseo && php -l viraseo/templates/admin/schema.php",
+    "cd /projects/sandbox/viraseo && NODE_OPTIONS='' node --check viraseo/assets/js/admin.js"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

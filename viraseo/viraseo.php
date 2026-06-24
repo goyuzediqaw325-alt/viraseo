@@ -69,6 +69,7 @@ add_action('plugins_loaded', function() {
     new \ViraSEO\Features\KeywordDiscovery();
     new \ViraSEO\Features\WorkflowManager();
     new \ViraSEO\Features\Diagnostics();
+    new \ViraSEO\Features\SchemaGenerator();
 });
 
 // Auto-migrate DB when plugin version changes (creates new tables like rank_tracking

@@ -2401,6 +2401,107 @@ $(document).on('click', '.vs-can-ai', function(){
 });
 $(vsCanLoad);
 
+// === SCHEMA GENERATOR ===
+$(function(){
+    if (!$('#vs-schema-tbody').length) return;
+    var schemaPage = 1;
+    var schemaPostId = 0;
+
+    function loadSchemas(page) {
+        schemaPage = page || 1;
+        var pt = $('#vs-schema-type-filter').val();
+        $('#vs-schema-tbody').html('<tr><td colspan="5" class="vs-empty">در حال بارگذاری...</td></tr>');
+        post('viraseo_schema_bulk', {page: schemaPage, post_type: pt}, function(r){
+            var $t = $('#vs-schema-tbody').empty();
+            if (!r.success || !r.data.rows.length) { $t.html('<tr><td colspan="5" class="vs-empty">موردی یافت نشد.</td></tr>'); $('#vs-schema-pager').empty(); return; }
+            $('#vs-schema-count').text(r.data.total + ' مورد');
+            r.data.rows.forEach(function(row){
+                var typeBadges = (row.types||[]).map(function(t){ return '<span class="vs-badge vs-schema-badge-'+t.toLowerCase()+'">'+t+'</span>'; }).join(' ');
+                var status = row.disabled ? '<span class="vs-badge vs-badge-red">غیرفعال</span>' : '<span class="vs-badge vs-badge-green">فعال</span>';
+                if (row.has_custom) status += ' <span class="vs-badge vs-badge-orange">سفارشی</span>';
+                var actions = '<button class="vs-btn vs-btn-sm vs-btn-secondary vs-schema-preview" data-id="'+row.id+'">پیش‌نمایش</button> '
+                    + '<button class="vs-btn vs-btn-sm '+(row.disabled?'vs-btn-success':'vs-btn-danger')+' vs-schema-toggle" data-id="'+row.id+'" data-enabled="'+(row.disabled?'1':'0')+'">'+(row.disabled?'فعال':'غیرفعال')+'</button>';
+                $t.append('<tr><td><a href="'+(row.edit_url||'#')+'" target="_blank">'+row.title+'</a></td><td>'+row.post_type+'</td><td>'+typeBadges+'</td><td>'+status+'</td><td>'+actions+'</td></tr>');
+            });
+            // Pager
+            var $p = $('#vs-schema-pager').empty();
+            if (r.data.pages > 1) {
+                if (schemaPage > 1) $p.append('<button class="vs-btn vs-btn-sm vs-btn-secondary vs-schema-page" data-p="'+(schemaPage-1)+'">&#8249; قبلی</button>');
+                $p.append('<span class="vs-pager-info">صفحه '+schemaPage+' از '+r.data.pages+'</span>');
+                if (schemaPage < r.data.pages) $p.append('<button class="vs-btn vs-btn-sm vs-btn-secondary vs-schema-page" data-p="'+(schemaPage+1)+'">بعدی &#8250;</button>');
+            }
+        });
+    }
+
+    $(document).on('click', '#vs-schema-load', function(){ loadSchemas(1); });
+    $(document).on('change', '#vs-schema-type-filter', function(){ loadSchemas(1); });
+    $(document).on('click', '.vs-schema-page', function(){ loadSchemas(parseInt($(this).data('p'),10)); });
+
+    // Preview
+    $(document).on('click', '.vs-schema-preview', function(){
+        schemaPostId = $(this).data('id');
+        var $card = $('#vs-schema-preview-card').show();
+        $('#vs-schema-json').text('در حال بارگذاری...');
+        $('#vs-schema-custom-json').val('');
+        post('viraseo_schema_preview', {post_id: schemaPostId}, function(r){
+            if (!r.success) { $('#vs-schema-json').text(r.data||'خطا'); return; }
+            $('#vs-schema-json').text(r.data.json_ld || '[]');
+            if (r.data.custom) $('#vs-schema-custom-json').val(r.data.custom);
+        });
+        $('html,body').animate({scrollTop: $card.offset().top - 80}, 200);
+    });
+
+    // Close preview
+    $(document).on('click', '#vs-schema-close-preview', function(){ $('#vs-schema-preview-card').hide(); });
+
+    // Copy JSON
+    $(document).on('click', '#vs-schema-copy-json', function(){
+        copyText($('#vs-schema-json').text());
+        toast('JSON کپی شد', 'success');
+    });
+
+    // Save custom schema
+    $(document).on('click', '#vs-schema-save-custom', function(){
+        var json = $('#vs-schema-custom-json').val().trim();
+        var $b = $(this).prop('disabled', true);
+        post('viraseo_schema_save_custom', {post_id: schemaPostId, custom_schema: json}, function(r){
+            $b.prop('disabled', false);
+            if (r.success) { toast(r.data.message, 'success'); loadSchemas(schemaPage); }
+            else toast(r.data||'خطا', 'err');
+        });
+    });
+
+    // Toggle
+    $(document).on('click', '.vs-schema-toggle', function(){
+        var id = $(this).data('id');
+        var enabled = $(this).data('enabled');
+        var $b = $(this).prop('disabled', true);
+        post('viraseo_schema_toggle', {post_id: id, enabled: enabled}, function(r){
+            $b.prop('disabled', false);
+            if (r.success) { toast(r.data.message, 'success'); loadSchemas(schemaPage); }
+            else toast(r.data||'خطا', 'err');
+        });
+    });
+
+    // Settings save
+    $(document).on('click', '#vs-schema-settings-save', function(){
+        var enabled = $('#vs-schema-enabled').is(':checked') ? 1 : 0;
+        var excluded = [];
+        $('.vs-schema-pt').each(function(){ if (!$(this).is(':checked')) excluded.push($(this).val()); });
+        var autoTypes = [];
+        $('.vs-schema-at').each(function(){ if ($(this).is(':checked')) autoTypes.push($(this).val()); });
+        var $b = $(this).prop('disabled', true);
+        post('viraseo_schema_settings_save', {enabled: enabled, excluded_types: excluded, auto_types: autoTypes}, function(r){
+            $b.prop('disabled', false);
+            if (r.success) toast(r.data.message, 'success');
+            else toast(r.data||'خطا', 'err');
+        });
+    });
+
+    // Auto-load on page load
+    loadSchemas(1);
+});
+
 // === CRAWL & HOST HEALTH ===
 $(document).on('click', '#vs-crawl-run', function(){
     const $b = $(this).prop('disabled', true);

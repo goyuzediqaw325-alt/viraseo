@@ -879,3 +879,14 @@
 .vs-comp-recs li { font-size: 12px; color: #fca5a5; padding: 3px 0; }
 .vs-comp-sections li { font-size: 12px; color: #cbd5e1; padding: 3px 0; }
 @media (max-width: 768px) { .vs-comp-details { grid-template-columns: 1fr; } }
+
+
+/* === Schema Generator === */
+.vs-schema-badge-article { background: rgba(99,102,241,.15); color: #a5b4fc; display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin: 2px; }
+.vs-schema-badge-product { background: rgba(16,185,129,.15); color: #6ee7b7; display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin: 2px; }
+.vs-schema-badge-faqpage { background: rgba(245,158,11,.15); color: #fbbf24; display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin: 2px; }
+.vs-schema-badge-howto { background: rgba(6,182,212,.15); color: #67e8f9; display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin: 2px; }
+.vs-schema-badge-breadcrumblist { background: rgba(148,163,184,.12); color: #94a3b8; display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin: 2px; }
+.vs-schema-badge-service { background: rgba(244,114,182,.15); color: #f472b6; display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin: 2px; }
+.vs-schema-badge-webpage { background: rgba(148,163,184,.12); color: #cbd5e1; display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin: 2px; }
+.vs-schema-json { background: var(--vs-bg); border: 1px solid var(--vs-border); border-radius: var(--vs-radius-sm); padding: 16px; font-family: 'JetBrains Mono','Fira Code',monospace; font-size: 12px; line-height: 1.6; color: #a5b4fc; overflow-x: auto; white-space: pre-wrap; max-height: 400px; direction: ltr; text-align: left; }
