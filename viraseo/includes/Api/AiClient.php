@@ -99,7 +99,7 @@ class AiClient {
     }
 
     /** Run a chat completion. Returns ['text'=>..., 'cost'=>..., 'tokens'=>...] or ['error'=>...]. */
-    public static function chat(string $system, string $user, float $temperature = 0.4): array {
+    public static function chat(string $system, string $user, float $temperature = 0.4, int $max_tokens = 2000): array {
         $key = Dashboard::get('openrouter_key');
         if (!$key) return ['error' => 'کلید OpenRouter وارد نشده.'];
         $model = self::model();
@@ -121,7 +121,7 @@ class AiClient {
                     ['role' => 'user', 'content' => $user],
                 ],
                 'temperature' => $temperature,
-                'max_tokens' => 2000,
+                'max_tokens' => $max_tokens,
             ]),
         ]);
         self::$proxy_active = false;

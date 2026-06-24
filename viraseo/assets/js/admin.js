@@ -1466,7 +1466,7 @@ $(document).on('click', '#vs-load-onpage', function(){
         r.data.rows.forEach((o, i) => {
             $t.append('<tr class="vs-onpage-row" data-i="'+i+'"><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+o.keyword+'</td><td>'+o.impressions+'</td><td>'+linkScoreBar(o.score)+'</td><td><button class="vs-btn vs-btn-sm vs-btn-secondary vs-onpage-toggle" data-i="'+i+'">جزئیات ▾</button></td></tr>');
             let checks = o.checks.map(c => '<li class="'+(c.ok?'vs-chk-ok':'vs-chk-no')+'">'+(c.ok?'✓':'✗')+' '+c.l+(c.note?' <small>('+c.note+')</small>':'')+'</li>').join('');
-            $t.append('<tr class="vs-onpage-detail vs-onpage-detail-'+i+'" style="display:none"><td colspan="6"><ul class="vs-onpage-checks">'+checks+'</ul> <a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-primary">ویرایش صفحه</a> <button class="vs-btn vs-btn-sm vs-btn-secondary vs-onpage-ai" data-id="'+o.id+'">🤖 پیشنهاد اصلاح AI</button><div class="vs-onpage-ai-box"></div></td></tr>');
+            $t.append('<tr class="vs-onpage-detail vs-onpage-detail-'+i+'" style="display:none"><td colspan="6"><ul class="vs-onpage-checks">'+checks+'</ul> <a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-primary">ویرایش صفحه</a> <button class="vs-btn vs-btn-sm vs-btn-secondary vs-onpage-ai" data-id="'+o.id+'">🤖 پیشنهاد اصلاح AI</button> <button class="vs-btn vs-btn-sm vs-btn-success vs-onpage-autofix" data-id="'+o.id+'" data-issues="'+escAttr(JSON.stringify(o.checks.filter(c=>!c.ok).map(c=>c.label)))+'">✏️ اصلاح خودکار محتوا</button><div class="vs-onpage-ai-box"></div></td></tr>');
         });
         vsRowPaginate($('#vs-onpage-tbody'), $('#vs-onpage-pager'), 25);
     });
@@ -1480,6 +1480,18 @@ $(document).on('click', '.vs-onpage-ai', function(){
         if (!r.success) { $box.html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
         const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
         $box.html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 پیشنهاد اصلاح <span class="vs-hint">هزینه: $'+(r.data.cost||0)+'</span></div><div class="vs-ai-body">'+html+'</div></div>');
+    });
+});
+$(document).on('click', '.vs-onpage-autofix', function(){
+    const $btn = $(this).prop('disabled', true).text('✏️ در حال اصلاح...');
+    const pid = $(this).data('id');
+    const issues = JSON.parse($(this).attr('data-issues')||'[]');
+    const $box = $(this).siblings('.vs-onpage-ai-box').html('<div class="vs-empty">⏳ هوش مصنوعی در حال اصلاح on-page... (تا ۹۰ ثانیه)</div>');
+    post('viraseo_onpage_fix', {post_id: pid, issues: issues}, r => {
+        $btn.prop('disabled', false).text('✏️ اصلاح خودکار محتوا');
+        if (!r.success) { $box.html('<div class="vs-inspect-err">'+(r.data||'خطا')+'</div>'); return; }
+        const cost = r.data.cost ? ' (هزینه: $'+r.data.cost+')' : '';
+        $box.html(vsRewriteUI(r.data, cost, 'viraseo_seo_rewrite_apply'));
     });
 });
 

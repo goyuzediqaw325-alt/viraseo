@@ -14,6 +14,7 @@ class Opportunities {
         add_action('wp_ajax_viraseo_link_opportunities', [$this, 'ajax_link_opportunities']);
         add_action('wp_ajax_viraseo_thin_content', [$this, 'ajax_thin_content']);
         add_action('wp_ajax_viraseo_onpage', [$this, 'ajax_onpage']);
+        add_action('wp_ajax_viraseo_onpage_fix', [$this, 'ajax_onpage_fix']);
     }
 
     /** Persian-aware "contains" check (normalized). */
@@ -235,5 +236,51 @@ class Opportunities {
         // Pages that already get impressions but are thin = highest rewrite ROI
         usort($rows, fn($a, $b) => ($b['impr_raw'] <=> $a['impr_raw']) ?: ($a['words'] <=> $b['words']));
         wp_send_json_success(['rows'=>array_slice($rows, 0, 300), 'threshold'=>$threshold, 'types'=>self::type_options()]);
+    }
+
+    /** AI auto-fix for on-page SEO issues. Reads problems list, rewrites content to fix them. */
+    public function ajax_onpage_fix(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        if (!\ViraSEO\Api\AiClient::is_enabled()) wp_send_json_error('هوش مصنوعی فعال نیست. در تنظیمات فعال کنید.');
+        $pid = absint($_POST['post_id'] ?? 0);
+        $post = $pid ? get_post($pid) : null;
+        if (!$post) wp_send_json_error('صفحه یافت نشد.');
+
+        $issues = isset($_POST['issues']) ? array_map('sanitize_text_field', (array)$_POST['issues']) : [];
+        $title = get_the_title($pid);
+        $content = $post->post_content;
+        $target = \ViraSEO\Features\TargetKeywords::get($pid);
+        $words = preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content)));
+        $contentPreview = implode(' ', array_slice($words, 0, 1500));
+
+        $issueList = implode("\n", array_map(fn($i) => "- {$i}", $issues));
+        $system = 'شما متخصص سئوی on-page فارسی هستید. وظیفه: محتوای موجود را طوری ویرایش/تکمیل کن که ایرادهای سئوی مشخص‌شده رفع شوند. '
+                . 'بخش‌های سالم را دست‌نخورده نگه دار. ایرادها را دقیقاً رفع کن (مثلاً لینک خارجی اضافه کن، H2 دوم بنویس، تصویر placeholder بذار). '
+                . 'خروجی باید HTML فارسی کامل باشد. مهم: فقط محتوای نهایی HTML. هیچ توضیح/یادداشت/code fence نده.';
+        $user = "عنوان: {$title}\n" . ($target ? "کلمه هدف: «{$target}»\n" : '')
+              . "\nایرادهای on-page که باید رفع شوند:\n{$issueList}\n\n"
+              . "محتوای فعلی:\n{$contentPreview}\n\n"
+              . "محتوای اصلاح‌شده (HTML) را برگردان.";
+
+        $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.4, 8000);
+        if (isset($res['error'])) wp_send_json_error($res['error']);
+
+        // Clean AI response
+        $text = $res['text'];
+        $text = preg_replace('/^```(?:html)?\s*\n?/im', '', $text);
+        $text = preg_replace('/\n?```\s*$/im', '', $text);
+        if (preg_match('/^(.*?)(<(?:h[1-6]|p|div|ul|ol|table|section|article|blockquote)[>\s])/uis', $text, $m) && strlen(trim($m[1])) > 0) {
+            $text = substr($text, strlen($m[1]));
+        }
+        $text = preg_replace('/(<\/(?:p|div|ul|ol|table|section|article|blockquote|h[1-6])>)\s*[^<]+$/uis', '$1', $text);
+        $text = trim($text);
+
+        update_post_meta($pid, '_viraseo_proposed_content', $text);
+        wp_send_json_success([
+            'post_id' => $pid, 'title' => $title,
+            'old_content' => $content, 'new_content' => $text,
+            'cost' => $res['cost'], 'tokens' => $res['tokens'],
+        ]);
     }
 }

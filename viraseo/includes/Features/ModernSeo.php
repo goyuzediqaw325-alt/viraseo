@@ -245,7 +245,8 @@ class ModernSeo {
         $system = 'شما متخصص ارشد GEO (Generative Engine Optimization) و سئوی فارسی هستید. '
                 . 'وظیفه: محتوای موجود را بهبود دهید تا برای AI Overview گوگل و موتورهای هوش مصنوعی بهینه باشد. '
                 . 'فقط بخش‌هایی که نیاز به تغییر دارند را تغییر دهید و بخش‌های مفید را حفظ کنید. '
-                . 'خروجی باید HTML کامل فارسی باشد.';
+                . 'خروجی باید HTML کامل فارسی باشد. '
+                . 'مهم: فقط محتوای نهایی HTML را برگردان. هیچ توضیح، یادداشت، دستورالعمل یا متن خارج از محتوا ننویس. بدون code fence.';
 
         $issueList = implode("\n", array_map(fn($t) => "- {$t}", $tips));
         $user = "عنوان صفحه: {$title}\nآدرس: " . get_permalink($pid) . "\n\n"
@@ -260,12 +261,13 @@ class ModernSeo {
               . "- عبارات کلیدی را Bold کن\n"
               . "- محتوا انسانی و مفید باشد نه ربات‌نوشته";
 
-        $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.5);
+        $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.5, 8000);
         if (isset($res['error'])) wp_send_json_error($res['error']);
-        update_post_meta($pid, '_viraseo_proposed_content', $res['text']);
+        $text = self::clean_ai_html($res['text']);
+        update_post_meta($pid, '_viraseo_proposed_content', $text);
         wp_send_json_success([
             'post_id' => $pid, 'title' => $title,
-            'old_content' => $content, 'new_content' => $res['text'],
+            'old_content' => $content, 'new_content' => $text,
             'cost' => $res['cost'], 'tokens' => $res['tokens'],
         ]);
     }
@@ -296,19 +298,21 @@ class ModernSeo {
                 . '- ساختار هدینگ H2/H3 بهینه کن\n'
                 . '- آمار/تاریخ‌ها را بروز کن (۱۴۰۳/۱۴۰۴/۲۰۲۵/۲۰۲۶)\n'
                 . '- لحن انسانی، تخصصی و مفید حفظ شود\n'
-                . '- خروجی HTML فارسی کامل';
+                . '- خروجی HTML فارسی کامل\n'
+                . '- مهم: فقط محتوای نهایی HTML را برگردان. هیچ توضیح، یادداشت یا متن خارج از محتوا ننویس. بدون code fence.';
 
         $user = "عنوان: {$title}\n" . ($target ? "کلمه هدف: «{$target}»\n" : '')
               . "\nمحتوای فعلی:\n{$contentPreview}\n\n"
               . "محتوای بروزرسانی‌شده را بنویس. خلاقانه باش: جدول اضافه کن، مقایسه بنویس، "
               . "FAQ اضافه کن، نکات عملی ۲۰۲۶ اضافه کن. ولی هسته‌ی محتوا را از بین نبر.";
 
-        $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.5);
+        $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.5, 8000);
         if (isset($res['error'])) wp_send_json_error($res['error']);
-        update_post_meta($pid, '_viraseo_proposed_content', $res['text']);
+        $text = self::clean_ai_html($res['text']);
+        update_post_meta($pid, '_viraseo_proposed_content', $text);
         wp_send_json_success([
             'post_id' => $pid, 'title' => $title,
-            'old_content' => $content, 'new_content' => $res['text'],
+            'old_content' => $content, 'new_content' => $text,
             'cost' => $res['cost'], 'tokens' => $res['tokens'],
         ]);
     }
@@ -327,6 +331,24 @@ class ModernSeo {
         wp_update_post(['ID' => $pid, 'post_content' => $content]);
         delete_post_meta($pid, '_viraseo_proposed_content');
         wp_send_json_success(['message' => '✅ محتوای بروزرسانی‌شده ذخیره شد. نسخه‌ی قبلی بکاپ گرفته شد.']);
+    }
+
+    /**
+     * Strip meta-commentary, code fences, and non-content text that AI sometimes
+     * includes before/after the actual HTML content. Ensures only clean HTML remains.
+     */
+    private static function clean_ai_html(string $raw): string {
+        $text = $raw;
+        // Remove markdown code fences (```html ... ```)
+        $text = preg_replace('/^```(?:html)?\s*\n?/im', '', $text);
+        $text = preg_replace('/\n?```\s*$/im', '', $text);
+        // Strip leading plain-text lines before the first HTML element
+        if (preg_match('/^(.*?)(<(?:h[1-6]|p|div|ul|ol|table|section|article|blockquote)[>\s])/uis', $text, $m) && strlen(trim($m[1])) > 0) {
+            $text = substr($text, strlen($m[1]));
+        }
+        // Strip trailing plain-text after the last closing HTML tag
+        $text = preg_replace('/(<\/(?:p|div|ul|ol|table|section|article|blockquote|h[1-6])>)\s*[^<]+$/uis', '$1', $text);
+        return trim($text);
     }
 
     /** Build llms.txt content (markdown) listing key pages to guide AI crawlers. */

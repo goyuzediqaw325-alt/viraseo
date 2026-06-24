@@ -279,7 +279,8 @@ class TrafficForecaster {
         $system = 'شما ویراستار ارشد محتوای سئوی فارسی هستید و اصول Helpful Content و E-E-A-T گوگل را کامل می‌شناسید. '
                 . 'وظیفه‌ی شما: بهبود یک صفحه‌ی موجود برای افزایش ترافیک واقعی بر اساس داده‌های سرچ کنسول. '
                 . 'محتوای فعلی را ویرایش/بازنویسی/تکمیل کن — نه از اول بنویس. بخش‌های مفید را نگه دار، ایرادها را رفع کن، بخش‌های جدید مفید اضافه کن. '
-                . 'خروجی باید HTML (heading, p, ul, table) و کاملاً فارسی باشد.';
+                . 'خروجی باید HTML (heading, p, ul, table) و کاملاً فارسی باشد. '
+                . 'مهم: فقط محتوای نهایی HTML را برگردان. هیچ توضیح، یادداشت، دستورالعمل یا متن خارج از محتوا ننویس. هیچ جمله‌ای مثل «این صفحه شامل...» یا «توضیح:» ننویس.';
 
         $user = "عنوان صفحه: {$title}\nآدرس: {$url}\n"
               . ($target ? "کلمه هدف اصلی: «{$target}»\n" : '')
@@ -295,17 +296,26 @@ class TrafficForecaster {
               . "۶) طول نهایی حداقل ۱.۵ برابر طول فعلی باشد\n"
               . "کل محتوای بهبودیافته (HTML) را برگردان.";
 
-        $res = AiClient::chat($system, $user, 0.5);
+        $res = AiClient::chat($system, $user, 0.5, 8000);
         if (isset($res['error'])) wp_send_json_error($res['error']);
 
+        // Clean AI response: strip any leading meta-commentary before actual HTML
+        $text = $res['text'];
+        // If AI started with plain-text lines before the first HTML tag, strip them
+        if (preg_match('/^(.*?)(<(?:h[1-6]|p|div|ul|ol|table|section|article)[>\s])/uis', $text, $m) && strlen(trim($m[1])) > 0) {
+            $text = substr($text, strlen($m[1]));
+        }
+        // Strip trailing meta-commentary after last closing HTML tag
+        $text = preg_replace('/(<\/(?:p|div|ul|ol|table|section|article|h[1-6])>)\s*[^<]+$/uis', '$1', $text);
+
         // Save the proposed content temporarily in post meta for the apply step
-        update_post_meta($pid, '_viraseo_proposed_content', $res['text']);
+        update_post_meta($pid, '_viraseo_proposed_content', $text);
 
         wp_send_json_success([
             'post_id'     => $pid,
             'title'       => $title,
             'old_content' => $content,
-            'new_content' => $res['text'],
+            'new_content' => $text,
             'cost'        => $res['cost'],
             'tokens'      => $res['tokens'],
         ]);
