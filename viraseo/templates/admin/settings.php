@@ -32,6 +32,8 @@
       <button type="button" class="vs-btn vs-btn-secondary vs-btn-sm" id="vs-ai-load-models">بارگذاری مدل‌ها + هزینه</button>
       <span class="vs-hint" id="vs-ai-model-cost"></span>
     </div>
+    <div class="vs-field"><label class="vs-label">حداکثر طول پاسخ AI (توکن)</label><div class="vs-row" style="gap:10px;align-items:center"><input type="number" class="vs-input vs-input-ltr" name="viraseo_settings[ai_max_tokens]" value="<?php echo esc_attr($s['ai_max_tokens'] ?? '4000'); ?>" min="1000" max="16000" style="max-width:120px"><select class="vs-input" name="viraseo_settings[ai_token_mode]" style="max-width:200px"><option value="auto" <?php selected(($s['ai_token_mode'] ?? 'auto'), 'auto'); ?>>خودکار (پیشنهادی)</option><option value="manual" <?php selected(($s['ai_token_mode'] ?? 'auto'), 'manual'); ?>>دستی</option></select></div><span class="vs-hint">حالت «خودکار»: افزونه بر اساس نوع عملیات تعداد مناسب توکن انتخاب میکند. حالت «دستی»: مقدار وارد‌شده همیشه استفاده میشود. مقدار بالاتر = محتوای بلندتر ولی زمان بیشتر.</span></div>
+    </div>
     <div class="vs-toolbar"><button type="button" class="vs-btn vs-btn-secondary vs-btn-sm" id="vs-test-n8n">تست اتصال</button><span id="vs-n8n-status"></span></div>
     <h3 class="vs-card-title">تنظیمات تحلیل</h3>
     <div class="vs-row">

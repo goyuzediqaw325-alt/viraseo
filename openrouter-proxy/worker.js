@@ -1,9 +1,10 @@
 /**
- * ViraSEO — OpenRouter Proxy (Cloudflare Worker)
- * ------------------------------------------------
- * Iranian hosts are often blocked from reaching openrouter.ai directly (or OpenRouter
- * blocks Iran IPs). This Worker runs on Cloudflare's global network and transparently
- * relays requests to OpenRouter, so the WordPress server only talks to the Worker.
+ * ViraSEO — OpenRouter Streaming Proxy (Cloudflare Worker)
+ * ---------------------------------------------------------
+ * Relays requests to OpenRouter with full streaming support.
+ * The response is streamed chunk-by-chunk back to the caller,
+ * so the Worker never buffers the full response and never times out
+ * (even if AI takes 2+ minutes to generate a long response).
  *
  * DEPLOY:
  *   1. Go to https://dash.cloudflare.com → Workers & Pages → Create Worker.
@@ -22,27 +23,26 @@ export default {
   async fetch(request) {
     const url = new URL(request.url);
 
-    // CORS preflight (harmless; main use is server-to-server)
+    // CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders() });
     }
 
-    // Only proxy the OpenRouter API paths
+    // Health check / info
     if (!url.pathname.startsWith('/v1/')) {
       return new Response(
-        JSON.stringify({ status: 'ViraSEO OpenRouter proxy is running', usage: 'POST {worker}/v1/chat/completions' }),
+        JSON.stringify({ status: 'ViraSEO OpenRouter Streaming Proxy v2', usage: 'POST {worker}/v1/chat/completions' }),
         { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders() } }
       );
     }
 
     const target = OPENROUTER + url.pathname + url.search;
 
-    // Clone headers, forward Authorization + Content-Type, set referer/title for OpenRouter
+    // Forward relevant headers
     const headers = new Headers();
     const auth = request.headers.get('Authorization');
     if (auth) headers.set('Authorization', auth);
     headers.set('Content-Type', request.headers.get('Content-Type') || 'application/json');
-    // Pass the calling site's referer through (any domain), fall back to the worker's own origin
     const ref = request.headers.get('X-Site-Url') || request.headers.get('Referer') || url.origin;
     headers.set('HTTP-Referer', ref);
     headers.set('X-Title', 'ViraSEO');
@@ -50,15 +50,25 @@ export default {
     const init = {
       method: request.method,
       headers,
-      body: (request.method === 'GET' || request.method === 'HEAD') ? undefined : await request.text(),
+      body: (request.method === 'GET' || request.method === 'HEAD') ? undefined : request.body,
     };
 
     try {
       const resp = await fetch(target, init);
-      // Stream the body straight through (lower latency, no buffering limits)
-      return new Response(resp.body, {
+
+      // Stream the response body directly — no buffering, no timeout.
+      // TransformStream ensures we relay chunks as they arrive.
+      const { readable, writable } = new TransformStream();
+      resp.body.pipeTo(writable);
+
+      return new Response(readable, {
         status: resp.status,
-        headers: { 'Content-Type': resp.headers.get('Content-Type') || 'application/json', ...corsHeaders() },
+        headers: {
+          'Content-Type': resp.headers.get('Content-Type') || 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          ...corsHeaders(),
+        },
       });
     } catch (e) {
       return new Response(
@@ -73,6 +83,6 @@ function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Site-Url',
   };
 }

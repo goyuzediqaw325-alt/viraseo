@@ -151,62 +151,114 @@ class AiClient {
     }
 
     /** Run a chat completion. Returns ['text'=>..., 'cost'=>..., 'tokens'=>...] or ['error'=>...].
-     * For long operations (rewrites), automatically splits into two calls if needed. */
+     * Uses streaming (chunked read) to avoid timeout even for long responses.
+     * Each received chunk resets the idle timer, so the total time can be unlimited. */
     public static function chat(string $system, string $user, float $temperature = 0.4, int $max_tokens = 2000): array {
         $key = Dashboard::get('openrouter_key');
         if (!$key) return ['error' => 'کلید OpenRouter وارد نشده.'];
         $model = self::model();
 
-        // Ensure PHP has enough execution time for long AI responses
-        $orig_time = (int) ini_get('max_execution_time');
-        if ($orig_time > 0 && $orig_time < 300) {
-            @set_time_limit(300);
+        // Ensure PHP won't die during long AI responses
+        $orig = (int) ini_get('max_execution_time');
+        if ($orig > 0 && $orig < 300) @set_time_limit(300);
+
+        // When going through CF Worker, cap tokens to fit in Worker's 30s CPU time
+        $via_worker = !empty(Dashboard::get('ai_proxy_url'));
+        // User preference: manual mode uses fixed value, auto mode uses the caller's $max_tokens
+        $token_mode = Dashboard::get('ai_token_mode') ?: 'auto';
+        $user_max = (int)(Dashboard::get('ai_max_tokens') ?: 4000);
+        if ($token_mode === 'manual') {
+            $effective_max = $user_max;
+        } else {
+            $effective_max = $via_worker ? min($max_tokens, 3000) : $max_tokens;
         }
 
-        // When using a direct proxy (ai_curl_proxy) without Worker, no 30s limit exists.
-        // Only cap when going through Cloudflare Worker (ai_proxy_url is set).
-        $via_worker = !empty(Dashboard::get('ai_proxy_url'));
-        $effective_max = $via_worker ? min($max_tokens, 3000) : $max_tokens;
+        $url = self::base() . '/chat/completions';
+        $payload = wp_json_encode([
+            'model' => $model,
+            'messages' => [
+                ['role' => 'system', 'content' => $system],
+                ['role' => 'user', 'content' => $user],
+            ],
+            'temperature' => $temperature,
+            'max_tokens' => $effective_max,
+            'stream' => true, // Stream mode — avoids idle timeout
+        ]);
 
-        // Register the curl timeout hook if not already registered
-        if (!has_action('http_api_curl', [self::class, 'apply_curl_proxy'])) {
-            add_action('http_api_curl', [self::class, 'apply_curl_proxy'], 10, 1);
+        $headers = [
+            'Authorization: Bearer ' . $key,
+            'Content-Type: application/json',
+            'HTTP-Referer: ' . home_url(),
+            'X-Site-Url: ' . home_url(),
+            'X-Title: ViraSEO',
+        ];
+
+        // Accumulate streamed chunks
+        $buffer = '';
+        $full_text = '';
+        $usage = [];
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => false,
+            CURLOPT_TIMEOUT => 180,         // absolute max (safety net)
+            CURLOPT_CONNECTTIMEOUT => 20,
+            CURLOPT_LOW_SPEED_LIMIT => 1,   // at least 1 byte/sec...
+            CURLOPT_LOW_SPEED_TIME => 60,   // ...for 60s before timing out (idle timeout)
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_WRITEFUNCTION => function($ch, $chunk) use (&$buffer, &$full_text, &$usage) {
+                $buffer .= $chunk;
+                // Process SSE lines
+                while (($pos = strpos($buffer, "\n")) !== false) {
+                    $line = substr($buffer, 0, $pos);
+                    $buffer = substr($buffer, $pos + 1);
+                    $line = trim($line);
+                    if ($line === '' || $line === 'data: [DONE]') continue;
+                    if (strpos($line, 'data: ') === 0) {
+                        $json = json_decode(substr($line, 6), true);
+                        if ($json) {
+                            $delta = $json['choices'][0]['delta']['content'] ?? '';
+                            $full_text .= $delta;
+                            if (!empty($json['usage'])) $usage = $json['usage'];
+                        }
+                    }
+                }
+                return strlen($chunk);
+            },
+        ]);
+
+        // Apply cURL proxy if configured
+        $px = Dashboard::get('ai_curl_proxy');
+        if ($px) {
+            curl_setopt($ch, CURLOPT_PROXY, $px);
+            if (strpos($px, '@') !== false) {
+                curl_setopt($ch, CURLOPT_PROXYAUTH, CURLAUTH_BASIC);
+            }
         }
 
         self::$proxy_active = true;
-        $r = wp_remote_post(self::base() . '/chat/completions', [
-            'timeout' => 90,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $key,
-                'Content-Type'  => 'application/json',
-                'HTTP-Referer'  => home_url(),
-                'X-Site-Url'    => home_url(),
-                'X-Title'       => 'ViraSEO',
-            ],
-            'body' => wp_json_encode([
-                'model' => $model,
-                'messages' => [
-                    ['role' => 'system', 'content' => $system],
-                    ['role' => 'user', 'content' => $user],
-                ],
-                'temperature' => $temperature,
-                'max_tokens' => $effective_max,
-            ]),
-        ]);
+        curl_exec($ch);
         self::$proxy_active = false;
-        if (is_wp_error($r)) return ['error' => 'خطا در اتصال به ' . self::base() . ' — ' . $r->get_error_message() . ' (اگر هاست ایران است، پروکسی Cloudflare را در تنظیمات تعریف کنید)'];
-        $code = wp_remote_retrieve_response_code($r);
-        $body = json_decode(wp_remote_retrieve_body($r), true);
-        if ($code < 200 || $code >= 300) {
-            return ['error' => 'AI خطا داد (HTTP ' . $code . '): ' . ($body['error']['message'] ?? '')];
-        }
-        $text = $body['choices'][0]['message']['content'] ?? '';
-        if ($text === '') return ['error' => 'پاسخ خالی از AI.'];
 
-        // Approximate cost from usage + cached pricing
-        $usage = $body['usage'] ?? [];
+        $err = curl_error($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($err) return ['error' => 'خطا در اتصال به ' . self::base() . ' — cURL: ' . $err . ' (اگر هاست ایران است، پروکسی را تنظیم کنید)'];
+        if ($code >= 400) {
+            // Try to parse error from accumulated text
+            $errBody = json_decode($full_text ?: $buffer, true);
+            return ['error' => 'AI خطا داد (HTTP ' . $code . '): ' . ($errBody['error']['message'] ?? $full_text)];
+        }
+        if ($full_text === '') return ['error' => 'پاسخ خالی از AI. (ممکن است مدل به مشکل خورده باشد)'];
+
         $cost = self::estimate_cost($model, (int)($usage['prompt_tokens'] ?? 0), (int)($usage['completion_tokens'] ?? 0));
-        return ['text' => $text, 'cost' => $cost, 'tokens' => (int)($usage['total_tokens'] ?? 0)];
+        return ['text' => $full_text, 'cost' => $cost, 'tokens' => (int)($usage['total_tokens'] ?? 0)];
     }
 
     /**

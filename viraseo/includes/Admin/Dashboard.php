@@ -93,6 +93,8 @@ class Dashboard {
             'ai_proxy_url' => esc_url_raw(rtrim($i['ai_proxy_url'] ?? '', '/')),
             'ai_curl_proxy' => sanitize_text_field($i['ai_curl_proxy'] ?? ''),
             'ai_model' => sanitize_text_field($i['ai_model'] ?? 'openai/gpt-4o-mini'),
+            'ai_max_tokens' => max(1000, min(16000, absint($i['ai_max_tokens'] ?? 4000))),
+            'ai_token_mode' => in_array($i['ai_token_mode'] ?? 'auto', ['auto','manual'], true) ? $i['ai_token_mode'] : 'auto',
             'oauth_proxy_url' => esc_url_raw(rtrim($i['oauth_proxy_url'] ?? '', '/')),
             'gsc_client_id' => sanitize_text_field($i['gsc_client_id'] ?? ''),
             'gsc_client_secret' => sanitize_text_field($i['gsc_client_secret'] ?? ''),
