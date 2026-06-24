@@ -1153,9 +1153,10 @@ $(document).on('click', '.vs-fc-autofix', function(){
         $out.html(
             '<div class="vs-autofix-preview">'
             + '<h4>📝 محتوای بهبودیافته (پیش‌نمایش)'+cost+'</h4>'
-            + '<div class="vs-autofix-tabs"><button class="vs-btn vs-btn-sm vs-autofix-tab active" data-show="new">محتوای جدید</button><button class="vs-btn vs-btn-sm vs-autofix-tab" data-show="old">محتوای فعلی</button></div>'
+            + '<div class="vs-autofix-tabs"><button class="vs-btn vs-btn-sm vs-autofix-tab active" data-show="new">محتوای جدید</button><button class="vs-btn vs-btn-sm vs-autofix-tab" data-show="old">محتوای فعلی</button><button class="vs-btn vs-btn-sm vs-autofix-tab" data-show="diff">🔍 مقایسه</button></div>'
             + '<div class="vs-autofix-new vs-autofix-pane" contenteditable="true" style="min-height:200px">'+r.data.new_content+'</div>'
             + '<div class="vs-autofix-old vs-autofix-pane" style="display:none;opacity:0.7">'+r.data.old_content+'</div>'
+            + '<div class="vs-autofix-diff vs-autofix-pane" style="display:none;max-height:500px;overflow:auto;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;line-height:2.2">'+vsBuildDiff(r.data.old_content, r.data.new_content)+'</div>'
             + '<div class="vs-autofix-actions" style="margin-top:12px;">'
             + '<button class="vs-btn vs-btn-success vs-fc-apply" data-pid="'+r.data.post_id+'">✅ تأیید و جایگزینی محتوا</button> '
             + '<button class="vs-btn vs-btn-secondary vs-fc-reject">❌ رد کردن</button>'
@@ -1751,22 +1752,76 @@ $(document).on('click', '.vs-seo-rewrite', function(){
     });
 });
 function vsRewriteUI(data, costStr, applyAction) {
+    // Build a visual diff (highlight changes)
+    const diffHtml = vsBuildDiff(data.old_content, data.new_content);
     return '<div class="vs-autofix-preview">'
         + '<h4>📝 محتوای بهبودیافته'+costStr+'</h4>'
-        + '<div class="vs-autofix-tabs"><button class="vs-btn vs-btn-sm vs-rw-tab active" data-show="new">محتوای جدید (قابل ویرایش)</button><button class="vs-btn vs-btn-sm vs-rw-tab" data-show="old">محتوای فعلی</button></div>'
+        + '<div class="vs-autofix-tabs"><button class="vs-btn vs-btn-sm vs-rw-tab active" data-show="new">محتوای جدید (قابل ویرایش)</button><button class="vs-btn vs-btn-sm vs-rw-tab" data-show="old">محتوای فعلی</button><button class="vs-btn vs-btn-sm vs-rw-tab" data-show="diff">🔍 مقایسه تفاوت‌ها</button></div>'
         + '<div class="vs-autofix-new vs-autofix-pane" contenteditable="true" style="min-height:180px;max-height:400px;overflow:auto;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px">'+data.new_content+'</div>'
         + '<div class="vs-autofix-old vs-autofix-pane" style="display:none;opacity:0.7;max-height:400px;overflow:auto;border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:12px">'+data.old_content+'</div>'
+        + '<div class="vs-autofix-diff vs-autofix-pane" style="display:none;max-height:500px;overflow:auto;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px;line-height:2.2">'+diffHtml+'</div>'
         + '<div class="vs-autofix-actions" style="margin-top:12px;">'
         + '<button class="vs-btn vs-btn-success vs-rw-apply" data-pid="'+data.post_id+'" data-action="'+applyAction+'">✅ تأیید و جایگزینی</button> '
         + '<button class="vs-btn vs-btn-secondary vs-rw-reject">❌ رد کردن</button>'
         + '<span class="vs-hint" style="margin-right:12px">می‌توانید قبل از تأیید، محتوای جدید را مستقیماً ویرایش کنید.</span>'
         + '</div></div>';
 }
+/**
+ * Build a visual word-level diff between old and new HTML content.
+ * Green background = added in new, Red strikethrough = removed from old.
+ */
+function vsBuildDiff(oldHtml, newHtml) {
+    // Strip HTML tags for text comparison, then re-wrap
+    const stripTags = h => (h||'').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const oldWords = stripTags(oldHtml).split(' ');
+    const newWords = stripTags(newHtml).split(' ');
+
+    // Simple LCS-based diff (optimized for readability, not performance on huge texts)
+    const MAX = 800; // limit for performance
+    const ow = oldWords.slice(0, MAX), nw = newWords.slice(0, MAX);
+
+    // Build LCS table (bounded)
+    const m = ow.length, n = nw.length;
+    const dp = Array.from({length: m+1}, () => new Uint16Array(n+1));
+    for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
+            dp[i][j] = ow[i-1] === nw[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
+
+    // Backtrack to find diff
+    let result = [];
+    let i = m, j = n;
+    while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && ow[i-1] === nw[j-1]) {
+            result.unshift({type:'same', word: ow[i-1]});
+            i--; j--;
+        } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+            result.unshift({type:'add', word: nw[j-1]});
+            j--;
+        } else {
+            result.unshift({type:'del', word: ow[i-1]});
+            i--;
+        }
+    }
+
+    // Render with colors
+    let html = '<div class="vs-diff-view">';
+    let lastType = '';
+    result.forEach(r => {
+        if (r.type === 'add') html += '<span class="vs-diff-add">'+r.word+'</span> ';
+        else if (r.type === 'del') html += '<span class="vs-diff-del">'+r.word+'</span> ';
+        else html += r.word + ' ';
+    });
+    // If content was longer than MAX, note it
+    if (oldWords.length > MAX || newWords.length > MAX) html += '<br><span class="vs-hint">(مقایسه فقط ۸۰۰ کلمه‌ی اول را نشان می‌دهد)</span>';
+    html += '</div>';
+    return html;
+}
 $(document).on('click', '.vs-rw-tab', function(){
     const show = $(this).data('show');
     $(this).addClass('active').siblings().removeClass('active');
-    $(this).closest('.vs-autofix-preview').find('.vs-autofix-pane').hide();
-    $(this).closest('.vs-autofix-preview').find('.vs-autofix-'+show).show();
+    const $preview = $(this).closest('.vs-autofix-preview');
+    $preview.find('.vs-autofix-pane').hide();
+    $preview.find('.vs-autofix-'+show).show();
 });
 $(document).on('click', '.vs-rw-apply', function(){
     const $btn = $(this).prop('disabled', true).text('در حال ذخیره...');

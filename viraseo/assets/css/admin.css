@@ -831,3 +831,8 @@
 .vs-autofix-pane { font-size: 13px; color: #e2e8f0; line-height: 2; direction: rtl; }
 .vs-autofix-pane[contenteditable="true"]:focus { outline: 2px solid var(--vs-primary); }
 .vs-autofix-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* === Diff view === */
+.vs-diff-view { direction: rtl; font-size: 13px; color: #e2e8f0; }
+.vs-diff-add { background: rgba(16,185,129,.2); color: #6ee7b7; padding: 2px 4px; border-radius: 4px; border-bottom: 2px solid #10b981; }
+.vs-diff-del { background: rgba(239,68,68,.15); color: #fca5a5; padding: 2px 4px; border-radius: 4px; text-decoration: line-through; opacity: 0.7; }
