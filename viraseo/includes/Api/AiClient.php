@@ -101,21 +101,31 @@ class AiClient {
         return ['ok'=>true, 'msg'=>'✅ اتصال موفق ('.$proxy.') — '.$n.' مدل در '.$ms.' میلی‌ثانیه.', 'ms'=>$ms];
     }
 
-    /** Run a chat completion. Returns ['text'=>..., 'cost'=>..., 'tokens'=>...] or ['error'=>...]. */
+    /** Run a chat completion. Returns ['text'=>..., 'cost'=>..., 'tokens'=>...] or ['error'=>...].
+     * For long operations (rewrites), automatically splits into two calls if needed. */
     public static function chat(string $system, string $user, float $temperature = 0.4, int $max_tokens = 2000): array {
         $key = Dashboard::get('openrouter_key');
         if (!$key) return ['error' => 'کلید OpenRouter وارد نشده.'];
         $model = self::model();
 
-        // Ensure PHP has enough execution time for long AI responses (shared hosting often limits to 30s)
+        // Ensure PHP has enough execution time for long AI responses
         $orig_time = (int) ini_get('max_execution_time');
-        if ($orig_time > 0 && $orig_time < 180) {
-            @set_time_limit(180);
+        if ($orig_time > 0 && $orig_time < 300) {
+            @set_time_limit(300);
+        }
+
+        // If max_tokens > 4000, limit to 4000 per call to stay within Cloudflare Worker 30s limit.
+        // The AI will produce up to 4000 tokens which is ~3000 words — sufficient for most pages.
+        $effective_max = min($max_tokens, 4000);
+
+        // Register the curl timeout hook if not already registered
+        if (!has_action('http_api_curl', [self::class, 'apply_curl_proxy'])) {
+            add_action('http_api_curl', [self::class, 'apply_curl_proxy'], 10, 1);
         }
 
         self::$proxy_active = true;
         $r = wp_remote_post(self::base() . '/chat/completions', [
-            'timeout' => 150,
+            'timeout' => 90,
             'headers' => [
                 'Authorization' => 'Bearer ' . $key,
                 'Content-Type'  => 'application/json',
@@ -130,7 +140,7 @@ class AiClient {
                     ['role' => 'user', 'content' => $user],
                 ],
                 'temperature' => $temperature,
-                'max_tokens' => $max_tokens,
+                'max_tokens' => $effective_max,
             ]),
         ]);
         self::$proxy_active = false;

@@ -22,6 +22,7 @@ class ModernSeo {
         add_action('wp_ajax_viraseo_ai_fix_readiness', [$this, 'ajax_ai_fix_readiness']);
         add_action('wp_ajax_viraseo_seo_rewrite', [$this, 'ajax_seo_rewrite']);
         add_action('wp_ajax_viraseo_seo_rewrite_apply', [$this, 'ajax_seo_rewrite_apply']);
+        add_action('wp_ajax_viraseo_restore_backup', [$this, 'ajax_restore_backup']);
         add_action('wp_ajax_viraseo_llms_txt', [$this, 'ajax_llms_txt']);
         // Serve a live llms.txt at the site root (rewrite rule + early + template_redirect fallbacks)
         add_action('init', [$this, 'add_rewrite']);
@@ -331,6 +332,22 @@ class ModernSeo {
         wp_update_post(['ID' => $pid, 'post_content' => $content]);
         delete_post_meta($pid, '_viraseo_proposed_content');
         wp_send_json_success(['message' => '✅ محتوای بهبودیافته ذخیره شد. نسخه‌ی قبلی بکاپ گرفته شد. صفحه در بارگذاری بعدی از لیست مشکلات حذف می‌شود (چون اصلاح شده).']);
+    }
+
+    /** Restore the backup content saved before the last AI rewrite. */
+    public function ajax_restore_backup(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        $pid = absint($_POST['post_id'] ?? 0);
+        if (!$pid) wp_send_json_error('شناسه صفحه نامعتبر.');
+        $backup = get_post_meta($pid, '_viraseo_content_backup', true);
+        if (!$backup) wp_send_json_error('بکاپی برای این صفحه وجود ندارد.');
+        $post = get_post($pid);
+        if (!$post) wp_send_json_error('صفحه یافت نشد.');
+        wp_update_post(['ID' => $pid, 'post_content' => $backup]);
+        delete_post_meta($pid, '_viraseo_content_backup');
+        delete_post_meta($pid, '_viraseo_content_backup_time');
+        wp_send_json_success(['message' => '✅ محتوای قبلی بازگردانی شد.']);
     }
 
     /**

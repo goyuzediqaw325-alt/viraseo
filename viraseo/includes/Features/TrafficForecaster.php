@@ -267,7 +267,7 @@ class TrafficForecaster {
         $content = $post->post_content;
         // Truncate content for AI context (keep first ~1500 words)
         $words = preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content)));
-        $contentPreview = implode(' ', array_slice($words, 0, 1500));
+        $contentPreview = implode(' ', array_slice($words, 0, 800));
 
         $kwLines = '';
         foreach ($rows as $r) {

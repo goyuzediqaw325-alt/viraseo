@@ -1170,7 +1170,7 @@ $(document).on('click', '.vs-fc-apply', function(){
         $btn.prop('disabled', false).text('✅ تأیید و جایگزینی محتوا');
         if (!r.success) { toast(r.data||'خطا','err'); return; }
         toast(r.data.message, 'success');
-        $btn.closest('.vs-autofix-preview').html('<div class="vs-chk-ok">'+r.data.message+'</div>');
+        $btn.closest('.vs-autofix-preview').html('<div class="vs-chk-ok">'+r.data.message+' <button class="vs-btn vs-btn-sm vs-btn-secondary vs-restore-backup" data-pid="'+pid+'">↩️ بازگردانی به محتوای قبلی</button></div>');
     });
 });
 $(document).on('click', '.vs-fc-reject', function(){
@@ -1755,11 +1755,22 @@ $(document).on('click', '.vs-rw-apply', function(){
         $btn.prop('disabled', false).text('✅ تأیید و جایگزینی');
         if (!r.success) { toast(r.data||'خطا','err'); return; }
         toast(r.data.message, 'success');
-        $btn.closest('.vs-autofix-preview').html('<div class="vs-chk-ok">'+r.data.message+'</div>');
+        $btn.closest('.vs-autofix-preview').html('<div class="vs-chk-ok">'+r.data.message+' <button class="vs-btn vs-btn-sm vs-btn-secondary vs-restore-backup" data-pid="'+pid+'">↩️ بازگردانی به محتوای قبلی</button></div>');
     });
 });
 $(document).on('click', '.vs-rw-reject', function(){
     $(this).closest('.vs-autofix-preview').html('<div class="vs-hint">رد شد. تغییری اعمال نشد.</div>');
+});
+// Restore backup content
+$(document).on('click', '.vs-restore-backup', function(){
+    const pid = $(this).data('pid');
+    if (!confirm('محتوای فعلی با نسخه‌ی قبلی (قبل از اصلاح AI) جایگزین می‌شود. ادامه؟')) return;
+    const $b = $(this).prop('disabled', true).text('↩️ در حال بازگردانی...');
+    post('viraseo_restore_backup', {post_id: pid}, r => {
+        $b.prop('disabled', false).text('↩️ بازگردانی به محتوای قبلی');
+        toast(r.success ? r.data.message : (r.data||'خطا'), r.success ? 'success' : 'err');
+        if (r.success) $b.replaceWith('<span class="vs-hint">✅ بازگردانی شد.</span>');
+    });
 });
 
 $(document).on('click', '#vs-llms-gen', function(){
