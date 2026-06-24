@@ -179,6 +179,10 @@ class SerpInspector {
         $d['weaknesses'] = (array)($d['weaknesses'] ?? []);
         $d['top_keywords'] = (array)($d['top_keywords'] ?? []);
         $d['keyword_analysis'] = (array)($d['keyword_analysis'] ?? []);
+        $d['ngrams'] = (array)($d['ngrams'] ?? []);
+        $d['paragraph_keywords'] = (array)($d['paragraph_keywords'] ?? []);
+        $d['content_density'] = (array)($d['content_density'] ?? []);
+        $d['seo_factors'] = (array)($d['seo_factors'] ?? []);
         return $d;
     }
 
@@ -331,6 +335,13 @@ class SerpInspector {
             $keyword_density = round(($kw_count / $word_count) * 100, 2);
         }
 
+        // Enhanced analysis: n-grams, paragraph keywords, density, SEO factors
+        $ngrams = $this->extract_ngrams($text);
+        $paragraph_keywords = $this->extract_paragraph_keywords($html);
+        $content_density = $this->content_density_analysis($html, $text, $word_count);
+        $schema_types = $this->schema_types($html);
+        $seo_factors = $this->seo_factors_analysis($html, $text, $word_count, $headings, (int)$images, $img_no_alt, $links, $title, $meta_desc_val, $keyword, $keyword_density, $url);
+
         return [
             'url'              => $url,
             'word_count'       => $word_count,
@@ -346,7 +357,7 @@ class SerpInspector {
             'external_links'   => $links['external'],
             'title'            => $title,
             'meta_desc'        => $meta_desc_val,
-            'schema'           => $this->schema_types($html),
+            'schema'           => $schema_types,
             'word_count_score' => $this->score($word_count, $headings, $images),
             'paragraphs'       => preg_match_all('/<p\b[^>]*>/i', $html) ?: 0,
             'note'             => $js_note,
@@ -365,6 +376,10 @@ class SerpInspector {
             'has_video'        => $videos > 0 ? 1 : 0,
             'has_table'        => $tables > 0 ? 1 : 0,
             'section_words'    => $section_words,
+            'ngrams'           => $ngrams,
+            'paragraph_keywords' => $paragraph_keywords,
+            'content_density'  => $content_density,
+            'seo_factors'      => $seo_factors,
             'strengths'        => $this->build_strengths($word_count, $headings, (int)$images, $tables, $has_faq, $videos, $links, $schema_types, $title, $meta_desc_val, $keyword, $keyword_density),
             'weaknesses'       => $this->build_weaknesses($word_count, $headings, (int)$images, $img_no_alt, $tables, $has_faq, $videos, $links, $schema_types, $title, $meta_desc_val, $keyword, $keyword_density),
         ];
@@ -606,6 +621,128 @@ class SerpInspector {
         return array_slice($result, 0, 10);
     }
 
+    /** Persian stop words shared across methods. */
+    private function get_stop_words(): array {
+        return ['و','در','به','از','که','این','را','با','است','برای','آن','یک','تا','هم','ها','یا','شده','می','بر','اما','هر','نیز','اگر','شما','ما','من','خود','پس','بود','باید','دارد','همه','بین','هیچ','آنها','کنید','شود','دارند','کرد','کنند','هستند','بودند','باشد','کنم','کنی','شدن','شوند','بوده','دارم','داری','دارید','داشت','داشته','خواهد','خواهند','آنچه','همان','چون','چنین','ولی','یعنی','حال','دیگر','وقتی','اینکه','هنوز','البته','بسیار'];
+    }
+
+    /** Tokenize text into clean words (filtered). */
+    private function tokenize(string $text): array {
+        $text = mb_strtolower($text);
+        $stops = $this->get_stop_words();
+        $words = preg_split('/[\s\x{200C}\x{200B},.;:!?\-\(\)\[\]\/\\\\]+/u', $text, -1, PREG_SPLIT_NO_EMPTY);
+        return array_values(array_filter($words, function($w) use ($stops) {
+            return mb_strlen($w) > 2 && !in_array($w, $stops) && !is_numeric($w);
+        }));
+    }
+
+    /** Extract n-grams (1-4) with frequency. */
+    private function extract_ngrams(string $text): array {
+        $words = $this->tokenize($text);
+        $total = count($words);
+        $result = ['unigrams' => [], 'bigrams' => [], 'trigrams' => [], 'fourgrams' => []];
+        if ($total < 2) return $result;
+
+        $freq = array_count_values($words);
+        arsort($freq);
+        foreach (array_slice($freq, 0, 15, true) as $w => $c) {
+            $result['unigrams'][] = ['word' => $w, 'count' => $c, 'density' => round(($c / $total) * 100, 2)];
+        }
+
+        $bg = [];
+        for ($i = 0; $i < $total - 1; $i++) {
+            $key = $words[$i] . ' ' . $words[$i + 1];
+            $bg[$key] = ($bg[$key] ?? 0) + 1;
+        }
+        arsort($bg);
+        foreach (array_slice($bg, 0, 10, true) as $w => $c) {
+            if ($c >= 2) $result['bigrams'][] = ['word' => $w, 'count' => $c, 'density' => round(($c / max(1, $total - 1)) * 100, 2)];
+        }
+
+        $tg = [];
+        for ($i = 0; $i < $total - 2; $i++) {
+            $key = $words[$i] . ' ' . $words[$i + 1] . ' ' . $words[$i + 2];
+            $tg[$key] = ($tg[$key] ?? 0) + 1;
+        }
+        arsort($tg);
+        foreach (array_slice($tg, 0, 10, true) as $w => $c) {
+            if ($c >= 2) $result['trigrams'][] = ['word' => $w, 'count' => $c, 'density' => round(($c / max(1, $total - 2)) * 100, 2)];
+        }
+
+        $fg = [];
+        for ($i = 0; $i < $total - 3; $i++) {
+            $key = $words[$i] . ' ' . $words[$i + 1] . ' ' . $words[$i + 2] . ' ' . $words[$i + 3];
+            $fg[$key] = ($fg[$key] ?? 0) + 1;
+        }
+        arsort($fg);
+        foreach (array_slice($fg, 0, 10, true) as $w => $c) {
+            if ($c >= 2) $result['fourgrams'][] = ['word' => $w, 'count' => $c, 'density' => round(($c / max(1, $total - 3)) * 100, 2)];
+        }
+
+        return $result;
+    }
+
+    /** Extract keywords from first and second paragraphs separately. */
+    private function extract_paragraph_keywords(string $html): array {
+        $result = ['first_paragraph' => [], 'second_paragraph' => []];
+        if (!preg_match_all('/<p\b[^>]*>(.*?)<\/p>/si', $html, $pm)) return $result;
+        $paragraphs = [];
+        foreach ($pm[1] as $p) {
+            $clean = trim(wp_strip_all_tags($p));
+            $clean = html_entity_decode($clean, ENT_QUOTES, 'UTF-8');
+            if (mb_strlen($clean) > 20) $paragraphs[] = $clean;
+            if (count($paragraphs) >= 2) break;
+        }
+        if (isset($paragraphs[0])) {
+            $words = $this->tokenize($paragraphs[0]);
+            $freq = array_count_values($words);
+            arsort($freq);
+            foreach (array_slice($freq, 0, 10, true) as $w => $c) {
+                $result['first_paragraph'][] = ['word' => $w, 'count' => $c];
+            }
+        }
+        if (isset($paragraphs[1])) {
+            $words = $this->tokenize($paragraphs[1]);
+            $freq = array_count_values($words);
+            arsort($freq);
+            foreach (array_slice($freq, 0, 10, true) as $w => $c) {
+                $result['second_paragraph'][] = ['word' => $w, 'count' => $c];
+            }
+        }
+        return $result;
+    }
+
+    /** Content density analysis. */
+    private function content_density_analysis(string $html, string $text, int $word_count): array {
+        $html_size = strlen($html);
+        $text_size = strlen($text);
+        $text_to_html_ratio = $html_size > 0 ? round(($text_size / $html_size) * 100, 1) : 0;
+        $body_html = '';
+        if (preg_match('/<body[^>]*>(.*)<\/body>/si', $html, $bm)) $body_html = $bm[1];
+        else $body_html = $html;
+        $body_no_scripts = preg_replace('/<(script|style|svg|template|iframe)[^>]*>.*?<\/\1>/si', '', $body_html);
+        $body_text = wp_strip_all_tags($body_no_scripts);
+        $body_text_len = mb_strlen(trim($body_text));
+        $useful_ratio = $body_text_len > 0 ? round(($word_count / max(1, PersianText::word_count($body_text))) * 100, 1) : 0;
+        $para_count = preg_match_all('/<p\b[^>]*>(.*?)<\/p>/si', $html, $pp) ?: 0;
+        $avg_para_length = 0;
+        if ($para_count > 0) {
+            $total_para_words = 0;
+            foreach ($pp[1] as $p) {
+                $clean = trim(wp_strip_all_tags($p));
+                if (mb_strlen($clean) > 10) $total_para_words += PersianText::word_count($clean);
+            }
+            $avg_para_length = (int) round($total_para_words / $para_count);
+        }
+        return [
+            'text_to_html_ratio' => $text_to_html_ratio,
+            'useful_content_ratio' => min(100, $useful_ratio),
+            'avg_paragraph_length' => $avg_para_length,
+            'html_size_kb' => round($html_size / 1024, 1),
+            'text_size_kb' => round($text_size / 1024, 1),
+        ];
+    }
+
     /** Word count per heading section breakdown. */
     private function word_count_per_section(string $html): array {
         $sections = [];
@@ -686,6 +823,173 @@ class SerpInspector {
         $s += min(10, $h['h3'] * 2);
         $s += min(10, $images * 2);
         return min(100, $s);
+    }
+
+
+    /** Analyze ~30 on-page SEO factors with scores and recommendations. */
+    private function seo_factors_analysis(string $html, string $text, int $word_count, array $headings, int $images, int $img_no_alt, array $links, string $title, string $meta_desc, string $keyword, float $keyword_density, string $url): array {
+        $factors = [];
+        $kw_lower = $keyword ? mb_strtolower($keyword) : '';
+        $title_lower = mb_strtolower($title);
+        $text_lower = mb_strtolower($text);
+        $url_lower = mb_strtolower($url);
+
+        // 1. Title tag
+        $title_len = mb_strlen($title); $t_score = 0; $t_tip = '';
+        if ($title_len >= 30 && $title_len <= 60) $t_score = 100;
+        elseif ($title_len > 0 && $title_len < 30) { $t_score = 50; $t_tip = 'عنوان کوتاه است.'; }
+        elseif ($title_len > 60) { $t_score = 60; $t_tip = 'عنوان بلند است.'; }
+        else { $t_score = 0; $t_tip = 'عنوان وجود ندارد!'; }
+        if ($kw_lower && $t_score > 0) { if (mb_strpos($title_lower, $kw_lower) === false) { $t_score -= 20; $t_tip = 'کلمه کلیدی در عنوان نیست.'; } elseif (mb_strpos($title_lower, $kw_lower) <= 5) $t_score = min(100, $t_score + 10); }
+        $factors[] = ['name' => 'title_optimization', 'label' => 'بهینه‌سازی عنوان (Title)', 'score' => max(0, $t_score), 'tip' => $t_tip];
+
+        // 2. Meta description
+        $meta_len = mb_strlen($meta_desc); $m_score = 0; $m_tip = '';
+        if ($meta_len >= 120 && $meta_len <= 160) $m_score = 100;
+        elseif ($meta_len >= 80 && $meta_len < 120) { $m_score = 70; $m_tip = 'متا کوتاه.'; }
+        elseif ($meta_len > 160) { $m_score = 60; $m_tip = 'متا بلند.'; }
+        elseif ($meta_len > 0) { $m_score = 40; $m_tip = 'متا خیلی کوتاه.'; }
+        else { $m_score = 0; $m_tip = 'متا دسکریپشن وجود ندارد!'; }
+        if ($kw_lower && $m_score > 0 && mb_strpos(mb_strtolower($meta_desc), $kw_lower) === false) { $m_score -= 15; $m_tip .= ' کلمه کلیدی در متا نیست.'; }
+        $factors[] = ['name' => 'meta_description', 'label' => 'متا دسکریپشن', 'score' => max(0, $m_score), 'tip' => $m_tip];
+
+        // 3. H1 tag
+        $h1_score = 0; $h1_tip = '';
+        if ($headings['h1'] === 1) $h1_score = 100;
+        elseif ($headings['h1'] > 1) { $h1_score = 50; $h1_tip = 'بیش از یک H1.'; }
+        else { $h1_score = 0; $h1_tip = 'H1 وجود ندارد!'; }
+        if ($kw_lower && $h1_score > 0 && !empty($headings['h1_texts'])) { $in_h1 = false; foreach ($headings['h1_texts'] as $h) { if (mb_strpos(mb_strtolower($h), $kw_lower) !== false) { $in_h1 = true; break; } } if (!$in_h1) { $h1_score -= 20; $h1_tip = 'کلمه کلیدی در H1 نیست.'; } }
+        $factors[] = ['name' => 'h1_tag', 'label' => 'تگ H1', 'score' => max(0, $h1_score), 'tip' => $h1_tip];
+
+        // 4. URL structure
+        $u_score = 80; $u_tip = ''; $path = wp_parse_url($url, PHP_URL_PATH) ?: '';
+        if (strlen($path) > 80) { $u_score -= 30; $u_tip = 'URL بلند.'; }
+        if ($kw_lower && mb_strpos($url_lower, $kw_lower) !== false) $u_score = min(100, $u_score + 20);
+        elseif ($kw_lower) { $u_score -= 10; $u_tip .= ' کلمه در URL نیست.'; }
+        $factors[] = ['name' => 'url_structure', 'label' => 'ساختار URL', 'score' => max(0, $u_score), 'tip' => trim($u_tip)];
+
+        // 5. Keyword in first 100 words
+        $f100_score = 50; $f100_tip = '';
+        if ($kw_lower && $word_count > 0) { $first_words = implode(' ', array_slice(explode(' ', $text_lower), 0, 100)); $f100_score = mb_strpos($first_words, $kw_lower) !== false ? 100 : 0; if ($f100_score === 0) $f100_tip = 'کلمه کلیدی در ۱۰۰ کلمه اول نیست.'; }
+        $factors[] = ['name' => 'keyword_first_100', 'label' => 'کلمه کلیدی در ۱۰۰ کلمه اول', 'score' => $f100_score, 'tip' => $f100_tip];
+
+        // 6. Keyword density
+        $d_score = 50; $d_tip = '';
+        if ($kw_lower) { if ($keyword_density >= 0.5 && $keyword_density <= 2.5) $d_score = 100; elseif ($keyword_density > 2.5 && $keyword_density <= 3.5) { $d_score = 60; $d_tip = 'تراکم بالا.'; } elseif ($keyword_density > 3.5) { $d_score = 20; $d_tip = 'تراکم بسیار بالا!'; } elseif ($keyword_density > 0) { $d_score = 50; $d_tip = 'تراکم کم.'; } else { $d_score = 0; $d_tip = 'کلمه استفاده نشده!'; } }
+        $factors[] = ['name' => 'keyword_density', 'label' => 'تراکم کلمه کلیدی', 'score' => $d_score, 'tip' => $d_tip];
+
+        // 7. Content length
+        $cl_score = 10; $cl_tip = '';
+        if ($word_count >= 2000) $cl_score = 100; elseif ($word_count >= 1200) $cl_score = 85; elseif ($word_count >= 800) $cl_score = 70; elseif ($word_count >= 500) { $cl_score = 50; $cl_tip = 'محتوا کوتاه.'; } elseif ($word_count >= 300) { $cl_score = 30; $cl_tip = 'محتوا کوتاه.'; } else $cl_tip = 'محتوا بسیار کوتاه.';
+        $factors[] = ['name' => 'content_length', 'label' => 'طول محتوا', 'score' => $cl_score, 'tip' => $cl_tip];
+
+        // 8. Images
+        $i_score = 0; $i_tip = '';
+        if ($images >= 3 && $img_no_alt === 0) $i_score = 100; elseif ($images >= 3) { $i_score = 70; $i_tip = $img_no_alt . ' تصویر بدون alt.'; } elseif ($images >= 1) { $i_score = 50; $i_tip = 'تصاویر کم.'; } else { $i_score = 0; $i_tip = 'تصویری ندارد!'; }
+        $factors[] = ['name' => 'image_optimization', 'label' => 'بهینه‌سازی تصاویر', 'score' => $i_score, 'tip' => $i_tip];
+
+        // 9-10. Links
+        $il_score = $links['internal'] >= 5 ? 100 : ($links['internal'] >= 3 ? 70 : ($links['internal'] >= 1 ? 40 : 0));
+        $factors[] = ['name' => 'internal_links', 'label' => 'لینک‌سازی داخلی', 'score' => $il_score, 'tip' => $il_score < 70 ? 'لینک داخلی کم.' : ''];
+        $el_score = ($links['external'] >= 1 && $links['external'] <= 5) ? 100 : ($links['external'] > 5 ? 70 : 30);
+        $factors[] = ['name' => 'external_links', 'label' => 'لینک خارجی (استناد)', 'score' => $el_score, 'tip' => $links['external'] === 0 ? 'لینک خارجی ندارد.' : ''];
+
+        // 11. Page speed
+        $html_kb = strlen($html) / 1024;
+        $sp_score = $html_kb < 100 ? 100 : ($html_kb < 200 ? 80 : ($html_kb < 500 ? 50 : 20));
+        $factors[] = ['name' => 'page_speed', 'label' => 'سرعت صفحه (حجم HTML)', 'score' => $sp_score, 'tip' => $sp_score < 80 ? 'HTML سنگین.' : ''];
+
+        // 12. Viewport
+        $viewport = (bool) preg_match('/<meta[^>]+name\s*=\s*["\']viewport["\']/i', $html);
+        $factors[] = ['name' => 'mobile_friendly', 'label' => 'سازگاری موبایل', 'score' => $viewport ? 100 : 0, 'tip' => $viewport ? '' : 'تگ viewport ندارد!'];
+
+        // 13. Schema
+        $schema_count = preg_match_all('/"@type"/i', $html) ?: 0;
+        $factors[] = ['name' => 'schema_markup', 'label' => 'Schema', 'score' => $schema_count >= 2 ? 100 : ($schema_count === 1 ? 70 : 0), 'tip' => $schema_count === 0 ? 'Schema ندارد.' : ''];
+
+        // 14. OG
+        $og_count = preg_match_all('/<meta[^>]+property\s*=\s*["\']og:/i', $html) ?: 0;
+        $factors[] = ['name' => 'open_graph', 'label' => 'Open Graph', 'score' => $og_count >= 4 ? 100 : ($og_count >= 2 ? 70 : ($og_count >= 1 ? 40 : 0)), 'tip' => $og_count === 0 ? 'OG ندارد.' : ''];
+
+        // 15. Canonical
+        $has_can = (bool) preg_match('/<link[^>]+rel\s*=\s*["\']canonical["\']/i', $html);
+        $factors[] = ['name' => 'canonical_tag', 'label' => 'تگ Canonical', 'score' => $has_can ? 100 : 0, 'tip' => $has_can ? '' : 'Canonical ندارد.'];
+
+        // 16. Robots
+        $robots = $this->extract_robots_meta($html);
+        $r_score = 100; $r_tip = '';
+        if (strpos($robots, 'noindex') !== false) { $r_score = 0; $r_tip = 'noindex دارد!'; } elseif (strpos($robots, 'nofollow') !== false) { $r_score = 50; $r_tip = 'nofollow دارد.'; }
+        $factors[] = ['name' => 'robots_directive', 'label' => 'دستور Robots', 'score' => $r_score, 'tip' => $r_tip];
+
+        // 17. Language
+        $has_lang = (bool) preg_match('/<html[^>]+lang\s*=/i', $html);
+        $factors[] = ['name' => 'language_declaration', 'label' => 'اعلام زبان', 'score' => $has_lang ? 100 : 0, 'tip' => $has_lang ? '' : 'اعلام زبان ندارد.'];
+
+        // 18. Freshness
+        $has_date = (bool) (preg_match('/\b(202[3-6])\b/', $html) || preg_match('/"dateModified"|"datePublished"/i', $html));
+        $factors[] = ['name' => 'content_freshness', 'label' => 'تازگی محتوا', 'score' => $has_date ? 100 : 30, 'tip' => $has_date ? '' : 'نشانه تاریخ یافت نشد.'];
+
+        // 19. FAQ
+        $factors[] = ['name' => 'faq_section', 'label' => 'بخش FAQ', 'score' => $this->detect_faq($html) ? 100 : 0, 'tip' => $this->detect_faq($html) ? '' : 'FAQ ندارد.'];
+
+        // 20. TOC
+        $has_toc = (bool) preg_match('/table.of.content|ez-toc|lwptoc/i', $html);
+        $factors[] = ['name' => 'table_of_contents', 'label' => 'فهرست مطالب (TOC)', 'score' => $has_toc ? 100 : 0, 'tip' => $has_toc ? '' : 'فهرست مطالب ندارد.'];
+
+        // 21. Breadcrumb
+        $has_bread = (bool) preg_match('/breadcrumb|BreadcrumbList/i', $html);
+        $factors[] = ['name' => 'breadcrumb', 'label' => 'مسیرنما (Breadcrumb)', 'score' => $has_bread ? 100 : 0, 'tip' => $has_bread ? '' : 'مسیرنما ندارد.'];
+
+        // 22. Video
+        $vid_count = $this->count_videos($html);
+        $factors[] = ['name' => 'video_multimedia', 'label' => 'ویدیو/مولتی‌مدیا', 'score' => $vid_count >= 1 ? 100 : 0, 'tip' => $vid_count < 1 ? 'ویدیو ندارد.' : ''];
+
+        // 23. Readability
+        $sentences = max(1, preg_match_all('/[.!?]/u', $text) ?: 1);
+        $avg_sent = $word_count > 0 ? round($word_count / $sentences) : 0;
+        $rd_score = 70;
+        if ($avg_sent >= 10 && $avg_sent <= 25) $rd_score = 100; elseif ($avg_sent > 25 && $avg_sent <= 35) $rd_score = 60; elseif ($avg_sent > 35) $rd_score = 30;
+        $factors[] = ['name' => 'readability', 'label' => 'خوانایی محتوا', 'score' => $rd_score, 'tip' => $rd_score < 70 ? 'جملات بلند.' : ''];
+
+        // 24. Heading hierarchy
+        $hh_score = 100;
+        if ($headings['h1'] === 0) $hh_score -= 40;
+        if ($headings['h2'] === 0) $hh_score -= 30;
+        if ($headings['h3'] > 0 && $headings['h2'] === 0) $hh_score -= 20;
+        $factors[] = ['name' => 'heading_hierarchy', 'label' => 'سلسله‌مراتب هدینگ', 'score' => max(0, $hh_score), 'tip' => $hh_score < 100 ? 'سلسله‌مراتب هدینگ ناقص.' : ''];
+
+        // 25. Paragraphs
+        $para_count = preg_match_all('/<p\b[^>]*>/i', $html) ?: 0;
+        $factors[] = ['name' => 'paragraph_structure', 'label' => 'ساختار پاراگراف', 'score' => $para_count >= 5 ? 100 : ($para_count >= 3 ? 70 : ($para_count >= 1 ? 40 : 0)), 'tip' => $para_count < 3 ? 'پاراگراف کم.' : ''];
+
+        // 26. Lists
+        $list_count = preg_match_all('/<(ul|ol)\b/i', $html) ?: 0;
+        $factors[] = ['name' => 'list_usage', 'label' => 'استفاده از لیست', 'score' => $list_count >= 2 ? 100 : ($list_count === 1 ? 60 : 0), 'tip' => $list_count < 1 ? 'لیست ندارد.' : ''];
+
+        // 27. Bold
+        $bold_count = preg_match_all('/<(strong|b)\b/i', $html) ?: 0;
+        $factors[] = ['name' => 'bold_emphasis', 'label' => 'برجسته‌سازی (Bold)', 'score' => $bold_count >= 3 ? 100 : ($bold_count >= 1 ? 60 : 0), 'tip' => $bold_count < 1 ? 'از bold استفاده نشده.' : ''];
+
+        // 28. Content uniqueness
+        $nav_size = 0;
+        if (preg_match_all('/<(nav|footer|sidebar|header)[^>]*>.*?<\/\1>/si', $html, $bp)) $nav_size = mb_strlen(implode('', $bp[0]));
+        $bp_ratio = strlen($html) > 0 ? round(($nav_size / strlen($html)) * 100) : 0;
+        $uniq_score = $bp_ratio < 30 ? 100 : ($bp_ratio < 50 ? 60 : 20);
+        $factors[] = ['name' => 'content_uniqueness', 'label' => 'یکتایی محتوا', 'score' => $uniq_score, 'tip' => $uniq_score < 60 ? 'نسبت boilerplate بالا.' : ''];
+
+        // 29. Social
+        $social = (bool) preg_match('/share|social|telegram|whatsapp|twitter|facebook/i', $html);
+        $factors[] = ['name' => 'social_sharing', 'label' => 'دکمه‌های اشتراک‌گذاری', 'score' => $social ? 100 : 0, 'tip' => $social ? '' : 'دکمه اشتراک ندارد.'];
+
+        // 30. LSI
+        $lsi_score = 50; $lsi_tip = '';
+        if ($kw_lower && $word_count > 100) { $unique_words = count(array_unique($this->tokenize($text))); $ratio = $unique_words / max(1, $word_count); if ($ratio >= 0.4) $lsi_score = 100; elseif ($ratio >= 0.25) $lsi_score = 70; else { $lsi_score = 30; $lsi_tip = 'تنوع واژگانی کم.'; } }
+        $factors[] = ['name' => 'lsi_keywords', 'label' => 'تنوع معنایی (LSI)', 'score' => $lsi_score, 'tip' => $lsi_tip];
+
+        // Overall
+        $total = 0; foreach ($factors as $f) $total += $f['score'];
+        $overall = count($factors) > 0 ? (int) round($total / count($factors)) : 0;
+        return ['factors' => $factors, 'overall_score' => $overall];
     }
 
     /** Build SEO strengths list. */

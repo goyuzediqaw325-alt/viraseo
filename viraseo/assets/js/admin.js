@@ -747,6 +747,10 @@ $(document).on('click', '#vs-comp-analyze', function(){
             + '</div>'
             + (d.strengths && d.strengths.length ? '<div class="vs-comp-section" style="margin-top:10px"><h4 style="color:#10b981">✅ نقاط قوت سئو:</h4><ul class="vs-strengths">'+d.strengths.map(s=>'<li>'+s+'</li>').join('')+'</ul></div>' : '')
             + (d.weaknesses && d.weaknesses.length ? '<div class="vs-comp-section"><h4 style="color:#ef4444">❌ نقاط ضعف سئو:</h4><ul class="vs-weaknesses">'+d.weaknesses.map(w=>'<li>'+w+'</li>').join('')+'</ul></div>' : '')
+            + vsRenderNgrams(d)
+            + vsRenderParaKeywords(d)
+            + vsRenderDensity(d)
+            + vsRenderSeoFactors(d)
             + '</div>'
         );
     });
@@ -812,6 +816,10 @@ $(document).on('click', '.vs-serp-row', function(e){
             + '</div>'
             + (d.strengths && d.strengths.length ? '<div class="vs-comp-section" style="margin-top:10px"><h4 style="color:#10b981">✅ نقاط قوت سئو:</h4><ul class="vs-strengths">'+d.strengths.map(s=>'<li>'+s+'</li>').join('')+'</ul></div>' : '')
             + (d.weaknesses && d.weaknesses.length ? '<div class="vs-comp-section"><h4 style="color:#ef4444">❌ نقاط ضعف سئو:</h4><ul class="vs-weaknesses">'+d.weaknesses.map(w=>'<li>'+w+'</li>').join('')+'</ul></div>' : '')
+            + vsRenderNgrams(d)
+            + vsRenderParaKeywords(d)
+            + vsRenderDensity(d)
+            + vsRenderSeoFactors(d)
             + '</div>'
         );
         // Update the parent row cells too
@@ -820,6 +828,93 @@ $(document).on('click', '.vs-serp-row', function(e){
         $row.find('.vs-c-img').text(d.images||'-');
     });
 });
+
+// === ENHANCED SERP INSPECTOR RENDER HELPERS ===
+$(document).on('click', '.vs-ngram-tab', function(){
+    var $t=$(this), tab=$t.data('tab'), $wrap=$t.closest('.vs-comp-section');
+    $wrap.find('.vs-ngram-tab').removeClass('active');
+    $t.addClass('active');
+    $wrap.find('.vs-ngram-panel').removeClass('active');
+    $wrap.find('.vs-ngram-panel[data-panel="'+tab+'"]').addClass('active');
+});
+function vsRenderNgrams(d) {
+    const ng = d.ngrams || {};
+    const tabs = [
+        {key:'unigrams', label:'\u062a\u06a9\u200c\u06a9\u0644\u0645\u0647\u200c\u0627\u06cc'},
+        {key:'bigrams', label:'\u06f2 \u06a9\u0644\u0645\u0647\u200c\u0627\u06cc'},
+        {key:'trigrams', label:'\u06f3 \u06a9\u0644\u0645\u0647\u200c\u0627\u06cc'},
+        {key:'fourgrams', label:'\u06f4 \u06a9\u0644\u0645\u0647\u200c\u0627\u06cc'}
+    ];
+    let html = '<div class="vs-comp-section"><h4>\u06a9\u0644\u0645\u0627\u062a \u067e\u0631\u062a\u06a9\u0631\u0627\u0631 (N-Grams):</h4>';
+    html += '<div class="vs-ngram-tabs">';
+    tabs.forEach(function(tab, i) {
+        html += '<button class="vs-ngram-tab'+(i===0?' active':'')+'" data-tab="'+tab.key+'">'+tab.label+'</button>';
+    });
+    html += '</div>';
+    tabs.forEach(function(tab, i) {
+        var items = ng[tab.key] || [];
+        html += '<div class="vs-ngram-panel'+(i===0?' active':'')+'" data-panel="'+tab.key+'">';
+        if (items.length === 0) { html += '<span class="vs-empty">\u062f\u0627\u062f\u0647\u200c\u0627\u06cc \u06cc\u0627\u0641\u062a \u0646\u0634\u062f</span>'; }
+        else {
+            html += '<table class="vs-ngram-table"><thead><tr><th>\u0639\u0628\u0627\u0631\u062a</th><th>\u062a\u06a9\u0631\u0627\u0631</th><th>\u062a\u0631\u0627\u06a9\u0645%</th></tr></thead><tbody>';
+            items.forEach(function(it) {
+                html += '<tr><td>'+it.word+'</td><td>'+it.count+'</td><td>'+(it.density||'-')+'</td></tr>';
+            });
+            html += '</tbody></table>';
+        }
+        html += '</div>';
+    });
+    html += '</div>';
+    return html;
+}
+function vsRenderParaKeywords(d) {
+    var pk = d.paragraph_keywords || {};
+    var p1 = pk.first_paragraph || [];
+    var p2 = pk.second_paragraph || [];
+    if (!p1.length && !p2.length) return '';
+    var html = '<div class="vs-comp-section"><h4>\u06a9\u0644\u0645\u0627\u062a \u067e\u0627\u0631\u0627\u06af\u0631\u0627\u0641 \u0627\u0648\u0644 \u0648 \u062f\u0648\u0645:</h4>';
+    if (p1.length) {
+        html += '<p><strong>\u067e\u0627\u0631\u0627\u06af\u0631\u0627\u0641 \u0627\u0648\u0644:</strong> ';
+        html += p1.map(function(k){return '<span class="vs-tag">'+k.word+' ('+k.count+')</span>';}).join('');
+        html += '</p>';
+    }
+    if (p2.length) {
+        html += '<p><strong>\u067e\u0627\u0631\u0627\u06af\u0631\u0627\u0641 \u062f\u0648\u0645:</strong> ';
+        html += p2.map(function(k){return '<span class="vs-tag">'+k.word+' ('+k.count+')</span>';}).join('');
+        html += '</p>';
+    }
+    html += '</div>';
+    return html;
+}
+function vsRenderDensity(d) {
+    var cd = d.content_density || {};
+    if (!cd.text_to_html_ratio && !cd.avg_paragraph_length) return '';
+    return '<div class="vs-comp-section"><h4>\u0622\u0646\u0627\u0644\u06cc\u0632 \u0686\u06af\u0627\u0644\u06cc \u0645\u062d\u062a\u0648\u0627:</h4>'
+        + '<div class="vs-density-grid">'
+        + '<div class="vs-density-item"><span class="vs-di-val">'+(cd.text_to_html_ratio||0)+'%</span><span class="vs-di-lbl">\u0646\u0633\u0628\u062a \u0645\u062a\u0646 \u0628\u0647 HTML</span></div>'
+        + '<div class="vs-density-item"><span class="vs-di-val">'+(cd.useful_content_ratio||0)+'%</span><span class="vs-di-lbl">\u0646\u0633\u0628\u062a \u0645\u062d\u062a\u0648\u0627\u06cc \u0645\u0641\u06cc\u062f</span></div>'
+        + '<div class="vs-density-item"><span class="vs-di-val">'+(cd.avg_paragraph_length||0)+'</span><span class="vs-di-lbl">\u0645\u06cc\u0627\u0646\u06af\u06cc\u0646 \u0637\u0648\u0644 \u067e\u0627\u0631\u0627\u06af\u0631\u0627\u0641</span></div>'
+        + '<div class="vs-density-item"><span class="vs-di-val">'+(cd.html_size_kb||0)+' KB</span><span class="vs-di-lbl">\u062d\u062c\u0645 HTML</span></div>'
+        + '<div class="vs-density-item"><span class="vs-di-val">'+(cd.text_size_kb||0)+' KB</span><span class="vs-di-lbl">\u062d\u062c\u0645 \u0645\u062a\u0646</span></div>'
+        + '</div></div>';
+}
+function vsRenderSeoFactors(d) {
+    var sf = d.seo_factors || {};
+    var factors = sf.factors || [];
+    if (!factors.length) return '';
+    var overall = sf.overall_score || 0;
+    var color = overall >= 70 ? '#10b981' : (overall >= 40 ? '#f59e0b' : '#ef4444');
+    var html = '<div class="vs-comp-section vs-seo-factors"><h4>\u06f3\u06f0 \u0645\u0639\u06cc\u0627\u0631 \u0633\u0626\u0648\u06cc \u062f\u0627\u062e\u0644\u06cc (On-Page):</h4>';
+    html += '<div class="vs-seo-overall" style="text-align:center;margin:8px 0"><span style="font-size:24px;font-weight:bold;color:'+color+'">'+overall+'/\u06f1\u06f0\u06f0</span><br><small>\u0627\u0645\u062a\u06cc\u0627\u0632 \u06a9\u0644\u06cc</small></div>';
+    html += '<table class="vs-factors-table"><thead><tr><th>\u0645\u0639\u06cc\u0627\u0631</th><th>\u0627\u0645\u062a\u06cc\u0627\u0632</th><th>\u062a\u0648\u0636\u06cc\u062d/\u067e\u06cc\u0634\u0646\u0647\u0627\u062f</th></tr></thead><tbody>';
+    factors.forEach(function(f) {
+        var sc = f.score||0;
+        var cls = sc >= 70 ? 'vs-f-good' : (sc >= 40 ? 'vs-f-mid' : 'vs-f-bad');
+        html += '<tr class="'+cls+'"><td>'+f.label+'</td><td><span class="vs-f-score">'+sc+'</span></td><td class="vs-f-tip">'+(f.tip||'\u2713')+'</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+}
 
 // === RANK MONITOR ===
 function loadRankAlerts() {

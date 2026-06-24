@@ -920,3 +920,29 @@
 .vs-health-actions-title { font-size: 14px; font-weight: 700; color: #fbbf24; margin-bottom: 10px; }
 .vs-health-actions-list { list-style: disc; padding-right: 20px; margin: 0; }
 .vs-health-actions-list li { font-size: 13px; color: #cbd5e1; padding: 4px 0; line-height: 1.8; }
+
+/* === Enhanced SERP Inspector: N-Grams, Density, SEO Factors === */
+.vs-ngram-tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+.vs-ngram-tab { padding: 5px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.03); color: #94a3b8; font-size: 12px; cursor: pointer; transition: all .2s; }
+.vs-ngram-tab.active { background: rgba(99,102,241,.2); border-color: rgba(99,102,241,.5); color: #e2e8f0; }
+.vs-ngram-panel { display: none; }
+.vs-ngram-panel.active { display: block; }
+.vs-ngram-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.vs-ngram-table th { text-align: right; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,.1); color: #94a3b8; font-weight: 600; }
+.vs-ngram-table td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,.04); color: #cbd5e1; }
+.vs-ngram-table tr:hover td { background: rgba(255,255,255,.03); }
+.vs-density-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 8px; }
+.vs-density-item { text-align: center; padding: 10px 6px; background: rgba(255,255,255,.03); border-radius: 8px; border: 1px solid rgba(255,255,255,.06); }
+.vs-di-val { display: block; font-size: 16px; font-weight: 700; color: #6366f1; }
+.vs-di-lbl { display: block; font-size: 10px; color: #94a3b8; margin-top: 4px; }
+.vs-seo-factors { margin-top: 12px; }
+.vs-factors-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.vs-factors-table th { text-align: right; padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,.12); color: #94a3b8; font-weight: 600; }
+.vs-factors-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,.04); }
+.vs-factors-table .vs-f-score { display: inline-block; min-width: 28px; text-align: center; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px; }
+.vs-f-good .vs-f-score { background: rgba(16,185,129,.15); color: #10b981; }
+.vs-f-mid .vs-f-score { background: rgba(245,158,11,.15); color: #f59e0b; }
+.vs-f-bad .vs-f-score { background: rgba(239,68,68,.15); color: #ef4444; }
+.vs-f-tip { color: #94a3b8; font-size: 11px; }
+.vs-f-good .vs-f-tip { color: #6ee7b7; }
+.vs-seo-overall { padding: 10px; background: rgba(255,255,255,.02); border-radius: 8px; }
