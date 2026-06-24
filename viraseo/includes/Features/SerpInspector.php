@@ -319,14 +319,59 @@ class SerpInspector {
         if (preg_match('/<body[^>]*>(.*)<\/body>/si', $noScripts, $bm)) $body = $bm[1];
         // Remove nav/footer/header/aside
         $clean = preg_replace('/<(nav|footer|header|aside)[^>]*>.*?<\/\1>/si', ' ', $body);
-        // Try data-content or main tag
+
+        // Try main tag or article first
+        $extracted = '';
         if (preg_match('/<main[^>]*>(.*?)<\/main>/si', $clean, $mm)) {
-            $clean = $mm[1];
+            $extracted = $mm[1];
         } elseif (preg_match('/<article[^>]*>(.*?)<\/article>/si', $clean, $am)) {
-            $clean = $am[1];
-        } elseif (preg_match('/data-content[^>]*>(.*?)<\/div>/si', $clean, $dc)) {
-            $clean = $dc[1];
+            $extracted = $am[1];
         }
+
+        // Check if extraction is adequate (>= 30 words)
+        if ($extracted) {
+            $test_text = wp_strip_all_tags($extracted);
+            $test_text = html_entity_decode($test_text, ENT_QUOTES, 'UTF-8');
+            if (PersianText::word_count($test_text) >= 30) {
+                return $test_text;
+            }
+        }
+
+        // Try additional content container selectors
+        $selectors = [
+            '/<div[^>]*class\s*=\s*["\'][^"\']*\bentry-content\b[^"\']*["\'][^>]*>(.*?)<\/div>/si',
+            '/<div[^>]*class\s*=\s*["\'][^"\']*\bpost-content\b[^"\']*["\'][^>]*>(.*?)<\/div>/si',
+            '/<div[^>]*class\s*=\s*["\'][^"\']*\bproduct-description\b[^"\']*["\'][^>]*>(.*?)<\/div>/si',
+            '/<div[^>]*id\s*=\s*["\']content["\'][^>]*>(.*?)<\/div>/si',
+            '/<div[^>]*class\s*=\s*["\'][^"\']*\bwoocommerce-product-content\b[^"\']*["\'][^>]*>(.*?)<\/div>/si',
+            '/<div[^>]*class\s*=\s*["\'][^"\']*\belementor-widget-container\b[^"\']*["\'][^>]*>(.*?)<\/div>/si',
+            '/<[^>]*role\s*=\s*["\']main["\'][^>]*>(.*?)<\/[a-z]+>/si',
+            '/data-content[^>]*>(.*?)<\/div>/si',
+        ];
+
+        foreach ($selectors as $pattern) {
+            if (preg_match($pattern, $clean, $sm)) {
+                $candidate = wp_strip_all_tags($sm[1]);
+                $candidate = html_entity_decode($candidate, ENT_QUOTES, 'UTF-8');
+                if (PersianText::word_count($candidate) >= 30) {
+                    return $candidate;
+                }
+            }
+        }
+
+        // Greedy capture: everything between first H1/H2 and the last content-bearing tag
+        if (preg_match('/<h[12]\b[^>]*>(.*)/si', $clean, $hm)) {
+            $after_heading = $hm[1];
+            // Strip from the last sidebar/widget area onward
+            $after_heading = preg_replace('/<(aside|footer|nav)[^>]*>.*$/si', '', $after_heading);
+            $greedy_text = wp_strip_all_tags($after_heading);
+            $greedy_text = html_entity_decode($greedy_text, ENT_QUOTES, 'UTF-8');
+            if (PersianText::word_count($greedy_text) >= 30) {
+                return $greedy_text;
+            }
+        }
+
+        // Final fallback: full body minus nav/header/footer/sidebar (already in $clean)
         $text = wp_strip_all_tags($clean);
         $text = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
         return $text;

@@ -166,6 +166,7 @@ class SerpAnalyzer {
                 'pos'=>$c->position,'url'=>$c->url,'domain'=>$c->domain,'title'=>$c->title,
                 'words'=>$c->word_count,'h1'=>$c->h1_count,'h2'=>$c->h2_count,'h3'=>$c->h3_count,
                 'images'=>$c->images_count,'schema'=>$c->schema_types,
+                'snippet'=>$c->snippet ?? $c->meta_desc ?? '',
             ], $comps),
         ]);
     }

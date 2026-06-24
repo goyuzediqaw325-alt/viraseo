@@ -92,6 +92,7 @@ class Schema {
             top_keywords text DEFAULT NULL,
             meta_title varchar(500) DEFAULT NULL,
             meta_desc text DEFAULT NULL,
+            snippet text DEFAULT NULL,
             PRIMARY KEY (id),
             KEY idx_aid (analysis_id)
         ) {$c};");

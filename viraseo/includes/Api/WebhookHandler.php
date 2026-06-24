@@ -56,6 +56,7 @@ class WebhookHandler {
                 'word_count'=>absint($c['word_count']??0),
                 'h1_count'=>absint($c['h1_count']??0),'h2_count'=>absint($c['h2_count']??0),'h3_count'=>absint($c['h3_count']??0),
                 'images_count'=>absint($c['images']??0),'schema_types'=>sanitize_text_field($c['schema_types']??''),
+                'snippet'=>sanitize_text_field($c['snippet']??''),
             ]);
         }
         return new \WP_REST_Response(['success'=>true],200);
@@ -135,6 +136,7 @@ class WebhookHandler {
             'organic'=>$body['organic']??[],
             'paa'=>$body['peopleAlsoAsk']??[],
             'related'=>$body['relatedSearches']??[],
+            'snippets'=>array_column($body['organic']??[], 'snippet'),
         ];
     }
 

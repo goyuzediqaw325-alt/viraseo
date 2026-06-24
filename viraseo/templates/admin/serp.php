@@ -83,7 +83,7 @@ $n8n_ready = !empty($n8n_url);
       <div id="vs-serp-conclusion" style="display:none;margin-bottom:12px;"></div>
       <div id="vs-serp-ai-box" style="display:none;margin-bottom:12px;"></div>
       <table class="vs-table">
-        <thead><tr><th>#</th><th>دامنه</th><th>عنوان</th><th>تعداد کلمات</th><th>H1/H2/H3</th><th>تصاویر</th></tr></thead>
+        <thead><tr><th>#</th><th>دامنه</th><th>عنوان</th><th>توضیحات (Snippet)</th><th>تعداد کلمات</th><th>H1/H2/H3</th><th>تصاویر</th></tr></thead>
         <tbody id="vs-serp-tbody"></tbody>
       </table>
     </div>
