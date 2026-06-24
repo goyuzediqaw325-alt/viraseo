@@ -119,7 +119,7 @@ class ModernSeo {
             // Summary/TL;DR box at top
             if (preg_match('/خلاصه|کلیدواژه|TL;?DR|نکات کلیدی/iu', $html)) $score += 7; else $tips[] = 'باکس «خلاصه/نکات کلیدی» در ابتدای مطلب اضافه کنید (برای استخراج سریع AI)';
 
-            if ($score >= 80) continue; // already good — show only pages needing work
+            // Show ALL pages (no score filter) so user can see improvement after AI fix
             $rows[] = [
                 'id'=>$p->ID, 'title'=>$p->post_title ?: '(بدون عنوان)', 'type'=>$this->type_label($p->ID),
                 'url'=>get_permalink($p->ID), 'edit'=>get_edit_post_link($p->ID,'raw'),

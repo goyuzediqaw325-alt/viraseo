@@ -18,6 +18,7 @@
     </div>
     <div class="vs-toolbar">
       <select class="vs-input vs-type-filter" id="vs-ai-type" style="max-width:180px;"><option value="all">همه نوع‌ها</option></select>
+      <select class="vs-input" id="vs-ai-sort" style="max-width:180px;"><option value="score-asc">امتیاز: کم → زیاد</option><option value="score-desc">امتیاز: زیاد → کم</option></select>
       <button class="vs-btn vs-btn-primary" id="vs-ai-load"><span class="dashicons dashicons-update"></span> تحلیل آمادگی AI</button>
     </div>
     <table class="vs-table" style="margin-top:12px;"><thead><tr><th>صفحه</th><th>نوع</th><th>امتیاز AI</th><th>پیشنهادها</th><th>عملیات</th></tr></thead><tbody id="vs-ai-tbody"><tr><td colspan="5" class="vs-empty">دکمه تحلیل را بزنید.</td></tr></tbody></table>

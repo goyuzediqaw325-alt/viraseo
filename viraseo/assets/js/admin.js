@@ -1653,14 +1653,29 @@ $(document).on('click', '#vs-ai-load', function(){
         const $t = $('#vs-ai-tbody').empty();
         if (!r.success) { $t.html('<tr><td colspan="5" class="vs-empty">'+(r.data||'خطا')+'</td></tr>'); return; }
         vsFillTypes('#vs-ai-type', r.data.types);
-        if (!r.data.rows.length) { $t.html('<tr><td colspan="5" class="vs-empty">🎉 همه صفحات از نظر آمادگی AI خوب هستند.</td></tr>'); return; }
-        r.data.rows.forEach(o => {
-            const tips = o.tips.map(t=>'<li>'+t+'</li>').join('');
-            const aiFixBtn = V.aiEnabled ? '<button class="vs-btn vs-btn-sm vs-btn-success vs-aifix-geo" data-id="'+o.id+'" data-tips="'+escAttr(JSON.stringify(o.tips))+'">🤖 اصلاح خودکار</button> ' : '';
-            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+linkScoreBar(o.score)+'</td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+tips+'</ul></td><td>'+aiFixBtn+'<a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بهبود</a></td></tr>');
-        });
-        vsRowPaginate($('#vs-ai-tbody'), $('#vs-ai-pager'), 25);
+        if (!r.data.rows.length) { $t.html('<tr><td colspan="5" class="vs-empty">صفحه‌ای یافت نشد.</td></tr>'); return; }
+        // Store for sorting
+        window._vsAiRows = r.data.rows;
+        vsAiRender(r.data.rows);
     });
+});
+function vsAiRender(rows) {
+    const $t = $('#vs-ai-tbody').empty();
+    rows.forEach(o => {
+        const tips = o.tips.map(t=>'<li>'+t+'</li>').join('');
+        const aiFixBtn = V.aiEnabled ? '<button class="vs-btn vs-btn-sm vs-btn-success vs-aifix-geo" data-id="'+o.id+'" data-tips="'+escAttr(JSON.stringify(o.tips))+'">🤖 اصلاح خودکار</button> ' : '';
+        const scoreClass = o.score >= 80 ? 'vs-badge-green' : (o.score >= 50 ? 'vs-badge-orange' : 'vs-badge-red');
+        $t.append('<tr data-score="'+o.score+'"><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td><span class="vs-badge '+scoreClass+'">'+o.score+'</span></td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+tips+'</ul></td><td>'+aiFixBtn+'<a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بهبود</a></td></tr>');
+    });
+    vsRowPaginate($('#vs-ai-tbody'), $('#vs-ai-pager'), 25);
+}
+$(document).on('change', '#vs-ai-sort', function(){
+    if (!window._vsAiRows) return;
+    const val = $(this).val();
+    let sorted = window._vsAiRows.slice();
+    if (val === 'score-asc') sorted.sort((a,b) => a.score - b.score);
+    else if (val === 'score-desc') sorted.sort((a,b) => b.score - a.score);
+    vsAiRender(sorted);
 });
 $(document).on('click', '#vs-fresh-load', function(){
     const $b = $(this).prop('disabled', true);
