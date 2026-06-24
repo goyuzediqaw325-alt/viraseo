@@ -166,18 +166,78 @@ class WebhookHandler {
         $id = $wpdb->insert_id;
         if (!$id) return ['error'=>'DB error'];
 
-        $result = self::to_n8n('viraseo-serp-analyze', [
-            'keyword'=>$keyword,'analysis_id'=>$id,
-            'callback_url'=>rest_url('viraseo/v1/serp-results'),
-            'serper_api_key'=>Dashboard::get('serper_api_key'),
-            'site_url'=>get_site_url(),'language'=>'fa',
-        ]);
-
-        if (isset($result['error'])) {
-            $wpdb->update($t, ['status'=>'failed'], ['id'=>$id]);
-            return ['error'=>$result['error'],'analysis_id'=>$id];
+        // If n8n is configured, use it (async callback)
+        $n8n_url = Dashboard::get('n8n_url');
+        if ($n8n_url) {
+            $result = self::to_n8n('viraseo-serp-analyze', [
+                'keyword'=>$keyword,'analysis_id'=>$id,
+                'callback_url'=>rest_url('viraseo/v1/serp-results'),
+                'serper_api_key'=>Dashboard::get('serper_api_key'),
+                'site_url'=>get_site_url(),'language'=>'fa',
+            ]);
+            if (!isset($result['error'])) {
+                $wpdb->update($t, ['status'=>'processing'], ['id'=>$id]);
+                return ['success'=>true,'analysis_id'=>$id];
+            }
+            // n8n failed — fall through to direct mode
         }
-        $wpdb->update($t, ['status'=>'processing'], ['id'=>$id]);
+
+        // DIRECT MODE: call Serper directly and process results inline (no n8n needed)
+        $serp = self::serper_search($keyword, 10);
+        if (isset($serp['error'])) {
+            $wpdb->update($t, ['status'=>'failed'], ['id'=>$id]);
+            return ['error'=>$serp['error'],'analysis_id'=>$id];
+        }
+
+        $organic = $serp['organic'] ?? [];
+        if (empty($organic)) {
+            $wpdb->update($t, ['status'=>'failed'], ['id'=>$id]);
+            return ['error'=>'هیچ نتیجه‌ی ارگانیکی از Serper برنگشت.','analysis_id'=>$id];
+        }
+
+        // Store competitors
+        $ct = $wpdb->prefix.'viraseo_serp_competitors';
+        $words_all = [];
+        foreach ($organic as $pos => $item) {
+            $wpdb->insert($ct, [
+                'analysis_id' => $id,
+                'position'    => $pos + 1,
+                'url'         => esc_url_raw($item['link'] ?? ''),
+                'title'       => sanitize_text_field($item['title'] ?? ''),
+                'domain'      => sanitize_text_field(wp_parse_url($item['link'] ?? '', PHP_URL_HOST) ?: ''),
+                'snippet'     => sanitize_text_field($item['snippet'] ?? ''),
+                'word_count'  => 0,
+                'h1_count'    => 0,
+                'h2_count'    => 0,
+                'h3_count'    => 0,
+                'images_count'=> 0,
+                'schema_types'=> '',
+            ]);
+        }
+
+        // Extract LSI keywords from snippets + related searches
+        $lsi = [];
+        foreach ($serp['related'] ?? [] as $r) {
+            $q = is_array($r) ? ($r['query'] ?? '') : (string)$r;
+            if ($q) $lsi[] = $q;
+        }
+        // People Also Ask
+        $questions = [];
+        foreach ($serp['paa'] ?? [] as $p) {
+            $q = is_array($p) ? ($p['question'] ?? '') : (string)$p;
+            if ($q) $questions[] = $q;
+        }
+
+        $wpdb->update($t, [
+            'status'         => 'completed',
+            'completed_at'   => current_time('mysql'),
+            'avg_word_count' => 0,
+            'avg_headings'   => 0,
+            'lsi_keywords'   => wp_json_encode(array_slice($lsi, 0, 20)),
+            'content_gap'    => wp_json_encode([]),
+            'questions'      => wp_json_encode(array_slice($questions, 0, 10)),
+        ], ['id' => $id]);
+
         return ['success'=>true,'analysis_id'=>$id];
     }
 
