@@ -241,7 +241,7 @@ class ModernSeo {
         $tips = isset($_POST['tips']) ? array_map('sanitize_text_field', (array)$_POST['tips']) : [];
         $title = get_the_title($pid);
         $content = $post->post_content;
-        $contentPreview = implode(' ', array_slice(preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 1200));
+        $contentPreview = implode(' ', array_slice(preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 600));
 
         $system = 'شما متخصص ارشد GEO (Generative Engine Optimization) و سئوی فارسی هستید. '
                 . 'وظیفه: محتوای موجود را بهبود دهید تا برای AI Overview گوگل و موتورهای هوش مصنوعی بهینه باشد. '
@@ -264,7 +264,7 @@ class ModernSeo {
 
         $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.5, 8000);
         if (isset($res['error'])) wp_send_json_error($res['error']);
-        $text = self::clean_ai_html($res['text']);
+        $text = \ViraSEO\Api\AiClient::clean_html($res['text']);
         update_post_meta($pid, '_viraseo_proposed_content', $text);
         wp_send_json_success([
             'post_id' => $pid, 'title' => $title,
@@ -289,7 +289,7 @@ class ModernSeo {
         $title = get_the_title($pid);
         $content = $post->post_content;
         $target = TargetKeywords::get($pid);
-        $contentPreview = implode(' ', array_slice(preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 1500));
+        $contentPreview = implode(' ', array_slice(preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 600));
 
         $system = 'شما ویراستار ارشد محتوای فارسی هستید و اصول Google Helpful Content Update (2024-2026) را کامل می‌شناسید. '
                 . 'وظیفه: محتوای قدیمی/کهنه را بروزرسانی کن. قوانین سختگیرانه:\n'
@@ -309,7 +309,7 @@ class ModernSeo {
 
         $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.5, 8000);
         if (isset($res['error'])) wp_send_json_error($res['error']);
-        $text = self::clean_ai_html($res['text']);
+        $text = \ViraSEO\Api\AiClient::clean_html($res['text']);
         update_post_meta($pid, '_viraseo_proposed_content', $text);
         wp_send_json_success([
             'post_id' => $pid, 'title' => $title,
@@ -348,24 +348,6 @@ class ModernSeo {
         delete_post_meta($pid, '_viraseo_content_backup');
         delete_post_meta($pid, '_viraseo_content_backup_time');
         wp_send_json_success(['message' => '✅ محتوای قبلی بازگردانی شد.']);
-    }
-
-    /**
-     * Strip meta-commentary, code fences, and non-content text that AI sometimes
-     * includes before/after the actual HTML content. Ensures only clean HTML remains.
-     */
-    private static function clean_ai_html(string $raw): string {
-        $text = $raw;
-        // Remove markdown code fences (```html ... ```)
-        $text = preg_replace('/^```(?:html)?\s*\n?/im', '', $text);
-        $text = preg_replace('/\n?```\s*$/im', '', $text);
-        // Strip leading plain-text lines before the first HTML element
-        if (preg_match('/^(.*?)(<(?:h[1-6]|p|div|ul|ol|table|section|article|blockquote)[>\s])/uis', $text, $m) && strlen(trim($m[1])) > 0) {
-            $text = substr($text, strlen($m[1]));
-        }
-        // Strip trailing plain-text after the last closing HTML tag
-        $text = preg_replace('/(<\/(?:p|div|ul|ol|table|section|article|blockquote|h[1-6])>)\s*[^<]+$/uis', '$1', $text);
-        return trim($text);
     }
 
     /** Build llms.txt content (markdown) listing key pages to guide AI crawlers. */

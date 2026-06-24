@@ -114,9 +114,9 @@ class AiClient {
             @set_time_limit(300);
         }
 
-        // If max_tokens > 4000, limit to 4000 per call to stay within Cloudflare Worker 30s limit.
-        // The AI will produce up to 4000 tokens which is ~3000 words — sufficient for most pages.
-        $effective_max = min($max_tokens, 4000);
+        // Cap max_tokens to 3000 to keep response time within Cloudflare Worker 30s limit.
+        // 3000 tokens ≈ 2000+ words Persian — sufficient for most page rewrites.
+        $effective_max = min($max_tokens, 3000);
 
         // Register the curl timeout hook if not already registered
         if (!has_action('http_api_curl', [self::class, 'apply_curl_proxy'])) {
@@ -157,6 +157,31 @@ class AiClient {
         $usage = $body['usage'] ?? [];
         $cost = self::estimate_cost($model, (int)($usage['prompt_tokens'] ?? 0), (int)($usage['completion_tokens'] ?? 0));
         return ['text' => $text, 'cost' => $cost, 'tokens' => (int)($usage['total_tokens'] ?? 0)];
+    }
+
+    /**
+     * Clean AI HTML output: strip code fences, leading/trailing meta-commentary,
+     * and any non-HTML text the model may have included outside the content.
+     */
+    public static function clean_html(string $raw): string {
+        $text = $raw;
+        // Remove markdown code fences
+        $text = preg_replace('/^```(?:html|HTML)?\s*\n?/m', '', $text);
+        $text = preg_replace('/\n?```\s*$/m', '', $text);
+        $text = trim($text);
+        // Strip leading plain-text lines before the first HTML element
+        if (preg_match('/^(.+?)(<(?:h[1-6]|p|div|ul|ol|table|section|article|blockquote|details|summary|figure|aside)[>\s\/])/uis', $text, $m)) {
+            $lead = trim($m[1]);
+            // Only strip if the lead doesn't contain HTML tags itself (pure commentary)
+            if (!preg_match('/<[a-z]/i', $lead)) {
+                $text = substr($text, strlen($m[1]));
+            }
+        }
+        // Strip trailing plain-text after the last closing HTML tag
+        if (preg_match('/^(.*<\/(?:p|div|ul|ol|table|section|article|blockquote|h[1-6]|details|figure|aside)>)\s*[^<]+$/uis', $text, $m2)) {
+            $text = $m2[1];
+        }
+        return trim($text);
     }
 
     /** Approximate USD cost for a request. */

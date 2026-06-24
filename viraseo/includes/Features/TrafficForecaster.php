@@ -267,7 +267,7 @@ class TrafficForecaster {
         $content = $post->post_content;
         // Truncate content for AI context (keep first ~1500 words)
         $words = preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content)));
-        $contentPreview = implode(' ', array_slice($words, 0, 800));
+        $contentPreview = implode(' ', array_slice($words, 0, 500));
 
         $kwLines = '';
         foreach ($rows as $r) {
@@ -299,14 +299,7 @@ class TrafficForecaster {
         $res = AiClient::chat($system, $user, 0.5, 8000);
         if (isset($res['error'])) wp_send_json_error($res['error']);
 
-        // Clean AI response: strip any leading meta-commentary before actual HTML
-        $text = $res['text'];
-        // If AI started with plain-text lines before the first HTML tag, strip them
-        if (preg_match('/^(.*?)(<(?:h[1-6]|p|div|ul|ol|table|section|article)[>\s])/uis', $text, $m) && strlen(trim($m[1])) > 0) {
-            $text = substr($text, strlen($m[1]));
-        }
-        // Strip trailing meta-commentary after last closing HTML tag
-        $text = preg_replace('/(<\/(?:p|div|ul|ol|table|section|article|h[1-6])>)\s*[^<]+$/uis', '$1', $text);
+        $text = AiClient::clean_html($res['text']);
 
         // Save the proposed content temporarily in post meta for the apply step
         update_post_meta($pid, '_viraseo_proposed_content', $text);

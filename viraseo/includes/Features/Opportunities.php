@@ -252,7 +252,7 @@ class Opportunities {
         $content = $post->post_content;
         $target = \ViraSEO\Features\TargetKeywords::get($pid);
         $words = preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content)));
-        $contentPreview = implode(' ', array_slice($words, 0, 800));
+        $contentPreview = implode(' ', array_slice($words, 0, 500));
 
         $issueList = implode("\n", array_map(fn($i) => "- {$i}", $issues));
         $system = 'شما متخصص سئوی on-page فارسی هستید. وظیفه: محتوای موجود را طوری ویرایش/تکمیل کن که ایرادهای سئوی مشخص‌شده رفع شوند. '
@@ -266,15 +266,7 @@ class Opportunities {
         $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.4, 8000);
         if (isset($res['error'])) wp_send_json_error($res['error']);
 
-        // Clean AI response
-        $text = $res['text'];
-        $text = preg_replace('/^```(?:html)?\s*\n?/im', '', $text);
-        $text = preg_replace('/\n?```\s*$/im', '', $text);
-        if (preg_match('/^(.*?)(<(?:h[1-6]|p|div|ul|ol|table|section|article|blockquote)[>\s])/uis', $text, $m) && strlen(trim($m[1])) > 0) {
-            $text = substr($text, strlen($m[1]));
-        }
-        $text = preg_replace('/(<\/(?:p|div|ul|ol|table|section|article|blockquote|h[1-6])>)\s*[^<]+$/uis', '$1', $text);
-        $text = trim($text);
+        $text = \ViraSEO\Api\AiClient::clean_html($res['text']);
 
         update_post_meta($pid, '_viraseo_proposed_content', $text);
         wp_send_json_success([
