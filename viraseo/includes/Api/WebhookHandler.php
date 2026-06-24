@@ -159,16 +159,20 @@ class WebhookHandler {
         return ['error'=>"n8n پاسخ HTTP {$code} داد.\n\nآدرس: {$full_url}\nپاسخ: " . mb_substr($resp_body, 0, 300)];
     }
 
-    public static function send_serp_request(string $keyword, int $user_id, int $post_id = 0): array {
+    public static function send_serp_request(string $keyword, int $user_id, int $post_id = 0, string $mode = 'direct'): array {
         global $wpdb;
         $t = $wpdb->prefix.'viraseo_serp_analysis';
         $wpdb->insert($t, ['keyword'=>$keyword,'keyword_hash'=>md5(mb_strtolower($keyword)),'status'=>'pending','requested_by'=>$user_id,'post_id'=>$post_id ?: null]);
         $id = $wpdb->insert_id;
         if (!$id) return ['error'=>'DB error'];
 
-        // If n8n is configured, use it (async callback)
-        $n8n_url = Dashboard::get('n8n_url');
-        if ($n8n_url) {
+        // If mode is n8n AND n8n is configured, use it (async callback)
+        if ($mode === 'n8n') {
+            $n8n_url = Dashboard::get('n8n_url');
+            if (!$n8n_url) {
+                $wpdb->update($t, ['status'=>'failed'], ['id'=>$id]);
+                return ['error'=>'حالت n8n انتخاب شده ولی آدرس n8n در تنظیمات وارد نشده.'];
+            }
             $result = self::to_n8n('viraseo-serp-analyze', [
                 'keyword'=>$keyword,'analysis_id'=>$id,
                 'callback_url'=>rest_url('viraseo/v1/serp-results'),
@@ -179,7 +183,8 @@ class WebhookHandler {
                 $wpdb->update($t, ['status'=>'processing'], ['id'=>$id]);
                 return ['success'=>true,'analysis_id'=>$id];
             }
-            // n8n failed — fall through to direct mode
+            $wpdb->update($t, ['status'=>'failed'], ['id'=>$id]);
+            return ['error'=>'خطای n8n: ' . $result['error'], 'analysis_id'=>$id];
         }
 
         // DIRECT MODE: call Serper directly and process results inline (no n8n needed)

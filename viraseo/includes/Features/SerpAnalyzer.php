@@ -80,7 +80,11 @@ class SerpAnalyzer {
 
         $kw = PersianText::normalize($kw);
         $post_id = absint($_POST['post_id'] ?? 0);
-        $r = WebhookHandler::send_serp_request($kw, get_current_user_id(), $post_id);
+
+        // Respect the serp_mode setting
+        $serp_mode = Dashboard::get('serp_mode') ?: 'direct';
+
+        $r = WebhookHandler::send_serp_request($kw, get_current_user_id(), $post_id, $serp_mode);
         if (isset($r['error'])) wp_send_json_error('❌ خطا: ' . $r['error']);
         wp_send_json_success(['analysis_id'=>$r['analysis_id'],'message'=>'✅ تحلیل انجام شد.']);
     }

@@ -141,8 +141,11 @@ class SerpInspector {
      *  Primary path: dedicated n8n workflow (offloads the WP server, avoids host WAF limits).
      *  Fallback: direct server-side fetch from WP. */
     public function analyze(string $url, string $keyword = ''): array {
-        // 1) Try the dedicated n8n Page Inspector workflow (synchronous response)
-        if (\ViraSEO\Admin\Dashboard::get('n8n_url')) {
+        // Respect the inspect_mode setting
+        $mode = Dashboard::get('inspect_mode') ?: 'direct';
+
+        // If mode=n8n and n8n is configured, try n8n first
+        if ($mode === 'n8n' && Dashboard::get('n8n_url')) {
             $res = \ViraSEO\Api\WebhookHandler::to_n8n('viraseo-page-inspect', [
                 'url' => $url,
                 'keyword' => $keyword,
@@ -154,7 +157,7 @@ class SerpInspector {
                     return $this->decorate($d);
                 }
             }
-            // n8n failed or returned nothing useful -- fall through to direct fetch
+            // n8n failed — fall through to direct fetch
         }
         return $this->analyze_direct($url, $keyword);
     }

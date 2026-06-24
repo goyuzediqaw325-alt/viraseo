@@ -89,6 +89,8 @@ class Dashboard {
             'n8n_secret' => sanitize_text_field($i['n8n_secret'] ?? ''),
             'serper_api_key' => sanitize_text_field($i['serper_api_key'] ?? ''),
             'browserless_token' => sanitize_text_field($i['browserless_token'] ?? ''),
+            'serp_mode' => in_array($i['serp_mode'] ?? 'direct', ['direct','n8n'], true) ? $i['serp_mode'] : 'direct',
+            'inspect_mode' => in_array($i['inspect_mode'] ?? 'direct', ['direct','n8n'], true) ? $i['inspect_mode'] : 'direct',
             'psi_api_key' => sanitize_text_field($i['psi_api_key'] ?? ''),
             'ai_enabled' => !empty($i['ai_enabled']),
             'openrouter_key' => sanitize_text_field($i['openrouter_key'] ?? ''),
