@@ -1103,6 +1103,7 @@ $(document).on('click', '.vs-fc-page', function(){
         }
         const aiBtn = r.data.ai_enabled
             ? '<button class="vs-btn vs-btn-sm vs-btn-primary vs-fc-ai" data-url="'+escAttr(r.data.url)+'">🤖 استراتژی کامل با هوش مصنوعی</button>'
+              + ' <button class="vs-btn vs-btn-sm vs-btn-success vs-fc-autofix" data-url="'+escAttr(r.data.url)+'">✏️ اصلاح صفحه برای افزایش ترافیک</button>'
             : '<span class="vs-muted" style="font-size:12px">برای استراتژی هوش مصنوعی، AI را در تنظیمات فعال کنید.</span>';
         $d.find('td').html(
             '<div class="vs-fc-detail-box">'+chips
@@ -1119,7 +1120,7 @@ $(document).on('click', '.vs-fc-page', function(){
 $(document).on('click', '.vs-fc-ai', function(){
     const url = $(this).data('url');
     const $btn = $(this);
-    const $out = $btn.siblings('.vs-fc-ai-out');
+    const $out = $btn.closest('.vs-fc-ai-wrap').find('.vs-fc-ai-out');
     $btn.prop('disabled', true).text('🤖 در حال تحلیل با هوش مصنوعی...');
     $out.show().html('<div class="vs-inspect-loading">⏳ هوش مصنوعی در حال ساخت نقشه‌ی راه بر اساس داده‌های واقعی سرچ کنسول...</div>');
     post('viraseo_forecast_ai', {url: url}, r => {
@@ -1129,6 +1130,51 @@ $(document).on('click', '.vs-fc-ai', function(){
         const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
         $out.html('<div class="vs-ai-result"><div class="vs-ai-text">'+html+'</div>'+cost+'</div>');
     });
+});
+// Auto-fix page content for traffic increase (AI rewrites/enhances the page)
+$(document).on('click', '.vs-fc-autofix', function(){
+    const url = $(this).data('url');
+    const $btn = $(this).prop('disabled', true).text('✏️ در حال تولید محتوای بهبودیافته...');
+    const $wrap = $btn.closest('.vs-fc-ai-wrap');
+    let $out = $wrap.find('.vs-fc-autofix-out');
+    if (!$out.length) { $wrap.append('<div class="vs-fc-autofix-out" style="margin-top:14px"></div>'); $out = $wrap.find('.vs-fc-autofix-out'); }
+    $out.show().html('<div class="vs-inspect-loading">⏳ هوش مصنوعی در حال بازنویسی/بهبود محتوا برای افزایش ترافیک... (ممکن است تا ۹۰ ثانیه طول بکشد)</div>');
+    post('viraseo_forecast_autofix', {url: url}, r => {
+        $btn.prop('disabled', false).text('✏️ اصلاح صفحه برای افزایش ترافیک');
+        if (!r.success) { $out.html('<div class="vs-inspect-err">'+(r.data||'خطا')+'</div>'); return; }
+        const cost = r.data.cost ? ' (هزینه: $'+r.data.cost+' • توکن: '+r.data.tokens+')' : '';
+        $out.html(
+            '<div class="vs-autofix-preview">'
+            + '<h4>📝 محتوای بهبودیافته (پیش‌نمایش)'+cost+'</h4>'
+            + '<div class="vs-autofix-tabs"><button class="vs-btn vs-btn-sm vs-autofix-tab active" data-show="new">محتوای جدید</button><button class="vs-btn vs-btn-sm vs-autofix-tab" data-show="old">محتوای فعلی</button></div>'
+            + '<div class="vs-autofix-new vs-autofix-pane" contenteditable="true" style="min-height:200px">'+r.data.new_content+'</div>'
+            + '<div class="vs-autofix-old vs-autofix-pane" style="display:none;opacity:0.7">'+r.data.old_content+'</div>'
+            + '<div class="vs-autofix-actions" style="margin-top:12px;">'
+            + '<button class="vs-btn vs-btn-success vs-fc-apply" data-pid="'+r.data.post_id+'">✅ تأیید و جایگزینی محتوا</button> '
+            + '<button class="vs-btn vs-btn-secondary vs-fc-reject">❌ رد کردن</button>'
+            + '</div></div>'
+        );
+    });
+});
+$(document).on('click', '.vs-autofix-tab', function(){
+    const show = $(this).data('show');
+    $(this).addClass('active').siblings().removeClass('active');
+    $(this).closest('.vs-autofix-preview').find('.vs-autofix-pane').hide();
+    $(this).closest('.vs-autofix-preview').find('.vs-autofix-'+show).show();
+});
+$(document).on('click', '.vs-fc-apply', function(){
+    const $btn = $(this).prop('disabled', true).text('در حال ذخیره...');
+    const pid = $(this).data('pid');
+    const content = $(this).closest('.vs-autofix-preview').find('.vs-autofix-new').html();
+    post('viraseo_forecast_apply', {post_id: pid, content: content}, r => {
+        $btn.prop('disabled', false).text('✅ تأیید و جایگزینی محتوا');
+        if (!r.success) { toast(r.data||'خطا','err'); return; }
+        toast(r.data.message, 'success');
+        $btn.closest('.vs-autofix-preview').html('<div class="vs-chk-ok">'+r.data.message+'</div>');
+    });
+});
+$(document).on('click', '.vs-fc-reject', function(){
+    $(this).closest('.vs-autofix-preview').html('<div class="vs-hint">محتوای پیشنهادی رد شد. تغییری اعمال نشد.</div>');
 });
 
 // === KEYWORD DISCOVERY ===
@@ -1591,7 +1637,8 @@ $(document).on('click', '#vs-ai-load', function(){
         if (!r.data.rows.length) { $t.html('<tr><td colspan="5" class="vs-empty">🎉 همه صفحات از نظر آمادگی AI خوب هستند.</td></tr>'); return; }
         r.data.rows.forEach(o => {
             const tips = o.tips.map(t=>'<li>'+t+'</li>').join('');
-            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+linkScoreBar(o.score)+'</td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+tips+'</ul></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بهبود</a></td></tr>');
+            const aiFixBtn = V.aiEnabled ? '<button class="vs-btn vs-btn-sm vs-btn-success vs-aifix-geo" data-id="'+o.id+'" data-tips="'+escAttr(JSON.stringify(o.tips))+'">🤖 اصلاح خودکار</button> ' : '';
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+linkScoreBar(o.score)+'</td><td><ul style="margin:0;padding-right:16px;font-size:11px">'+tips+'</ul></td><td>'+aiFixBtn+'<a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">بهبود</a></td></tr>');
         });
         vsRowPaginate($('#vs-ai-tbody'), $('#vs-ai-pager'), 25);
     });
@@ -1607,7 +1654,8 @@ $(document).on('click', '#vs-fresh-load', function(){
         if (!r.data.rows.length) { $t.html('<tr><td colspan="7" class="vs-empty">محتوای کهنه‌ای یافت نشد.</td></tr>'); return; }
         r.data.rows.forEach(o => {
             const pc = o.priority==='بالا'?'red':(o.priority==='متوسط'?'orange':'blue');
-            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+o.modified+'</td><td>'+o.age+'</td><td>'+o.impressions+'</td><td><span class="vs-badge vs-badge-'+pc+'">'+o.priority+'</span></td><td><a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">به‌روزرسانی</a></td></tr>');
+            const rewriteBtn = V.aiEnabled ? '<button class="vs-btn vs-btn-sm vs-btn-success vs-seo-rewrite" data-id="'+o.id+'">🤖 بروزرسانی سئو</button> ' : '';
+            $t.append('<tr><td><a href="'+o.url+'" target="_blank">'+o.title+'</a></td><td><span class="vs-type-tag">'+o.type+'</span></td><td>'+o.modified+'</td><td>'+o.age+'</td><td>'+o.impressions+'</td><td><span class="vs-badge vs-badge-'+pc+'">'+o.priority+'</span></td><td>'+rewriteBtn+'<a href="'+o.edit+'" class="vs-btn vs-btn-sm vs-btn-secondary">به‌روزرسانی</a></td></tr>');
         });
         vsRowPaginate($('#vs-fresh-tbody'), $('#vs-fresh-pager'), 25);
     });
@@ -1636,6 +1684,72 @@ $(document).on('click', '.vs-fa-fix', function(){
         else { toast(r.data,'err'); $b.prop('disabled',false).text('🔧 اصلاح خودکار'); }
     });
 });
+
+// AI auto-fix for GEO/AI readiness issues
+$(document).on('click', '.vs-aifix-geo', function(){
+    const $btn = $(this).prop('disabled', true).text('🤖 در حال اصلاح...');
+    const pid = $(this).data('id');
+    const tips = JSON.parse($(this).attr('data-tips')||'[]');
+    const $row = $(this).closest('tr');
+    let $detail = $row.next('.vs-aifix-detail');
+    if (!$detail.length) { $row.after('<tr class="vs-aifix-detail"><td colspan="5"></td></tr>'); $detail = $row.next('.vs-aifix-detail'); }
+    $detail.show().find('td').html('<div class="vs-empty">⏳ هوش مصنوعی در حال اصلاح محتوا برای AI/GEO... (ممکن است تا ۹۰ ثانیه)</div>');
+    post('viraseo_ai_fix_readiness', {post_id: pid, tips: tips}, r => {
+        $btn.prop('disabled', false).text('🤖 اصلاح خودکار');
+        if (!r.success) { $detail.find('td').html('<div class="vs-inspect-err">'+(r.data||'خطا')+'</div>'); return; }
+        const cost = r.data.cost ? ' (هزینه: $'+r.data.cost+')' : '';
+        $detail.find('td').html(vsRewriteUI(r.data, cost, 'viraseo_seo_rewrite_apply'));
+    });
+});
+// SEO rewrite for stale content
+$(document).on('click', '.vs-seo-rewrite', function(){
+    const $btn = $(this).prop('disabled', true).text('🤖 در حال بروزرسانی...');
+    const pid = $(this).data('id');
+    const $row = $(this).closest('tr');
+    let $detail = $row.next('.vs-rewrite-detail');
+    if (!$detail.length) { $row.after('<tr class="vs-rewrite-detail"><td colspan="7"></td></tr>'); $detail = $row.next('.vs-rewrite-detail'); }
+    $detail.show().find('td').html('<div class="vs-empty">⏳ هوش مصنوعی در حال بروزرسانی بر اساس اصول Helpful Content... (تا ۹۰ ثانیه)</div>');
+    post('viraseo_seo_rewrite', {post_id: pid}, r => {
+        $btn.prop('disabled', false).text('🤖 بروزرسانی سئو');
+        if (!r.success) { $detail.find('td').html('<div class="vs-inspect-err">'+(r.data||'خطا')+'</div>'); return; }
+        const cost = r.data.cost ? ' (هزینه: $'+r.data.cost+')' : '';
+        $detail.find('td').html(vsRewriteUI(r.data, cost, 'viraseo_seo_rewrite_apply'));
+    });
+});
+function vsRewriteUI(data, costStr, applyAction) {
+    return '<div class="vs-autofix-preview">'
+        + '<h4>📝 محتوای بهبودیافته'+costStr+'</h4>'
+        + '<div class="vs-autofix-tabs"><button class="vs-btn vs-btn-sm vs-rw-tab active" data-show="new">محتوای جدید (قابل ویرایش)</button><button class="vs-btn vs-btn-sm vs-rw-tab" data-show="old">محتوای فعلی</button></div>'
+        + '<div class="vs-autofix-new vs-autofix-pane" contenteditable="true" style="min-height:180px;max-height:400px;overflow:auto;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:12px">'+data.new_content+'</div>'
+        + '<div class="vs-autofix-old vs-autofix-pane" style="display:none;opacity:0.7;max-height:400px;overflow:auto;border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:12px">'+data.old_content+'</div>'
+        + '<div class="vs-autofix-actions" style="margin-top:12px;">'
+        + '<button class="vs-btn vs-btn-success vs-rw-apply" data-pid="'+data.post_id+'" data-action="'+applyAction+'">✅ تأیید و جایگزینی</button> '
+        + '<button class="vs-btn vs-btn-secondary vs-rw-reject">❌ رد کردن</button>'
+        + '<span class="vs-hint" style="margin-right:12px">می‌توانید قبل از تأیید، محتوای جدید را مستقیماً ویرایش کنید.</span>'
+        + '</div></div>';
+}
+$(document).on('click', '.vs-rw-tab', function(){
+    const show = $(this).data('show');
+    $(this).addClass('active').siblings().removeClass('active');
+    $(this).closest('.vs-autofix-preview').find('.vs-autofix-pane').hide();
+    $(this).closest('.vs-autofix-preview').find('.vs-autofix-'+show).show();
+});
+$(document).on('click', '.vs-rw-apply', function(){
+    const $btn = $(this).prop('disabled', true).text('در حال ذخیره...');
+    const pid = $(this).data('pid');
+    const action = $(this).data('action') || 'viraseo_seo_rewrite_apply';
+    const content = $(this).closest('.vs-autofix-preview').find('.vs-autofix-new').html();
+    post(action, {post_id: pid, content: content}, r => {
+        $btn.prop('disabled', false).text('✅ تأیید و جایگزینی');
+        if (!r.success) { toast(r.data||'خطا','err'); return; }
+        toast(r.data.message, 'success');
+        $btn.closest('.vs-autofix-preview').html('<div class="vs-chk-ok">'+r.data.message+'</div>');
+    });
+});
+$(document).on('click', '.vs-rw-reject', function(){
+    $(this).closest('.vs-autofix-preview').html('<div class="vs-hint">رد شد. تغییری اعمال نشد.</div>');
+});
+
 $(document).on('click', '#vs-llms-gen', function(){
     const $b = $(this).prop('disabled', true);
     post('viraseo_llms_txt', {}, r => {

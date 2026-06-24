@@ -73,9 +73,13 @@ $gsc_connected = !empty($_GET['gsc_connected']);
       <div class="vs-field" style="min-width:140px;margin-bottom:0;">
         <label class="vs-label">بازه زمانی:</label>
         <select id="vs-gsc-days" class="vs-select">
+          <option value="1">امروز</option>
+          <option value="2">دیروز تا امروز</option>
+          <option value="3">۳ روز اخیر</option>
           <option value="7">۷ روز اخیر</option>
           <option value="28" selected>۲۸ روز اخیر</option>
           <option value="90">۹۰ روز اخیر</option>
+          <option value="180">۶ ماه اخیر</option>
         </select>
       </div>
       <button class="vs-btn vs-btn-primary" id="vs-gsc-sync">

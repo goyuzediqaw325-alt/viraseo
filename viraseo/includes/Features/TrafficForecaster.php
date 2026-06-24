@@ -14,6 +14,8 @@ class TrafficForecaster {
         add_action('wp_ajax_viraseo_forecast', [$this, 'ajax']);
         add_action('wp_ajax_viraseo_forecast_page', [$this, 'ajax_page']);
         add_action('wp_ajax_viraseo_forecast_ai', [$this, 'ajax_ai_strategy']);
+        add_action('wp_ajax_viraseo_forecast_autofix', [$this, 'ajax_autofix']);
+        add_action('wp_ajax_viraseo_forecast_apply', [$this, 'ajax_apply']);
     }
 
     /** Action recommendation based on current position. */
@@ -231,5 +233,104 @@ class TrafficForecaster {
         $res = AiClient::chat($system, $user, 0.5);
         if (isset($res['error'])) wp_send_json_error($res['error']);
         wp_send_json_success(['text'=>$res['text'], 'cost'=>$res['cost'], 'tokens'=>$res['tokens']]);
+    }
+
+    /**
+     * Auto-fix page content for traffic increase. Reads real GSC data for the page,
+     * gets current post content, asks AI to produce an optimized version of specific
+     * sections (H2s, paragraphs to add/edit) targeting opportunity keywords.
+     * Returns both old and proposed new content for user diff + approval.
+     */
+    public function ajax_autofix(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        if (!AiClient::is_enabled()) wp_send_json_error('هوش مصنوعی فعال نیست. در تنظیمات فعال کنید.');
+        global $wpdb;
+        $t = $wpdb->prefix . 'viraseo_gsc_keywords';
+        $url = esc_url_raw($_POST['url'] ?? '');
+        $pid = $url ? url_to_postid($url) : 0;
+        if (!$pid) wp_send_json_error('صفحه‌ی وردپرسی برای این آدرس یافت نشد. فقط پست‌ها/صفحات/محصولات قابل اصلاح هستند.');
+
+        $post = get_post($pid);
+        if (!$post) wp_send_json_error('پست یافت نشد.');
+
+        // GSC data for this page
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT keyword, SUM(clicks) c, SUM(impressions) i, AVG(position) p
+             FROM {$t} WHERE page_url=%s GROUP BY keyword_hash ORDER BY i DESC LIMIT 30", $url
+        ));
+        if (!$rows) wp_send_json_error('برای این صفحه داده‌ای در سرچ کنسول نیست.');
+
+        $target = TargetKeywords::get($pid);
+        $secondary = TargetKeywords::get_secondary($pid);
+        $title = get_the_title($pid);
+        $content = $post->post_content;
+        // Truncate content for AI context (keep first ~1500 words)
+        $words = preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content)));
+        $contentPreview = implode(' ', array_slice($words, 0, 1500));
+
+        $kwLines = '';
+        foreach ($rows as $r) {
+            $pos = round((float)$r->p, 1);
+            $imp = (int)$r->i;
+            $kwLines .= "- «{$r->keyword}» | جایگاه {$pos} | نمایش {$imp}\n";
+        }
+
+        $system = 'شما ویراستار ارشد محتوای سئوی فارسی هستید و اصول Helpful Content و E-E-A-T گوگل را کامل می‌شناسید. '
+                . 'وظیفه‌ی شما: بهبود یک صفحه‌ی موجود برای افزایش ترافیک واقعی بر اساس داده‌های سرچ کنسول. '
+                . 'محتوای فعلی را ویرایش/بازنویسی/تکمیل کن — نه از اول بنویس. بخش‌های مفید را نگه دار، ایرادها را رفع کن، بخش‌های جدید مفید اضافه کن. '
+                . 'خروجی باید HTML (heading, p, ul, table) و کاملاً فارسی باشد.';
+
+        $user = "عنوان صفحه: {$title}\nآدرس: {$url}\n"
+              . ($target ? "کلمه هدف اصلی: «{$target}»\n" : '')
+              . ($secondary ? "کلمات فرعی: " . implode('، ', $secondary) . "\n" : '')
+              . "\nکلمات کلیدی واقعی این صفحه در سرچ کنسول (فرصت‌های رشد):\n{$kwLines}\n"
+              . "خلاصه‌ی محتوای فعلی (اول ۱۵۰۰ کلمه):\n{$contentPreview}\n\n"
+              . "حالا محتوای بهبودیافته را بنویس. قوانین:\n"
+              . "۱) کلمات «فاصله‌ی ضربه» (جایگاه ۱۱-۲۰ با نمایش بالا) را حتماً در زیربخش‌های H2/H3 جدید پوشش بده\n"
+              . "۲) کلماتی که جایگاه ۴-۱۰ دارند را در پاراگراف‌های اول صفحه تقویت کن\n"
+              . "۳) یک بخش «سوالات متداول» با ۴-۶ سوال واقعی مرتبط اضافه کن\n"
+              . "۴) جدول یا لیست مقایسه‌ای اضافه کن اگر به موضوع می‌خورد\n"
+              . "۵) محتوا را انسانی، مفید و ارزشمند بنویس (نه کلیدواژه‌چینی)\n"
+              . "۶) طول نهایی حداقل ۱.۵ برابر طول فعلی باشد\n"
+              . "کل محتوای بهبودیافته (HTML) را برگردان.";
+
+        $res = AiClient::chat($system, $user, 0.5);
+        if (isset($res['error'])) wp_send_json_error($res['error']);
+
+        // Save the proposed content temporarily in post meta for the apply step
+        update_post_meta($pid, '_viraseo_proposed_content', $res['text']);
+
+        wp_send_json_success([
+            'post_id'     => $pid,
+            'title'       => $title,
+            'old_content' => $content,
+            'new_content' => $res['text'],
+            'cost'        => $res['cost'],
+            'tokens'      => $res['tokens'],
+        ]);
+    }
+
+    /**
+     * Apply the AI-proposed content to the post (user confirmed).
+     * POST: post_id, content (the final content — user may have manually edited it).
+     */
+    public function ajax_apply(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        $pid = absint($_POST['post_id'] ?? 0);
+        $content = wp_kses_post($_POST['content'] ?? '');
+        if (!$pid || !$content) wp_send_json_error('داده‌ی نامعتبر.');
+        $post = get_post($pid);
+        if (!$post) wp_send_json_error('پست یافت نشد.');
+
+        // Save a backup of the old content
+        update_post_meta($pid, '_viraseo_content_backup', $post->post_content);
+        update_post_meta($pid, '_viraseo_content_backup_time', current_time('mysql'));
+
+        wp_update_post(['ID' => $pid, 'post_content' => $content]);
+        delete_post_meta($pid, '_viraseo_proposed_content');
+
+        wp_send_json_success(['message' => '✅ محتوای بهبودیافته ذخیره شد. نسخه‌ی قبلی به‌عنوان بکاپ نگه داشته شد.']);
     }
 }

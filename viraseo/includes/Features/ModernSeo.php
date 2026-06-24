@@ -19,6 +19,9 @@ class ModernSeo {
         add_action('wp_ajax_viraseo_freshness', [$this, 'ajax_freshness']);
         add_action('wp_ajax_viraseo_persian_quality', [$this, 'ajax_persian_quality']);
         add_action('wp_ajax_viraseo_persian_fix', [$this, 'ajax_persian_fix']);
+        add_action('wp_ajax_viraseo_ai_fix_readiness', [$this, 'ajax_ai_fix_readiness']);
+        add_action('wp_ajax_viraseo_seo_rewrite', [$this, 'ajax_seo_rewrite']);
+        add_action('wp_ajax_viraseo_seo_rewrite_apply', [$this, 'ajax_seo_rewrite_apply']);
         add_action('wp_ajax_viraseo_llms_txt', [$this, 'ajax_llms_txt']);
         // Serve a live llms.txt at the site root (rewrite rule + early + template_redirect fallbacks)
         add_action('init', [$this, 'add_rewrite']);
@@ -85,21 +88,36 @@ class ModernSeo {
             $score = 0; $tips = [];
 
             // Concise lead answer (first ~50 words present)
-            if ($wc >= 40) $score += 15; else $tips[] = 'یک پاراگراف ابتدایی کوتاه که مستقیم به سوال پاسخ دهد اضافه کنید';
+            if ($wc >= 40) $score += 10; else $tips[] = 'یک پاراگراف ابتدایی کوتاه که مستقیم به سوال پاسخ دهد اضافه کنید';
             // Question headings (great for AI extraction)
             $hasQ = preg_match('/<h[2-3][^>]*>[^<]*(چگونه|چطور|چیست|چرا|آیا|کدام|چند)[^<]*<\/h[2-3]>/u', $html)
                   || preg_match('/<h[2-3][^>]*>[^<]*؟\s*<\/h[2-3]>/u', $html);
-            if ($hasQ) $score += 25; else $tips[] = 'زیرعنوان‌های پرسشی (H2/H3) با «چگونه/چیست/چرا...» اضافه کنید';
+            if ($hasQ) $score += 15; else $tips[] = 'زیرعنوان‌های پرسشی (H2/H3) با «چگونه/چیست/چرا...» اضافه کنید';
             // Lists (extractable)
-            if (preg_match('/<(ul|ol)[^>]*>/i', $html)) $score += 15; else $tips[] = 'از فهرست (لیست) برای مراحل/نکات استفاده کنید';
+            if (preg_match('/<(ul|ol)[^>]*>/i', $html)) $score += 10; else $tips[] = 'از فهرست (لیست) برای مراحل/نکات استفاده کنید';
             // FAQ section
-            if (preg_match('/سوالات متداول|پرسش‌های متداول|FAQ/iu', $html)) $score += 15; else $tips[] = 'بخش «سوالات متداول» با پاسخ‌های کوتاه اضافه کنید (برای AI Overview)';
+            if (preg_match('/سوالات متداول|پرسش‌های متداول|FAQ/iu', $html)) $score += 10; else $tips[] = 'بخش «سوالات متداول» با پاسخ‌های کوتاه اضافه کنید (برای AI Overview)';
             // Depth
-            if ($wc >= 600) $score += 15; elseif ($wc >= 300) $score += 8; else $tips[] = 'محتوا را عمیق‌تر کنید (حداقل ۶۰۰ کلمه)';
+            if ($wc >= 600) $score += 10; elseif ($wc >= 300) $score += 5; else $tips[] = 'محتوا را عمیق‌تر کنید (حداقل ۶۰۰ کلمه)';
             // Media / tables
-            if (preg_match('/<table|<img/i', $html)) $score += 10; else $tips[] = 'جدول یا تصویر توضیحی اضافه کنید';
+            if (preg_match('/<table/i', $html)) $score += 8; else $tips[] = 'جدول مقایسه‌ای/اطلاعاتی اضافه کنید (AI ساختار جدول را ترجیح می‌دهد)';
+            if (preg_match('/<img/i', $html)) $score += 5; else $tips[] = 'تصویر توضیحی با alt فارسی اضافه کنید';
+            // Structured data (Schema.org) — huge for GEO/AI Overview
+            $hasSchema = preg_match('/<script[^>]+application\/ld\+json/i', $html)
+                      || (function_exists('rank_math') && get_post_meta($p->ID, 'rank_math_rich_snippet', true));
+            if ($hasSchema) $score += 10; else $tips[] = 'اسکیمای ساختاریافته (FAQ, HowTo, Article) اضافه کنید — AI Overview از Schema استخراج می‌کند';
+            // Author/entity signal (E-E-A-T for GEO)
+            $hasAuthor = (int)$p->post_author > 0 && get_the_author_meta('description', $p->post_author);
+            if ($hasAuthor) $score += 5; else $tips[] = 'بیوگرافی نویسنده تکمیل شود (سیگنال تخصص E-E-A-T برای AI)';
+            // Clear entity definitions (bolded key terms)
+            if (preg_match('/<(strong|b)>[^<]{4,}<\/(strong|b)>/u', $html)) $score += 5; else $tips[] = 'عبارات کلیدی را Bold کنید (AI راحت‌تر مفاهیم اصلی را تشخیص می‌دهد)';
+            // Internal citation / source links
+            $extLinks = preg_match_all('/<a\s[^>]*href=["\']https?:\/\/(?!'.preg_quote(wp_parse_url(home_url(), PHP_URL_HOST), '/').')/i', $html);
+            if ($extLinks >= 1) $score += 5; else $tips[] = 'استناد به منابع معتبر (لینک خارجی) اضافه کنید — سیگنال اعتبار برای AI';
+            // Summary/TL;DR box at top
+            if (preg_match('/خلاصه|کلیدواژه|TL;?DR|نکات کلیدی/iu', $html)) $score += 7; else $tips[] = 'باکس «خلاصه/نکات کلیدی» در ابتدای مطلب اضافه کنید (برای استخراج سریع AI)';
 
-            if ($score >= 75) continue; // already good — show only pages needing work
+            if ($score >= 80) continue; // already good — show only pages needing work
             $rows[] = [
                 'id'=>$p->ID, 'title'=>$p->post_title ?: '(بدون عنوان)', 'type'=>$this->type_label($p->ID),
                 'url'=>get_permalink($p->ID), 'edit'=>get_edit_post_link($p->ID,'raw'),
@@ -203,6 +221,112 @@ class ModernSeo {
         if ($fixed === $post->post_content) wp_send_json_success(['message' => 'موردی برای اصلاح یافت نشد.']);
         wp_update_post(['ID' => $pid, 'post_content' => $fixed]);
         wp_send_json_success(['message' => '✅ متن فارسی اصلاح و ذخیره شد (' . PersianText::format_number($changes) . ' بخش).']);
+    }
+
+    /**
+     * AI auto-fix for AI/GEO readiness issues. Reads the page, identifies the specific
+     * issues flagged by the readiness audit, asks AI to produce an improved version that
+     * resolves them (adds FAQ, question headings, summary box, structured markup etc).
+     * Returns old + proposed content for user approval.
+     */
+    public function ajax_ai_fix_readiness(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        if (!\ViraSEO\Api\AiClient::is_enabled()) wp_send_json_error('هوش مصنوعی فعال نیست. در تنظیمات فعال کنید.');
+        $pid = absint($_POST['post_id'] ?? 0);
+        $post = $pid ? get_post($pid) : null;
+        if (!$post) wp_send_json_error('صفحه یافت نشد.');
+
+        $tips = isset($_POST['tips']) ? array_map('sanitize_text_field', (array)$_POST['tips']) : [];
+        $title = get_the_title($pid);
+        $content = $post->post_content;
+        $contentPreview = implode(' ', array_slice(preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 1200));
+
+        $system = 'شما متخصص ارشد GEO (Generative Engine Optimization) و سئوی فارسی هستید. '
+                . 'وظیفه: محتوای موجود را بهبود دهید تا برای AI Overview گوگل و موتورهای هوش مصنوعی بهینه باشد. '
+                . 'فقط بخش‌هایی که نیاز به تغییر دارند را تغییر دهید و بخش‌های مفید را حفظ کنید. '
+                . 'خروجی باید HTML کامل فارسی باشد.';
+
+        $issueList = implode("\n", array_map(fn($t) => "- {$t}", $tips));
+        $user = "عنوان صفحه: {$title}\nآدرس: " . get_permalink($pid) . "\n\n"
+              . "ایرادهای شناسایی‌شده که باید رفع شوند:\n{$issueList}\n\n"
+              . "محتوای فعلی (خلاصه):\n{$contentPreview}\n\n"
+              . "محتوای بهبودیافته (HTML) را برگردان. توجه:\n"
+              . "- بخش «خلاصه/نکات کلیدی» در ابتدا اضافه کن\n"
+              . "- زیرعنوان‌های پرسشی (چگونه/چیست/چرا) بنویس\n"
+              . "- بخش FAQ با ۴-۶ سوال واقعی اضافه کن\n"
+              . "- جدول اطلاعاتی اضافه کن اگر مرتبط است\n"
+              . "- فهرست/لیست مراحل بنویس\n"
+              . "- عبارات کلیدی را Bold کن\n"
+              . "- محتوا انسانی و مفید باشد نه ربات‌نوشته";
+
+        $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.5);
+        if (isset($res['error'])) wp_send_json_error($res['error']);
+        update_post_meta($pid, '_viraseo_proposed_content', $res['text']);
+        wp_send_json_success([
+            'post_id' => $pid, 'title' => $title,
+            'old_content' => $content, 'new_content' => $res['text'],
+            'cost' => $res['cost'], 'tokens' => $res['tokens'],
+        ]);
+    }
+
+    /**
+     * SEO rewrite for stale content. Based on latest Helpful Content principles:
+     * keeps the valuable parts, removes fluff, adds useful sections (tables, FAQ,
+     * updated data), improves structure. Returns both versions for user approval.
+     */
+    public function ajax_seo_rewrite(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        if (!\ViraSEO\Api\AiClient::is_enabled()) wp_send_json_error('هوش مصنوعی فعال نیست. در تنظیمات فعال کنید.');
+        $pid = absint($_POST['post_id'] ?? 0);
+        $post = $pid ? get_post($pid) : null;
+        if (!$post) wp_send_json_error('صفحه یافت نشد.');
+
+        $title = get_the_title($pid);
+        $content = $post->post_content;
+        $target = TargetKeywords::get($pid);
+        $contentPreview = implode(' ', array_slice(preg_split('/\s+/u', wp_strip_all_tags(strip_shortcodes($content))), 0, 1500));
+
+        $system = 'شما ویراستار ارشد محتوای فارسی هستید و اصول Google Helpful Content Update (2024-2026) را کامل می‌شناسید. '
+                . 'وظیفه: محتوای قدیمی/کهنه را بروزرسانی کن. قوانین سختگیرانه:\n'
+                . '- بخش‌های مفید و ارزشمند را حفظ کن (بازنویسی نکن)\n'
+                . '- بخش‌های تکراری/بی‌ارزش/غیرمفید را حذف کن\n'
+                . '- بخش‌های جدید مفید اضافه کن (جدول، لیست، FAQ، نکات عملی)\n'
+                . '- ساختار هدینگ H2/H3 بهینه کن\n'
+                . '- آمار/تاریخ‌ها را بروز کن (۱۴۰۳/۱۴۰۴/۲۰۲۵/۲۰۲۶)\n'
+                . '- لحن انسانی، تخصصی و مفید حفظ شود\n'
+                . '- خروجی HTML فارسی کامل';
+
+        $user = "عنوان: {$title}\n" . ($target ? "کلمه هدف: «{$target}»\n" : '')
+              . "\nمحتوای فعلی:\n{$contentPreview}\n\n"
+              . "محتوای بروزرسانی‌شده را بنویس. خلاقانه باش: جدول اضافه کن، مقایسه بنویس، "
+              . "FAQ اضافه کن، نکات عملی ۲۰۲۶ اضافه کن. ولی هسته‌ی محتوا را از بین نبر.";
+
+        $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.5);
+        if (isset($res['error'])) wp_send_json_error($res['error']);
+        update_post_meta($pid, '_viraseo_proposed_content', $res['text']);
+        wp_send_json_success([
+            'post_id' => $pid, 'title' => $title,
+            'old_content' => $content, 'new_content' => $res['text'],
+            'cost' => $res['cost'], 'tokens' => $res['tokens'],
+        ]);
+    }
+
+    /** Apply the proposed rewrite (stale or AI-readiness). Saves backup + replaces content. */
+    public function ajax_seo_rewrite_apply(): void {
+        check_ajax_referer('viraseo_nonce', 'nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error('دسترسی غیرمجاز.');
+        $pid = absint($_POST['post_id'] ?? 0);
+        $content = wp_kses_post($_POST['content'] ?? '');
+        if (!$pid || !$content) wp_send_json_error('داده نامعتبر.');
+        $post = get_post($pid);
+        if (!$post) wp_send_json_error('پست یافت نشد.');
+        update_post_meta($pid, '_viraseo_content_backup', $post->post_content);
+        update_post_meta($pid, '_viraseo_content_backup_time', current_time('mysql'));
+        wp_update_post(['ID' => $pid, 'post_content' => $content]);
+        delete_post_meta($pid, '_viraseo_proposed_content');
+        wp_send_json_success(['message' => '✅ محتوای بروزرسانی‌شده ذخیره شد. نسخه‌ی قبلی بکاپ گرفته شد.']);
     }
 
     /** Build llms.txt content (markdown) listing key pages to guide AI crawlers. */
