@@ -744,7 +744,10 @@ $(document).on('click', '#vs-comp-analyze', function(){
             +     '<h4>Canonical:</h4><p style="direction:ltr;text-align:left">'+(d.canonical_url||'-')+'</p>'
             +     '<h4>Robots:</h4><p>'+(d.robots_meta||'-')+'</p>'
             +   '</div>'
-            + '</div></div>'
+            + '</div>'
+            + (d.strengths && d.strengths.length ? '<div class="vs-comp-section" style="margin-top:10px"><h4 style="color:#10b981">✅ نقاط قوت سئو:</h4><ul class="vs-strengths">'+d.strengths.map(s=>'<li>'+s+'</li>').join('')+'</ul></div>' : '')
+            + (d.weaknesses && d.weaknesses.length ? '<div class="vs-comp-section"><h4 style="color:#ef4444">❌ نقاط ضعف سئو:</h4><ul class="vs-weaknesses">'+d.weaknesses.map(w=>'<li>'+w+'</li>').join('')+'</ul></div>' : '')
+            + '</div>'
         );
     });
 });
@@ -806,7 +809,10 @@ $(document).on('click', '.vs-serp-row', function(e){
             +       '<h4>کلمات پرتکرار:</h4><div class="vs-tags">'+topKw+'</div>'
             +       '<h4>Canonical:</h4><p style="direction:ltr;text-align:left;font-size:11px">'+(d.canonical_url||'-')+'</p>'
             +       '<h4>Robots:</h4><p>'+(d.robots_meta||'-')+'</p></div>'
-            + '</div></div>'
+            + '</div>'
+            + (d.strengths && d.strengths.length ? '<div class="vs-comp-section" style="margin-top:10px"><h4 style="color:#10b981">✅ نقاط قوت سئو:</h4><ul class="vs-strengths">'+d.strengths.map(s=>'<li>'+s+'</li>').join('')+'</ul></div>' : '')
+            + (d.weaknesses && d.weaknesses.length ? '<div class="vs-comp-section"><h4 style="color:#ef4444">❌ نقاط ضعف سئو:</h4><ul class="vs-weaknesses">'+d.weaknesses.map(w=>'<li>'+w+'</li>').join('')+'</ul></div>' : '')
+            + '</div>'
         );
         // Update the parent row cells too
         $row.find('.vs-c-words').html(d.word_count_fa||d.word_count||0);

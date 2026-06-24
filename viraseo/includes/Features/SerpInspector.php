@@ -143,7 +143,7 @@ class SerpInspector {
     public function analyze(string $url, string $keyword = ''): array {
         // 1) Try the dedicated n8n Page Inspector workflow (synchronous response)
         if (\ViraSEO\Admin\Dashboard::get('n8n_url')) {
-            $res = \ViraSEO\Api\WebhookHandler::to_n8n('viraseo-page-inspect', ['url' => $url]);
+            $res = \ViraSEO\Api\WebhookHandler::to_n8n('viraseo-page-inspect', ['url' => $url, 'keyword' => $keyword]);
             if (!isset($res['error']) && is_array($res['data'] ?? null)) {
                 $d = $res['data'];
                 if (empty($d['error']) && isset($d['word_count']) && (int)$d['word_count'] > 0) {
@@ -155,12 +155,12 @@ class SerpInspector {
         return $this->analyze_direct($url, $keyword);
     }
 
-    /** Add Persian-formatted helpers to a metrics array. */
+    /** Add Persian-formatted helpers + SEO strengths/weaknesses to a metrics array. */
     private function decorate(array $d): array {
         $d['word_count']     = (int)($d['word_count'] ?? 0);
         $d['word_count_fa']  = PersianText::format_number($d['word_count']);
         $d['word_count_score'] = (int)($d['word_count_score'] ?? 0);
-        foreach (['h1','h2','h3','images','images_no_alt','internal_links','external_links','paragraphs'] as $k) {
+        foreach (['h1','h2','h3','images','images_no_alt','internal_links','external_links','paragraphs','tables','videos'] as $k) {
             $d[$k] = (int)($d[$k] ?? 0);
         }
         $d['h1_texts'] = array_slice((array)($d['h1_texts'] ?? []), 0, 3);
@@ -168,6 +168,10 @@ class SerpInspector {
         $d['schema']   = array_slice((array)($d['schema'] ?? []), 0, 10);
         $d['title']    = (string)($d['title'] ?? '');
         $d['meta_desc']= (string)($d['meta_desc'] ?? '');
+        $d['strengths'] = (array)($d['strengths'] ?? []);
+        $d['weaknesses'] = (array)($d['weaknesses'] ?? []);
+        $d['top_keywords'] = (array)($d['top_keywords'] ?? []);
+        $d['keyword_analysis'] = (array)($d['keyword_analysis'] ?? []);
         return $d;
     }
 
@@ -354,6 +358,8 @@ class SerpInspector {
             'has_video'        => $videos > 0 ? 1 : 0,
             'has_table'        => $tables > 0 ? 1 : 0,
             'section_words'    => $section_words,
+            'strengths'        => $this->build_strengths($word_count, $headings, (int)$images, $tables, $has_faq, $videos, $links, $schema_types, $title, $meta_desc_val, $keyword, $keyword_density),
+            'weaknesses'       => $this->build_weaknesses($word_count, $headings, (int)$images, $img_no_alt, $tables, $has_faq, $videos, $links, $schema_types, $title, $meta_desc_val, $keyword, $keyword_density),
         ];
     }
 
@@ -673,5 +679,46 @@ class SerpInspector {
         $s += min(10, $h['h3'] * 2);
         $s += min(10, $images * 2);
         return min(100, $s);
+    }
+
+    /** Build SEO strengths list. */
+    private function build_strengths(int $wc, array $h, int $img, int $tables, bool $faq, int $videos, array $links, array $schema, string $title, string $meta, string $kw, float $density): array {
+        $s = [];
+        if ($wc >= 1500) $s[] = 'محتوای جامع (' . PersianText::format_number($wc) . ' کلمه)';
+        elseif ($wc >= 800) $s[] = 'طول محتوا مناسب (' . PersianText::format_number($wc) . ' کلمه)';
+        if ($h['h2'] >= 3) $s[] = 'ساختار هدینگ خوب (' . $h['h2'] . ' H2)';
+        if ($img >= 3) $s[] = 'تصاویر مناسب (' . $img . ' عدد)';
+        if ($tables > 0) $s[] = 'استفاده از جدول (ساختارمند)';
+        if ($faq) $s[] = 'بخش FAQ دارد (Featured Snippet)';
+        if ($videos > 0) $s[] = 'ویدیو دارد (جذابیت بالا)';
+        if ($links['internal'] >= 5) $s[] = 'لینک داخلی قوی (' . $links['internal'] . ')';
+        if ($links['external'] >= 1 && $links['external'] <= 5) $s[] = 'استناد مناسب (' . $links['external'] . ' لینک خارجی)';
+        if (!empty($schema)) $s[] = 'Schema: ' . implode(', ', array_slice($schema, 0, 3));
+        if (mb_strlen($meta) >= 120 && mb_strlen($meta) <= 160) $s[] = 'متا دسکریپشن بهینه';
+        if (mb_strlen($title) >= 30 && mb_strlen($title) <= 65) $s[] = 'عنوان بهینه';
+        if ($kw && $density >= 0.5 && $density <= 2.5) $s[] = 'تراکم کلمه کلیدی مناسب (' . $density . '%)';
+        return $s;
+    }
+
+    /** Build SEO weaknesses list. */
+    private function build_weaknesses(int $wc, array $h, int $img, int $noalt, int $tables, bool $faq, int $videos, array $links, array $schema, string $title, string $meta, string $kw, float $density): array {
+        $w = [];
+        if ($wc < 300) $w[] = 'محتوا بسیار کوتاه (' . PersianText::format_number($wc) . ' کلمه)';
+        elseif ($wc < 800) $w[] = 'محتوا نسبتاً کوتاه. رقبای قوی ۱۵۰۰+ کلمه دارند.';
+        if ($h['h2'] < 2) $w[] = 'هدینگ H2 کم (' . $h['h2'] . '). ساختار ضعیف.';
+        if ($img < 2) $w[] = 'تصاویر کم. محتوای بصری ضعیف.';
+        if ($noalt > 0) $w[] = $noalt . ' تصویر بدون alt (مشکل سئو).';
+        if (!$faq) $w[] = 'FAQ ندارد. فرصت Featured Snippet از دست رفته.';
+        if (empty($schema)) $w[] = 'Schema ندارد. فرصت Rich Snippet از دست رفته.';
+        if ($links['internal'] < 3) $w[] = 'لینک داخلی کم (' . $links['internal'] . '). سیلو ضعیف.';
+        if ($links['external'] === 0) $w[] = 'لینک خارجی/استناد ندارد.';
+        if (empty($meta)) $w[] = 'متا دسکریپشن ندارد!';
+        elseif (mb_strlen($meta) < 100) $w[] = 'متا کوتاه (' . mb_strlen($meta) . ' کاراکتر).';
+        if (mb_strlen($title) > 65) $w[] = 'عنوان بلند (' . mb_strlen($title) . ' کاراکتر). گوگل کوتاه می‌کند.';
+        if ($kw) {
+            if ($density < 0.5) $w[] = 'تراکم کلمه کلیدی خیلی کم (' . $density . '%)';
+            elseif ($density > 3) $w[] = 'تراکم زیاد (' . $density . '%). خطر اسپم!';
+        }
+        return $w;
     }
 }
