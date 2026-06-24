@@ -497,6 +497,7 @@ $(document).on('click', '#vs-serp-start', function(){
     $('#vs-serp-error').hide();
     $('#vs-serp-results').hide();
     post('viraseo_start_serp', {keyword:kw, post_id: window._vsSerpPost||0}, r => {
+        window._vsSerpKw = kw;
         if (!r.success) {
             $('#vs-serp-progress').hide();
             $('#vs-serp-start').prop('disabled',false);
@@ -554,6 +555,7 @@ function loadSerpResults(id) {
         $('#vs-serp-progress').hide(); $('#vs-serp-start').prop('disabled',false);
         if (!r.success || r.data.status!=='completed') return;
         const d = r.data;
+        window._vsSerpKw = d.keyword || window._vsSerpKw || '';
         // If n8n returned an error or no competitors, show a clear reason instead of an empty table
         if ((d.error && d.error.length > 0) || !d.competitors || d.competitors.length === 0) {
             $('#vs-serp-results').hide();
@@ -592,7 +594,7 @@ function loadSerpResults(id) {
         loadSerpHistory();
         $('#vs-serp-stats').html(`<div class="vs-stat"><div class="vs-stat-icon"><span class="dashicons dashicons-editor-textcolor"></span></div><div><span class="vs-stat-num">${d.avg_words}</span><span class="vs-stat-label">میانگین کلمات</span></div></div><div class="vs-stat"><div class="vs-stat-icon green"><span class="dashicons dashicons-heading"></span></div><div><span class="vs-stat-num">${d.avg_headings}</span><span class="vs-stat-label">هدینگ</span></div></div><div class="vs-stat"><div class="vs-stat-icon cyan"><span class="dashicons dashicons-groups"></span></div><div><span class="vs-stat-num">${d.competitors.length}</span><span class="vs-stat-label">رقیب</span></div></div>`);
         const $t = $('#vs-serp-tbody').empty();
-        d.competitors.forEach(c => { $t.append(`<tr class="vs-serp-row" data-url="${c.url}" title="برای تحلیل دقیق این صفحه کلیک کنید"><td>${c.pos}</td><td>${c.domain}</td><td>${c.title||'-'}</td><td class="vs-c-snippet">${c.snippet ? '<span class="vs-snippet-text">'+c.snippet.substring(0,120)+(c.snippet.length>120?'...':'')+'</span>' : '<span class="vs-snippet-note">-</span>'}</td><td class="vs-c-words">${c.words>0?c.words:'<span class="vs-snippet-note">— (دکمه آنالیز دقیق)</span>'}</td><td class="vs-c-head">${c.h1}/${c.h2}/${c.h3}</td><td class="vs-c-img">${c.images||'-'}</td></tr>`); });
+        d.competitors.forEach(c => { $t.append(`<tr class="vs-serp-row" data-url="${c.url}" title="برای تحلیل دقیق این صفحه کلیک کنید"><td>${c.pos}</td><td><a href="${c.url}" target="_blank" class="vs-serp-link" dir="ltr">${c.url.length>55?c.url.substring(0,55)+'...':c.url}</a><br><small class="vs-hint">${c.domain}</small></td><td>${c.title||'-'}</td><td class="vs-c-snippet">${c.snippet ? '<span class="vs-snippet-text">'+c.snippet.substring(0,120)+(c.snippet.length>120?'...':'')+'</span>' : '<span class="vs-snippet-note">-</span>'}</td><td class="vs-c-words">${c.words>0?c.words:'<span class="vs-snippet-note">—</span>'}</td><td class="vs-c-head">${c.h1}/${c.h2}/${c.h3}</td><td class="vs-c-img">${c.images||'-'}</td></tr><tr class="vs-serp-detail" style="display:none"><td colspan="7"><div class="vs-serp-detail-box"></div></td></tr>`); });
         const $l = $('#vs-lsi-tags').empty();
         (d.lsi||[]).forEach(w => $l.append(`<span class="vs-tag">${w}</span>`));
         const $g = $('#vs-gap-list').empty();
@@ -748,33 +750,38 @@ $(document).on('click', '#vs-comp-analyze', function(){
 });
 
 // === SERP DEEP INSPECT (on-demand per result) ===
-$(document).on('click', '.vs-serp-row', function(){
+$(document).on('click', '.vs-serp-row', function(e){
+    if ($(e.target).closest('a').length) return; // don't trigger on link clicks
     const $row = $(this);
     const url = $row.data('url');
     if (!url) return;
     // Toggle: if detail already open, close it
     const $next = $row.next('.vs-serp-detail');
-    if ($next.length) { $next.remove(); return; }
-    const colspan = $row.children('td').length;
-    const $detail = $('<tr class="vs-serp-detail"><td colspan="'+colspan+'"><div class="vs-inspect-loading">⏳ در حال دریافت و تحلیل صفحه...</div></td></tr>');
-    $row.after($detail);
-    post('viraseo_serp_inspect', {url: url}, r => {
-        if (!r.success) { $detail.find('td').html('<div class="vs-inspect-err">❌ '+(r.data||'خطا در تحلیل')+'</div>'); return; }
+    if ($next.is(':visible')) { $next.hide(); return; }
+    if ($next.find('.vs-inspect').length) { $next.show(); return; } // already loaded
+    const $box = $next.find('.vs-serp-detail-box');
+    if (!$box.length) return;
+    $box.html('<div class="vs-inspect-loading">⏳ در حال دریافت و تحلیل دقیق صفحه...</div>');
+    $next.show();
+    const kw = window._vsSerpKw || '';
+    post('viraseo_serp_inspect_full', {url: url, keyword: kw}, r => {
+        if (!r.success) { $box.html('<div class="vs-inspect-err">❌ '+(r.data||'خطا در تحلیل')+'</div>'); return; }
         const d = r.data;
+        const ka = d.keyword_analysis || {};
         let h2list = (d.h2_texts||[]).map(t=>'<li>'+t+'</li>').join('') || '<li class="vs-empty">-</li>';
         let schema = (d.schema||[]).length ? (d.schema||[]).map(s=>'<span class="vs-tag">'+s+'</span>').join('') : '<span class="vs-empty">ندارد</span>';
-        let topKw = (d.top_keywords||[]).map(function(k){ return '<span class="vs-tag">'+k.word+' ('+k.count+')</span>'; }).join('') || '<span class="vs-empty">-</span>';
+        let topKw = (d.top_keywords||[]).map(function(k){ return '<span class="vs-tag">'+k.word+' <small>('+k.count+')</small></span>'; }).join('') || '<span class="vs-empty">-</span>';
         let jsNote = d.note ? '<div class="vs-alert vs-alert-warning" style="margin:8px 0"><span class="dashicons dashicons-warning"></span><p>'+d.note+'</p></div>' : '';
         let wordZeroNote = (d.word_count === 0) ? '<div class="vs-alert vs-alert-warning" style="margin:8px 0"><span class="dashicons dashicons-info"></span><p>تعداد کلمات صفر است. احتمالا این صفحه محتوا را با JavaScript رندر می‌کند و از سمت سرور قابل خواندن نیست.</p></div>' : '';
-        $detail.find('td').html(
+        $box.html(
             '<div class="vs-inspect">'
             + wordZeroNote + jsNote
             + '<div class="vs-inspect-grid">'
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.word_count_fa||d.word_count||0)+'</span><span class="vs-im-lbl">تعداد دقیق کلمات</span></div>'
-            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.h1+'/'+d.h2+'/'+d.h3+'</span><span class="vs-im-lbl">H1/H2/H3</span></div>'
-            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.images+'</span><span class="vs-im-lbl">تصاویر ('+d.images_no_alt+' بدون alt)</span></div>'
-            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.internal_links+'/'+d.external_links+'</span><span class="vs-im-lbl">لینک داخلی/خارجی</span></div>'
-            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+d.paragraphs+'</span><span class="vs-im-lbl">پاراگراف</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.h1||0)+'/'+(d.h2||0)+'/'+(d.h3||0)+'</span><span class="vs-im-lbl">H1/H2/H3</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.images||0)+'</span><span class="vs-im-lbl">تصاویر ('+(d.images_no_alt||0)+' بدون alt)</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.internal_links||0)+'/'+(d.external_links||0)+'</span><span class="vs-im-lbl">لینک داخلی/خارجی</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.paragraphs||0)+'</span><span class="vs-im-lbl">پاراگراف</span></div>'
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.word_count_score||0)+'/۱۰۰</span><span class="vs-im-lbl">امتیاز محتوا</span></div>'
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.response_time||0)+'ms</span><span class="vs-im-lbl">زمان پاسخ</span></div>'
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.reading_level||0)+'</span><span class="vs-im-lbl">سطح خوانایی</span></div>'
@@ -782,18 +789,29 @@ $(document).on('click', '.vs-serp-row', function(){
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.videos||0)+'</span><span class="vs-im-lbl">ویدیو</span></div>'
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.has_faq?'بله':'خیر')+'</span><span class="vs-im-lbl">بخش FAQ</span></div>'
             +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.content_type||'-')+'</span><span class="vs-im-lbl">نوع محتوا</span></div>'
+            +   '<div class="vs-inspect-metric"><span class="vs-im-num">'+(d.keyword_density||0)+'%</span><span class="vs-im-lbl">تراکم کلمه</span></div>'
             + '</div>'
+            + (kw ? '<div class="vs-comp-section" style="margin:10px 0"><h4>🔍 بررسی کلمه «'+kw+'» در این صفحه:</h4><div class="vs-comp-kw-grid">'
+            +   '<span class="vs-kw-check '+(ka.in_title?'vs-kw-yes':'vs-kw-no')+'">عنوان: '+(ka.in_title?'✓':'✗')+'</span>'
+            +   '<span class="vs-kw-check '+(ka.in_h1?'vs-kw-yes':'vs-kw-no')+'">H1: '+(ka.in_h1?'✓':'✗')+'</span>'
+            +   '<span class="vs-kw-check '+(ka.in_meta?'vs-kw-yes':'vs-kw-no')+'">متا: '+(ka.in_meta?'✓':'✗')+'</span>'
+            +   '<span class="vs-kw-check '+(ka.in_url?'vs-kw-yes':'vs-kw-no')+'">URL: '+(ka.in_url?'✓':'✗')+'</span>'
+            +   '<span class="vs-kw-prominence">برجستگی: '+(ka.prominence||0)+'/۱۰۰</span>'
+            + '</div></div>' : '')
             + '<div class="vs-inspect-cols">'
             +   '<div><h4>ساختار هدینگ‌ها (H2):</h4><ul class="vs-inspect-h2">'+h2list+'</ul></div>'
             +   '<div><h4>عنوان صفحه (Title):</h4><p class="vs-inspect-title">'+(d.title||'-')+'</p>'
             +       '<h4>توضیحات متا:</h4><p class="vs-inspect-desc">'+(d.meta_desc||'-')+'</p>'
             +       '<h4>اسکیما (Schema):</h4><div class="vs-tags">'+schema+'</div>'
             +       '<h4>کلمات پرتکرار:</h4><div class="vs-tags">'+topKw+'</div>'
-            +       (d.keyword_density ? '<h4>تراکم کلمه کلیدی:</h4><p>'+d.keyword_density+'%</p>' : '')
             +       '<h4>Canonical:</h4><p style="direction:ltr;text-align:left;font-size:11px">'+(d.canonical_url||'-')+'</p>'
             +       '<h4>Robots:</h4><p>'+(d.robots_meta||'-')+'</p></div>'
             + '</div></div>'
         );
+        // Update the parent row cells too
+        $row.find('.vs-c-words').html(d.word_count_fa||d.word_count||0);
+        $row.find('.vs-c-head').text((d.h1||0)+'/'+(d.h2||0)+'/'+(d.h3||0));
+        $row.find('.vs-c-img').text(d.images||'-');
     });
 });
 
