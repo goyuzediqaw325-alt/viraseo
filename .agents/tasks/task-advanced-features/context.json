@@ -1,0 +1,31 @@
+{
+  "project_type": "WordPress plugin (PHP 8.0+, jQuery IIFE frontend)",
+  "language": "PHP + JavaScript (jQuery)",
+  "build_system": "None (WordPress plugin loaded directly). Lint with `php -l file.php` and `NODE_OPTIONS='' node --check viraseo/assets/js/admin.js`",
+  "test_framework": "No formal test suite. Manual lint checks serve as verification.",
+  "build_command": "php -l viraseo/viraseo.php && php -l viraseo/includes/Features/*.php && php -l viraseo/includes/Api/*.php && php -l viraseo/includes/Admin/Dashboard.php && php -l viraseo/includes/Database/Schema.php",
+  "test_command": "find viraseo/includes viraseo/templates -name '*.php' -exec php -l {} \\; | grep -v 'No syntax errors' || true",
+  "verification_instructions": "1. Run php -l on all modified PHP files. 2. Run node --check on admin.js. 3. All should report no syntax errors.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "No setup needed - PHP is available on the host.",
+  "environment_constraints": "No WordPress runtime available - cannot run the plugin. Validation is limited to syntax checking (php -l, node --check). No Docker daemon available.",
+  "contribution_requirements": "All UI in Persian (Farsi, RTL). Use existing patterns: check_ajax_referer('viraseo_nonce','nonce'), current_user_can('manage_options'). Register AJAX in constructor. Menu in Dashboard.php. Feature instantiation in viraseo.php.",
+  "key_patterns": "PHP: namespace ViraSEO\\Features, one class per feature in includes/Features/. AJAX: add_action('wp_ajax_viraseo_ACTION', [$this, 'method']) in constructor. JS: post('viraseo_ACTION', {data}, callback). AI: AiClient::chat($system, $user, $temp, $max_tokens) returns ['text'=>..., 'cost'=>..., 'tokens'=>...] or ['error'=>...]. Settings: Dashboard::get('key'). DB tables use $wpdb->prefix.'viraseo_' prefix with dbDelta in Schema.php. Templates in templates/admin/. Single CSS file: assets/css/admin.css. Single JS file: assets/js/admin.js (jQuery IIFE, const V = window.VS). Persian helpers: PersianText::format_number(), JalaliDate::format(). AiClient::clean_html() for AI HTML post-processing.",
+  "relevant_files": [
+    "viraseo/viraseo.php",
+    "viraseo/includes/Admin/Dashboard.php",
+    "viraseo/includes/Database/Schema.php",
+    "viraseo/includes/Features/InternalSilo.php",
+    "viraseo/includes/Features/SerpAnalyzer.php",
+    "viraseo/includes/Features/SerpInspector.php",
+    "viraseo/includes/Features/AiAssistant.php",
+    "viraseo/includes/Features/ModernSeo.php",
+    "viraseo/includes/Features/TargetKeywords.php",
+    "viraseo/includes/Api/AiClient.php",
+    "viraseo/assets/js/admin.js",
+    "viraseo/assets/css/admin.css",
+    "viraseo/templates/admin/links.php",
+    "viraseo/templates/admin/serp.php"
+  ],
+  "directory_structure": "viraseo/ = plugin root. includes/Features/ = one PHP class per feature. includes/Api/ = API clients (AI, OAuth, Webhook). includes/Admin/ = Dashboard menu/assets. includes/Database/ = Schema (dbDelta). templates/admin/ = PHP template files for admin pages. assets/js/admin.js = single JS file (all frontend logic). assets/css/admin.css = single CSS file."
+}

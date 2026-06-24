@@ -193,10 +193,11 @@ class AiClient {
             'X-Title: ViraSEO',
         ];
 
-        // Accumulate streamed chunks
+        // Accumulate streamed chunks — raw response also kept for fallback parsing
         $buffer = '';
         $full_text = '';
         $usage = [];
+        $raw_response = '';
 
         $ch = curl_init();
         curl_setopt_array($ch, [
@@ -205,26 +206,29 @@ class AiClient {
             CURLOPT_POSTFIELDS => $payload,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => false,
-            CURLOPT_TIMEOUT => 180,         // absolute max (safety net)
+            CURLOPT_TIMEOUT => 180,
             CURLOPT_CONNECTTIMEOUT => 20,
-            CURLOPT_LOW_SPEED_LIMIT => 1,   // at least 1 byte/sec...
-            CURLOPT_LOW_SPEED_TIME => 60,   // ...for 60s before timing out (idle timeout)
+            CURLOPT_LOW_SPEED_LIMIT => 1,
+            CURLOPT_LOW_SPEED_TIME => 60,
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => 0,
-            CURLOPT_WRITEFUNCTION => function($ch, $chunk) use (&$buffer, &$full_text, &$usage) {
+            CURLOPT_WRITEFUNCTION => function($ch, $chunk) use (&$buffer, &$full_text, &$usage, &$raw_response) {
+                $raw_response .= $chunk;
                 $buffer .= $chunk;
-                // Process SSE lines
-                while (($pos = strpos($buffer, "\n")) !== false) {
-                    $line = substr($buffer, 0, $pos);
-                    $buffer = substr($buffer, $pos + 1);
-                    $line = trim($line);
+                // Process SSE lines (handle both \r\n and \n line endings)
+                while (preg_match('/^(.*?)[\r\n]+/s', $buffer, $lm)) {
+                    $line = trim($lm[1]);
+                    $buffer = substr($buffer, strlen($lm[0]));
                     if ($line === '' || $line === 'data: [DONE]') continue;
                     if (strpos($line, 'data: ') === 0) {
                         $json = json_decode(substr($line, 6), true);
-                        if ($json) {
+                        if (is_array($json)) {
                             $delta = $json['choices'][0]['delta']['content'] ?? '';
-                            $full_text .= $delta;
+                            if ($delta !== '') $full_text .= $delta;
+                            // Some models send usage in final chunk
                             if (!empty($json['usage'])) $usage = $json['usage'];
+                            // OpenRouter sometimes sends x_groq usage
+                            if (!empty($json['x_groq']['usage'])) $usage = $json['x_groq']['usage'];
                         }
                     }
                 }
@@ -252,9 +256,19 @@ class AiClient {
         if ($err) return ['error' => 'خطا در اتصال به ' . self::base() . ' — cURL: ' . $err . ' (اگر هاست ایران است، پروکسی را تنظیم کنید)'];
         if ($code >= 400) {
             // Try to parse error from accumulated text
-            $errBody = json_decode($full_text ?: $buffer, true);
-            return ['error' => 'AI خطا داد (HTTP ' . $code . '): ' . ($errBody['error']['message'] ?? $full_text)];
+            $errBody = json_decode($full_text ?: $raw_response, true);
+            return ['error' => 'AI خطا داد (HTTP ' . $code . '): ' . ($errBody['error']['message'] ?? mb_substr($raw_response, 0, 200))];
         }
+
+        // Fallback: if SSE parsing yielded nothing, try parsing raw_response as standard JSON
+        if ($full_text === '' && $raw_response !== '') {
+            $fallback = json_decode($raw_response, true);
+            if (is_array($fallback) && !empty($fallback['choices'][0]['message']['content'])) {
+                $full_text = $fallback['choices'][0]['message']['content'];
+                $usage = $fallback['usage'] ?? [];
+            }
+        }
+
         if ($full_text === '') return ['error' => 'پاسخ خالی از AI. (ممکن است مدل به مشکل خورده باشد)'];
 
         $cost = self::estimate_cost($model, (int)($usage['prompt_tokens'] ?? 0), (int)($usage['completion_tokens'] ?? 0));

@@ -1024,11 +1024,39 @@ $(document).on('click', '.vs-cl-ai', function(){
     const $box = $('.vs-cl-ai-box[data-cl="'+ci+'"]').html('<div class="vs-empty">🤖 هوش مصنوعی در حال طراحی نقشه‌ی لینک سیلو...</div>');
     post('viraseo_ai_cluster', {keyword: kw, pages: JSON.stringify(pages)}, r => {
         if (!r.success) { $box.html('<div class="vs-alert vs-alert-danger"><span class="dashicons dashicons-dismiss"></span><p>'+(r.data||'خطا')+'</p></div>'); return; }
-        const html = (r.data.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
-        $box.html('<div class="vs-ai-output"><div class="vs-ai-head">🤖 نقشه‌ی لینک سیلو <span class="vs-hint">هزینه: $'+(r.data.cost||0)+'</span></div><div class="vs-ai-body">'+html+'</div></div>');
+        let html = '';
+        const d = r.data;
+        if (d.structured && d.structured.links && d.structured.links.length) {
+            const s = d.structured;
+            html += '<div class="vs-ai-output">';
+            if (s.pillar) html += '<div class="vs-hint" style="margin-bottom:8px">🏛️ ستون پیشنهادی: <a href="'+(s.pillar.url||'')+'" target="_blank">'+(s.pillar.url||'')+'</a> — '+(s.pillar.reason||'')+'</div>';
+            html += '<h4>🔗 لینک‌های پیشنهادی (قابل درج):</h4>';
+            html += '<table class="vs-table"><thead><tr><th>از صفحه</th><th>به صفحه</th><th>انکرتکست</th><th></th></tr></thead><tbody>';
+            s.links.forEach(l => {
+                html += '<tr><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;direction:ltr;font-size:11px">'+(l.from_url||'')+'</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;direction:ltr;font-size:11px">'+(l.to_url||'')+'</td><td>'+l.anchor+'</td><td><button class="vs-btn vs-btn-sm vs-btn-success vs-cl-ai-insert" data-from="'+escAttr(l.from_url||'')+'" data-to="'+escAttr(l.to_url||'')+'" data-anchor="'+escAttr(l.anchor||'')+'">درج لینک</button></td></tr>';
+            });
+            html += '</tbody></table>';
+            if (s.missing_content && s.missing_content.length) {
+                html += '<h4>📝 محتوای پیشنهادی:</h4><ul>';
+                s.missing_content.forEach(m => html += '<li>'+m+'</li>');
+                html += '</ul>';
+            }
+            html += '<div class="vs-hint" style="margin-top:8px">هزینه: $'+(d.cost||0)+'</div></div>';
+        } else {
+            const txt = (d.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+            html = '<div class="vs-ai-output"><div class="vs-ai-head">🤖 نقشه‌ی لینک <span class="vs-hint">هزینه: $'+(d.cost||0)+'</span></div><div class="vs-ai-body">'+txt+'</div></div>';
+        }
+        $box.html(html);
     });
 });
-// Topical clusters
+$(document).on('click', '.vs-cl-ai-insert', function(){
+    const $btn = $(this).prop('disabled', true).text('...');
+    post('viraseo_auto_link', {source_url: $(this).data('from'), target_url: $(this).data('to'), anchor: $(this).data('anchor')}, r => {
+        $btn.prop('disabled', false);
+        if (r.success) { $btn.replaceWith('<span class="vs-badge vs-badge-green">✅</span>'); toast(r.data.message||'درج شد','success'); }
+        else { $btn.text('درج لینک'); toast(r.data||'خطا','err'); }
+    });
+});
 $(document).on('click', '#vs-load-clusters', function(){
     const $b = $(this).prop('disabled', true);
     $('#vs-clusters-list').html('<div class="vs-empty">در حال محاسبه خوشه‌ها...</div>');

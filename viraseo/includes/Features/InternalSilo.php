@@ -300,16 +300,30 @@ class InternalSilo {
         foreach (array_slice($pages, 0, 25) as $i => $pg) {
             $list .= ($i+1).". {$pg['title']} [{$pg['type']}] — {$pg['url']}\n";
         }
-        $system = 'شما معمار سئوی فارسی و متخصص ساختار Silo و لینک‌سازی داخلی هستید. فقط فارسی و ساختارمند پاسخ بده.';
-        $user = "موضوع خوشه: «{$keyword}»\nصفحات این خوشه (شامل انواع مقاله/محصول/برگه):\n{$list}\n"
-              . "یک نقشه‌ی لینک‌سازی داخلی Silo بده:\n"
-              . "۱) کدام صفحه باید «ستون» (Pillar) باشد و چرا\n"
-              . "۲) دقیقاً کدام صفحه به کدام صفحه لینک بدهد (شامل لینک بین محصول و مقاله و لندینگ)\n"
-              . "۳) انکرتکست پیشنهادی فارسی برای هر لینک\n"
-              . "۴) آیا محتوای جدیدی برای کامل‌شدن این خوشه لازم است؟";
+        $system = 'شما معمار سئوی فارسی و متخصص ساختار Silo و لینک‌سازی داخلی هستید. '
+                . 'پاسخ خود را به‌صورت JSON با ساختار زیر بده. بدون هیچ توضیح اضافه قبل یا بعد JSON:\n'
+                . '{"pillar":{"url":"...","reason":"..."},"links":[{"from_url":"...","to_url":"...","anchor":"انکرتکست فارسی"}],"missing_content":["عنوان محتوای پیشنهادی"]}';
+        $user = "موضوع خوشه: «{$keyword}»\nصفحات این خوشه:\n{$list}\n"
+              . "نقشه‌ی لینک‌سازی داخلی سیلو بساز. دقیقاً مشخص کن:\n"
+              . "- pillar (ستون) کدام URL باشد و دلیلش\n"
+              . "- از کدام URL به کدام URL با چه انکرتکستی لینک بدهد (حداقل ۵ لینک)\n"
+              . "- آیا محتوای جدیدی برای کامل‌شدن خوشه لازم است";
         $res = \ViraSEO\Api\AiClient::chat($system, $user, 0.4);
         if (isset($res['error'])) wp_send_json_error($res['error']);
-        wp_send_json_success(['text'=>$res['text'], 'cost'=>$res['cost'], 'tokens'=>$res['tokens']]);
+
+        // Try to parse JSON from response
+        $text = $res['text'];
+        $structured = null;
+        if (preg_match('/\{.*\}/s', $text, $jm)) {
+            $structured = json_decode($jm[0], true);
+        }
+
+        wp_send_json_success([
+            'text' => $text,
+            'structured' => $structured,
+            'cost' => $res['cost'],
+            'tokens' => $res['tokens'],
+        ]);
     }
 
     /**
